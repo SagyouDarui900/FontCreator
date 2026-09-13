@@ -1,0 +1,6 @@
+{
+  "name": "Font Creator Studio",
+  "description": "ブラウザ上で手書き・デザインフォントの作成、パス輪郭の単純化(Simplify)、サイドベアリング自動設定(Auto-Spacing)、連続グリフ移動、JIS水準・学年別漢字分類、TTF出力ができるフォント開発スタジオ。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
