@@ -4280,10 +4280,67 @@ export function findContourIntersections(contours: PathContour[]): Point[] {
 }
 
 /**
- * 輪郭群に自己交差または輪郭間の交差が存在するか高速判定
+ * 輪郭群に自己交差または輪郭間の交差が存在するか高速判定（最初の交点が見つかった瞬間に早期脱出）
  */
 export function hasContourIntersections(contours: PathContour[]): boolean {
-  return findContourIntersections(contours).length > 0;
+  if (!contours || contours.length === 0) return false;
+
+  interface Segment {
+    p1: Point;
+    p2: Point;
+    contourIdx: number;
+    segIdx: number;
+  }
+
+  const allSegments: Segment[] = [];
+
+  for (let cIdx = 0; cIdx < contours.length; cIdx++) {
+    const contour = contours[cIdx];
+    if (!contour.nodes || contour.nodes.length < 2) continue;
+    const points = sampleContourPoints(contour, 6);
+    if (points.length < 2) continue;
+
+    for (let i = 0; i < points.length - 1; i++) {
+      allSegments.push({
+        p1: points[i],
+        p2: points[i + 1],
+        contourIdx: cIdx,
+        segIdx: i,
+      });
+    }
+
+    if (contour.closed && points.length > 2) {
+      allSegments.push({
+        p1: points[points.length - 1],
+        p2: points[0],
+        contourIdx: cIdx,
+        segIdx: points.length - 1,
+      });
+    }
+  }
+
+  const segCount = allSegments.length;
+  const maxSegsToCheck = 400;
+  const step = segCount > maxSegsToCheck ? Math.ceil(segCount / maxSegsToCheck) : 1;
+
+  for (let i = 0; i < segCount; i += step) {
+    const s1 = allSegments[i];
+    for (let j = i + step; j < segCount; j += step) {
+      const s2 = allSegments[j];
+
+      // 同一輪郭で隣接するセグメントは端点を共有するため除外
+      if (s1.contourIdx === s2.contourIdx) {
+        const diff = Math.abs(s1.segIdx - s2.segIdx);
+        if (diff <= 1) continue;
+      }
+
+      if (getLineSegmentIntersection(s1.p1, s1.p2, s2.p1, s2.p2)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**

@@ -27,6 +27,7 @@ import { GlyphSynthesisModal } from './components/GlyphSynthesisModal';
 import { KerningModal } from './components/KerningModal';
 import { RadicalStudioModal } from './components/RadicalStudioModal';
 import { PenPresetsModal } from './components/PenPresetsModal';
+import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
 import { Toast, ToastMessage } from './components/Toast';
 import { ThemeMode } from './utils/theme';
 import { createSmallKanaContours, generateId, simplifyGlyphContours } from './utils/pathUtils';
@@ -117,7 +118,10 @@ export default function App() {
   const [autoSmoothBrush, setAutoSmoothBrush] = useState<boolean>(true);
   const [smoothStrength, setSmoothStrength] = useState<'mild' | 'standard' | 'strong'>('standard');
   const [smoothPreserveCorners, setSmoothPreserveCorners] = useState<boolean>(true);
-  const [autoUnionBrush, setAutoUnionBrush] = useState<boolean>(false);
+  const [autoUnionBrush, setAutoUnionBrush] = useState<boolean>(() => {
+    const saved = loadStickyBrushConfigs();
+    return saved.brush?.autoUnionBrush ?? true;
+  });
 
   // Sticky Brush Settings: Change style and automatically restore saved parameters
   const handleChangeBrushStyle = useCallback((newStyle: BrushStyle) => {
@@ -261,6 +265,7 @@ export default function App() {
   const [isSynthesisModalOpen, setIsSynthesisModalOpen] = useState<boolean>(false);
   const [isKerningModalOpen, setIsKerningModalOpen] = useState<boolean>(false);
   const [isRadicalStudioOpen, setIsRadicalStudioOpen] = useState<boolean>(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
 
   const isAnyModalOpen =
     isTestModalOpen ||
@@ -272,7 +277,8 @@ export default function App() {
     isSynthesisModalOpen ||
     isKerningModalOpen ||
     isRadicalStudioOpen ||
-    isPenPresetsModalOpen;
+    isPenPresetsModalOpen ||
+    isShortcutsModalOpen;
 
   // Responsive layout tracking to prevent sidebar/grid overlaps onto canvas
   const [viewportWidth, setViewportWidth] = useState<number>(() => {
@@ -307,6 +313,11 @@ export default function App() {
     }
   }, [showGridDrawer, showMetricsDrawer, showRadicals, showToast]);
 
+  const toggleGridDrawer = useCallback(() => setShowGridDrawer((prev) => !prev), []);
+  const toggleMetricsDrawer = useCallback(() => setShowMetricsDrawer((prev) => !prev), []);
+  const toggleRadicals = useCallback(() => setShowRadicals((prev) => !prev), []);
+  const openPenPresetsModal = useCallback(() => setIsPenPresetsModalOpen(true), []);
+
   // Clipboard for copying glyph shapes
   const [clipboardContours, setClipboardContours] = useState<PathContour[] | null>(null);
 
@@ -340,17 +351,32 @@ export default function App() {
     currentGlyphRef.current = currentGlyph;
   }, [currentGlyph]);
 
+  // Quota warning throttle ref
+  const lastQuotaWarningRef = useRef<number>(0);
+
   // Auto-save to LocalStorage with 750ms debounce to prevent UI stutter during drawing
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(project));
-      } catch (e) {
+      } catch (e: any) {
         console.warn('Auto-save to localStorage failed:', e);
+        const isQuota =
+          e?.name === 'QuotaExceededError' ||
+          e?.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+          e?.code === 22 ||
+          e?.code === 1014;
+        if (isQuota && Date.now() - lastQuotaWarningRef.current > 120000) {
+          lastQuotaWarningRef.current = Date.now();
+          showToast(
+            'ブラウザの保存容量の上限に達しました。上部の「保存」ボタンからプロジェクトファイル(.json)をダウンロードしてバックアップしてください。',
+            'warning'
+          );
+        }
       }
     }, 750);
     return () => clearTimeout(timer);
-  }, [project]);
+  }, [project, showToast]);
 
   // Ensure synchronous save before window closes or refreshes
   useEffect(() => {
@@ -863,12 +889,37 @@ export default function App() {
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape key to dismiss any open modal
+      if (e.key === 'Escape') {
+        if (isAnyModalOpen) {
+          e.preventDefault();
+          setIsTestModalOpen(false);
+          setIsFontInfoModalOpen(false);
+          setIsTraceModalOpen(false);
+          setIsSvgModalOpen(false);
+          setIsBatchNormalizeModalOpen(false);
+          setIsQualityModalOpen(false);
+          setIsSynthesisModalOpen(false);
+          setIsKerningModalOpen(false);
+          setIsRadicalStudioOpen(false);
+          setIsPenPresetsModalOpen(false);
+          setIsShortcutsModalOpen(false);
+          return;
+        }
+      }
+
       const targetEl = e.target as HTMLElement;
       if (
         ['INPUT', 'TEXTAREA', 'SELECT'].includes(targetEl?.tagName) ||
         targetEl?.isContentEditable ||
         isAnyModalOpen
       ) {
+        return;
+      }
+
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        setIsShortcutsModalOpen(true);
         return;
       }
 
@@ -1059,6 +1110,7 @@ export default function App() {
         onToggleZenMode={toggleZenMode}
         isZenMode={isZenMode}
         onApplyHandwritingPreset={handleApplyHandwritingPreset}
+        onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
         selectedChar={selectedChar}
         selectedUnicode={selectedUnicode}
         theme={theme}
@@ -1150,11 +1202,11 @@ export default function App() {
             theme={theme}
             onCopyFromChar={handleCopyFromChar}
             onGenerateDakutenTarget={handleGenerateDakutenTarget}
-            onToggleGridDrawer={() => setShowGridDrawer(!showGridDrawer)}
+            onToggleGridDrawer={toggleGridDrawer}
             showGridDrawer={showGridDrawer}
-            onToggleMetricsDrawer={() => setShowMetricsDrawer(!showMetricsDrawer)}
+            onToggleMetricsDrawer={toggleMetricsDrawer}
             showMetricsDrawer={showMetricsDrawer}
-            onToggleRadicals={() => setShowRadicals(!showRadicals)}
+            onToggleRadicals={toggleRadicals}
             showRadicals={showRadicals}
             onToggleZenMode={toggleZenMode}
             isZenMode={isZenMode}
@@ -1162,7 +1214,7 @@ export default function App() {
             onRedo={handleRedo}
             canUndo={undoStack.length > 0}
             canRedo={redoStack.length > 0}
-            onOpenPenPresetsModal={() => setIsPenPresetsModalOpen(true)}
+            onOpenPenPresetsModal={openPenPresetsModal}
             isAnyModalOpen={isAnyModalOpen}
           />
         </div>
@@ -1407,6 +1459,12 @@ export default function App() {
         onApplyPreset={handleApplyPenPreset}
         presets={penPresets}
         onUpdatePresets={setPenPresets}
+        theme={theme}
+      />
+
+      <ShortcutsHelpModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
         theme={theme}
       />
 

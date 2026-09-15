@@ -10,7 +10,7 @@ export const DEFAULT_PEN_PRESETS: UserPenPreset[] = [
     autoSmoothBrush: true,
     smoothStrength: 'standard',
     smoothPreserveCorners: true,
-    autoUnionBrush: false,
+    autoUnionBrush: true,
   },
   {
     id: 'preset-fountain-nib',
@@ -21,7 +21,7 @@ export const DEFAULT_PEN_PRESETS: UserPenPreset[] = [
     autoSmoothBrush: true,
     smoothStrength: 'mild',
     smoothPreserveCorners: true,
-    autoUnionBrush: false,
+    autoUnionBrush: true,
   },
   {
     id: 'preset-calligraphy-chisel',
@@ -32,7 +32,7 @@ export const DEFAULT_PEN_PRESETS: UserPenPreset[] = [
     autoSmoothBrush: true,
     smoothStrength: 'mild',
     smoothPreserveCorners: true,
-    autoUnionBrush: false,
+    autoUnionBrush: true,
   },
   {
     id: 'preset-sumi-thick',
@@ -43,7 +43,7 @@ export const DEFAULT_PEN_PRESETS: UserPenPreset[] = [
     autoSmoothBrush: true,
     smoothStrength: 'standard',
     smoothPreserveCorners: true,
-    autoUnionBrush: false,
+    autoUnionBrush: true,
   },
   {
     id: 'preset-signpen-uniform',
@@ -54,7 +54,7 @@ export const DEFAULT_PEN_PRESETS: UserPenPreset[] = [
     autoSmoothBrush: true,
     smoothStrength: 'strong',
     smoothPreserveCorners: false,
-    autoUnionBrush: false,
+    autoUnionBrush: true,
   },
   {
     id: 'preset-marumoji-pop',
@@ -65,7 +65,7 @@ export const DEFAULT_PEN_PRESETS: UserPenPreset[] = [
     autoSmoothBrush: true,
     smoothStrength: 'strong',
     smoothPreserveCorners: false,
-    autoUnionBrush: false,
+    autoUnionBrush: true,
   },
   {
     id: 'preset-pencil-sketch',
@@ -76,7 +76,7 @@ export const DEFAULT_PEN_PRESETS: UserPenPreset[] = [
     autoSmoothBrush: false,
     smoothStrength: 'mild',
     smoothPreserveCorners: true,
-    autoUnionBrush: false,
+    autoUnionBrush: true,
   },
   {
     id: 'preset-sharp-angular',
@@ -87,7 +87,7 @@ export const DEFAULT_PEN_PRESETS: UserPenPreset[] = [
     autoSmoothBrush: false,
     smoothStrength: 'mild',
     smoothPreserveCorners: true,
-    autoUnionBrush: false,
+    autoUnionBrush: true,
   },
   {
     id: 'preset-sharp-round',
@@ -98,7 +98,7 @@ export const DEFAULT_PEN_PRESETS: UserPenPreset[] = [
     autoSmoothBrush: false,
     smoothStrength: 'mild',
     smoothPreserveCorners: true,
-    autoUnionBrush: false,
+    autoUnionBrush: true,
   },
 ];
 
@@ -115,21 +115,21 @@ export interface StickyBrushConfig {
 }
 
 export const DEFAULT_BRUSH_CONFIGS: Record<BrushStyle, StickyBrushConfig> = {
-  brush: { brushWidth: 42, pressureSensitivity: 'high', autoSmoothBrush: true, smoothStrength: 'standard', smoothPreserveCorners: true, autoUnionBrush: false },
-  fountain: { brushWidth: 26, pressureSensitivity: 'high', autoSmoothBrush: true, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
-  calligraphy: { brushWidth: 38, pressureSensitivity: 'normal', autoSmoothBrush: true, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
-  sumi: { brushWidth: 54, pressureSensitivity: 'high', autoSmoothBrush: true, smoothStrength: 'standard', smoothPreserveCorners: true, autoUnionBrush: false },
-  signpen: { brushWidth: 22, pressureSensitivity: 'off', autoSmoothBrush: true, smoothStrength: 'strong', smoothPreserveCorners: false, autoUnionBrush: false },
-  marumoji: { brushWidth: 36, pressureSensitivity: 'off', autoSmoothBrush: true, smoothStrength: 'strong', smoothPreserveCorners: false, autoUnionBrush: false },
-  marker: { brushWidth: 32, pressureSensitivity: 'off', autoSmoothBrush: true, smoothStrength: 'standard', smoothPreserveCorners: false, autoUnionBrush: false },
-  ballpoint: { brushWidth: 14, pressureSensitivity: 'normal', autoSmoothBrush: true, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
-  highlighter: { brushWidth: 40, pressureSensitivity: 'off', autoSmoothBrush: true, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
-  pencil: { brushWidth: 16, pressureSensitivity: 'high', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
-  chalk: { brushWidth: 28, pressureSensitivity: 'normal', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
-  sharp: { brushWidth: 36, pressureSensitivity: 'off', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
-  sharp_round: { brushWidth: 36, pressureSensitivity: 'off', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
-  wobbly: { brushWidth: 24, pressureSensitivity: 'normal', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
-  polygon: { brushWidth: 32, pressureSensitivity: 'off', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: false },
+  brush: { brushWidth: 42, pressureSensitivity: 'high', autoSmoothBrush: true, smoothStrength: 'standard', smoothPreserveCorners: true, autoUnionBrush: true },
+  fountain: { brushWidth: 26, pressureSensitivity: 'high', autoSmoothBrush: true, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
+  calligraphy: { brushWidth: 38, pressureSensitivity: 'normal', autoSmoothBrush: true, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
+  sumi: { brushWidth: 54, pressureSensitivity: 'high', autoSmoothBrush: true, smoothStrength: 'standard', smoothPreserveCorners: true, autoUnionBrush: true },
+  signpen: { brushWidth: 22, pressureSensitivity: 'off', autoSmoothBrush: true, smoothStrength: 'strong', smoothPreserveCorners: false, autoUnionBrush: true },
+  marumoji: { brushWidth: 36, pressureSensitivity: 'off', autoSmoothBrush: true, smoothStrength: 'strong', smoothPreserveCorners: false, autoUnionBrush: true },
+  marker: { brushWidth: 32, pressureSensitivity: 'off', autoSmoothBrush: true, smoothStrength: 'standard', smoothPreserveCorners: false, autoUnionBrush: true },
+  ballpoint: { brushWidth: 14, pressureSensitivity: 'normal', autoSmoothBrush: true, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
+  highlighter: { brushWidth: 40, pressureSensitivity: 'off', autoSmoothBrush: true, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
+  pencil: { brushWidth: 16, pressureSensitivity: 'high', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
+  chalk: { brushWidth: 28, pressureSensitivity: 'normal', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
+  sharp: { brushWidth: 36, pressureSensitivity: 'off', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
+  sharp_round: { brushWidth: 36, pressureSensitivity: 'off', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
+  wobbly: { brushWidth: 24, pressureSensitivity: 'normal', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
+  polygon: { brushWidth: 32, pressureSensitivity: 'off', autoSmoothBrush: false, smoothStrength: 'mild', smoothPreserveCorners: true, autoUnionBrush: true },
 };
 
 export function loadStickyBrushConfigs(): Record<BrushStyle, StickyBrushConfig> {

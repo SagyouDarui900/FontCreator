@@ -237,7 +237,7 @@ const HIGH_CONTRAST_NODE_CURSOR = `url("data:image/svg+xml,%3Csvg width='32' hei
 
 const HIGH_CONTRAST_ERASER_CURSOR = `url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 22L16 12L22 18L12 28L6 28Z' fill='white' stroke='%230f172a' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M6 22L16 12L22 18L12 28L6 28Z' fill='%23ef4444' stroke='%230f172a' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M11 17L17 23' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M12 28H26' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='6' cy='28' r='2' fill='%2310b981' stroke='white' stroke-width='1'/%3E%3C/svg%3E") 6 28, crosshair`;
 
-export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
+export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
   contours,
   onChangeContours,
   advanceWidth,
@@ -412,6 +412,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
 
   // Brush Tool stroke in-progress (Hardware-accelerated direct SVG path refs for 120Hz smooth iPad drawing)
   const brushStrokePointsRef = useRef<StrokePoint[]>([]);
+  const brushStrokeStartTimeRef = useRef<number>(0);
+  const brushStrokeStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const pendingBrushEventsRef = useRef<{ clientX: number; clientY: number; pressure: number; timeStamp: number; pointerType: string }[]>([]);
   const activeBrushPathRef = useRef<SVGPathElement | null>(null);
   const brushRafIdRef = useRef<number | null>(null);
@@ -465,9 +467,24 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
 
   // Stroke Smoothing Options & Real-time Auto-Smooth
   const [autoSmoothBrush, setAutoSmoothBrush] = useState<boolean>(true);
-  const [autoUnionBrush, setAutoUnionBrush] = useState<boolean>(false);
-  // 一筆書きの線が交差・重なった部分の白抜き防止（デフォルトOFF: 必要時のみONでストロークラグをゼロ化）
-  const [autoResolveBrushOverlap, setAutoResolveBrushOverlap] = useState<boolean>(false);
+  // 合体（デフォルトON: 初心者でも交差した線が自然に結合され、穴あきや重なりバグ感を防止）
+  const [autoUnionBrush, setAutoUnionBrush] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('fontforge_auto_union_brush');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+  // 一筆書きの線が交差・重なった部分の白抜き防止（デフォルトON: ループ線を描いた時の中抜け・白抜きバグ感を防止）
+  const [autoResolveBrushOverlap, setAutoResolveBrushOverlap] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('fontforge_auto_resolve_brush_overlap');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
   const [smoothStrength, setSmoothStrength] = useState<'mild' | 'standard' | 'strong'>('standard');
   const [smoothPreserveCorners, setSmoothPreserveCorners] = useState<boolean>(true);
   const [showSmoothMenu, setShowSmoothMenu] = useState<boolean>(false);
@@ -1280,6 +1297,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
     if (toolMode === 'brush') {
       setIsDrawingStroke(true);
       pendingBrushEventsRef.current = [];
+      brushStrokeStartTimeRef.current = Date.now();
+      brushStrokeStartPosRef.current = { x: pos.x, y: pos.y };
       const isPen = e.pointerType === 'pen';
       let pres = 0.5;
       if (pressureSensitivity === 'off') {
@@ -1302,14 +1321,17 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
         const pCurr: StrokePoint = { x: pos.x, y: pos.y, pressure: pres, time: Date.now() };
         const straightPts = generateStraightStrokePoints(pPrev, pCurr);
         brushStrokePointsRef.current = straightPts;
+        if (activeBrushPathRef.current) {
+          const contour = getProcessedBrushContour(brushStrokePointsRef.current, false);
+          const d = contoursToSvgPath([contour]);
+          activeBrushPathRef.current.setAttribute('d', d);
+        }
       } else {
         brushStrokePointsRef.current = [{ x: pos.x, y: pos.y, pressure: pres, time: Date.now() }];
-      }
-
-      if (activeBrushPathRef.current) {
-        const contour = getProcessedBrushContour(brushStrokePointsRef.current, false);
-        const d = contoursToSvgPath([contour]);
-        activeBrushPathRef.current.setAttribute('d', d);
+        // 初期タップ瞬間には画面に巨大な丸をプレビュー表示せず、動いた時または描画確定時に表示
+        if (activeBrushPathRef.current) {
+          activeBrushPathRef.current.setAttribute('d', '');
+        }
       }
       return;
     }
@@ -2399,6 +2421,32 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
         }
       }
 
+      // 軽くタップしただけの偶発接触（stray touch / accidental tap）を判別
+      const duration = Date.now() - brushStrokeStartTimeRef.current;
+      const startPos = brushStrokeStartPosRef.current;
+      let maxDistFromStart = 0;
+      let totalStrokeLength = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const dStart = Math.hypot(pts[i].x - startPos.x, pts[i].y - startPos.y);
+        if (dStart > maxDistFromStart) maxDistFromStart = dStart;
+        if (i > 0) {
+          totalStrokeLength += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+        }
+      }
+
+      // スタイラス（ペン）で意図してしっかり押し当てた点打ち（筆圧 > 0.38）は許可
+      const isDeliberatePenTap = e.pointerType === 'pen' && pts.some((p) => (p.pressure || 0) > 0.38);
+
+      // スマホ・タブレット等の微小タップや誤接触（画面に軽く触れてすぐ離しただけ）を破棄:
+      // ・点数が1個以下、または移動量が極小（maxDistFromStart < 5px かつ totalStrokeLength < 8px）
+      // ・かつ接触時間が短い（duration < 280ms）
+      // ・かつ意図的な筆圧ペンタップ（isDeliberatePenTap）ではない
+      // ※ 意図して点を打つ場合は長押し（280ms以上）するか、軽く払うように点を打つ（5px以上動く）ことで自然に描画可能
+      const isAccidentalTap = !isDeliberatePenTap && (pts.length <= 1 || (maxDistFromStart < 5.0 && totalStrokeLength < 8.0)) && duration < 280;
+      if (isAccidentalTap) {
+        return;
+      }
+
       if (pts.length > 0) {
         let finalizedContour = getProcessedBrushContour(pts, true);
 
@@ -2413,7 +2461,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
                 } else {
                   // ループにより複数の外輪郭/内輪郭に分割された場合
                   if (autoUnionBrush && contours.length > 0) {
-                    const merged = unionContours([...contours, ...selfMerged], 1.2, true);
+                    const merged = unionContours([...contours, ...selfMerged], 1.2, false);
                     if (merged && merged.length > 0) {
                       onChangeContours(merged);
                       onCommitHistory();
@@ -2432,10 +2480,28 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
         }
 
         if (autoUnionBrush && contours.length > 0) {
-          const merged = unionContours([...contours, finalizedContour], 1.2, true);
-          if (merged && merged.length > 0) {
-            onChangeContours(merged);
+          // 既存輪郭とのバウンディングボックス接触判定（接触がなければ unionContours を完全スキップして 0ms で完了）
+          const newBBox = getContoursBoundingBox([finalizedContour]);
+          const hasOverlappingContour = contours.some((c) => {
+            const b = getContoursBoundingBox([c]);
+            return (
+              newBBox.minX <= b.maxX + 4 &&
+              newBBox.maxX >= b.minX - 4 &&
+              newBBox.minY <= b.maxY + 4 &&
+              newBBox.maxY >= b.minY - 4
+            );
+          });
+
+          if (hasOverlappingContour) {
+            // forceProcessSingle: false により、接触していない他の画は一切再計算されず、元のベクター精度のまま維持される！
+            const merged = unionContours([...contours, finalizedContour], 1.2, false);
+            if (merged && merged.length > 0) {
+              onChangeContours(merged);
+            } else {
+              onChangeContours([...contours, finalizedContour]);
+            }
           } else {
+            // 離れた独立画は即座に配列追加（超高速）
             onChangeContours([...contours, finalizedContour]);
           }
         } else {
@@ -3308,6 +3374,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
                     onClick={() => {
                       const next = !autoResolveBrushOverlap;
                       setAutoResolveBrushOverlap(next);
+                      try { localStorage.setItem('fontforge_auto_resolve_brush_overlap', String(next)); } catch {}
                       showCanvasToast(
                         next
                           ? '一筆書きの重なり白抜き防止をONにしました'
@@ -3331,6 +3398,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
                     onClick={() => {
                       const next = !autoUnionBrush;
                       setAutoUnionBrush(next);
+                      try { localStorage.setItem('fontforge_auto_union_brush', String(next)); } catch {}
                       showCanvasToast(
                         next
                           ? 'ストローク描画ごとの自動合体をONにしました'
@@ -4423,6 +4491,33 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
                 <span>1画戻す</span>
               </button>
 
+              {/* Auto Union (Auto Merge Overlaps) */}
+              <button
+                onClick={() => {
+                  const next = !autoUnionBrush;
+                  setAutoUnionBrush(next);
+                  try { localStorage.setItem('fontforge_auto_union_brush', String(next)); } catch {}
+                  showCanvasToast(
+                    next
+                      ? '自動合体: ON（交差線を一体化）'
+                      : '自動合体: OFF（画ごとに個別保持）'
+                  );
+                }}
+                className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold flex items-center space-x-1 transition-all shrink-0 ${
+                  autoUnionBrush
+                    ? isLight
+                      ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-300'
+                      : 'bg-emerald-950 text-emerald-200 border border-emerald-700'
+                    : isLight
+                    ? 'bg-stone-100 hover:bg-stone-200 text-stone-500'
+                    : 'bg-[#1b2820] hover:bg-[#25382c] text-stone-400'
+                }`}
+                title="ストローク同士が重なった時に自動で合体・一体化します（文字の穴あき・重なりバグ感を防止）"
+              >
+                <Layers className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                <span>合体:{autoUnionBrush ? 'ON' : 'OFF'}</span>
+              </button>
+
               <div className="h-3 w-[1px] bg-stone-200 dark:bg-[#25382c] shrink-0" />
 
               {/* Reset position (if moved) */}
@@ -4568,20 +4663,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
                 stroke={isSelected ? '#10b981' : 'transparent'}
                 strokeWidth={isSelected ? Math.max(2, 2.5 / zoom) : Math.max(14, 18 / zoom)}
                 strokeDasharray={isSelected ? '6 4' : undefined}
-                className={toolMode === 'select' || toolMode === 'node' || toolMode === 'eraser' ? 'cursor-pointer' : 'pointer-events-none'}
-                pointerEvents={toolMode === 'select' || toolMode === 'node' || toolMode === 'eraser' ? 'stroke fill' : 'none'}
+                className={toolMode === 'select' || toolMode === 'node' ? 'cursor-pointer' : 'pointer-events-none'}
+                pointerEvents={toolMode === 'select' || toolMode === 'node' ? 'stroke fill' : 'none'}
                 onPointerDown={(e) => {
-                  if (toolMode === 'eraser') {
-                    e.stopPropagation();
-                    const clickPos = screenToCanvas(e.clientX, e.clientY);
-                    const eraseRadius = Math.max(8, (eraserSize / 2) / zoom);
-                    const updated = eraseContoursAtPoint(contours, clickPos, eraseRadius, eraserMode);
-                    if (updated.length !== contours.length || JSON.stringify(updated) !== JSON.stringify(contours)) {
-                      onChangeContours(updated);
-                      onCommitHistory();
-                    }
-                    return;
-                  }
                   if (toolMode === 'node') {
                     e.stopPropagation();
                     const clickPos = screenToCanvas(e.clientX, e.clientY);
@@ -6792,4 +6876,4 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = ({
     )}
   </div>
 );
-};
+});

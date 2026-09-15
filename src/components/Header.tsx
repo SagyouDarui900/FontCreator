@@ -27,6 +27,7 @@ import {
   X,
   ShieldCheck,
   Paintbrush,
+  Keyboard,
 } from 'lucide-react';
 import { FontProject } from '../types';
 import { ThemeMode } from '../utils/theme';
@@ -58,6 +59,7 @@ interface HeaderProps {
   onToggleZenMode?: () => void;
   isZenMode?: boolean;
   onApplyHandwritingPreset?: () => void;
+  onOpenShortcutsModal?: () => void;
   selectedChar: string;
   selectedUnicode: number;
   theme: ThemeMode;
@@ -90,6 +92,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onToggleZenMode,
   isZenMode = false,
   onApplyHandwritingPreset,
+  onOpenShortcutsModal,
   selectedChar,
   selectedUnicode,
   theme,
@@ -131,18 +134,30 @@ export const Header: React.FC<HeaderProps> = React.memo(({
     notify(`新しいフォント『${finalName}』を作成・キャンバスをリセットしました`, 'success');
   };
 
-  // セーブデータ (.json) のエクスポート (PC/iPad/スマホ間で移行可能)
+  // セーブデータ (.json) のエクスポート (PC/iPad/スマホ間で移行可能・大容量対応)
   const handleSaveProjectJson = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(project, null, 2));
-    const downloadAnchor = document.createElement('a');
-    const safeName = (project.metadata.familyName || 'FontProject').replace(/[^a-zA-Z0-9_\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff-]/g, '_');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `${safeName}.fontproj.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-    setShowToolsMenu(false);
-    notify('プロジェクトセーブデータを保存しました', 'success');
+    try {
+      const jsonStr = JSON.stringify(project, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const downloadAnchor = document.createElement('a');
+      const safeName = (project.metadata.familyName || 'FontProject').replace(/[^a-zA-Z0-9_\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff-]/g, '_');
+      downloadAnchor.href = url;
+      downloadAnchor.download = `${safeName}.fontproj.json`;
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(downloadAnchor);
+          URL.revokeObjectURL(url);
+        } catch (_) {}
+      }, 1000);
+      setShowToolsMenu(false);
+      notify('プロジェクトセーブデータを保存しました', 'success');
+    } catch (err) {
+      console.error('Failed to export project JSON:', err);
+      notify('プロジェクトの保存に失敗しました', 'error');
+    }
   };
 
   // セーブデータ (.json) のインポート
@@ -203,7 +218,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
 
   return (
     <header
-      className={`h-13 border-b flex items-center justify-between px-2 sm:px-4 shrink-0 z-30 select-none relative transition-colors ${
+      className={`h-13 border-b flex items-center justify-between px-2 sm:px-4 shrink-0 z-30 select-none relative transition-colors overflow-x-auto scrollbar-none gap-2 sm:gap-3 ${
         isLight
           ? 'bg-white text-stone-800 border-stone-200 shadow-xs'
           : 'bg-[#121914] text-emerald-100 border-[#222e25] shadow-xs'
@@ -226,10 +241,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({
       />
 
       {/* Left: Sidebar Toggle & Brand & Project Info */}
-      <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+      <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
         <button
           onClick={onToggleGridDrawer}
-          className={`px-2.5 py-1.5 rounded-xl transition-colors flex items-center space-x-1.5 text-xs font-bold ${
+          className={`px-2 sm:px-2.5 py-1.5 rounded-xl transition-colors flex items-center space-x-1.5 text-xs font-bold ${
             showGridDrawer
               ? isLight
                 ? 'bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-xs'
@@ -241,13 +256,13 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           title="文字一覧（コード表）の表示/非表示"
         >
           <Grid className="w-4 h-4" />
-          <span className="hidden md:inline">文字一覧</span>
+          <span className="hidden sm:inline">文字一覧</span>
         </button>
 
         <div className={`h-5 w-[1px] hidden sm:block ${isLight ? 'bg-stone-200' : 'bg-[#222e25]'}`} />
 
         {/* Brand Logo & Name */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
           <div
             className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shadow-xs tracking-tighter ${
               isLight
@@ -259,14 +274,14 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           </div>
           <div className="flex flex-col">
             <span className="text-xs font-bold tracking-wide flex items-center space-x-1.5">
-              <span className="truncate max-w-[100px] sm:max-w-[160px] md:max-w-[200px]">
+              <span className="truncate max-w-[80px] xs:max-w-[110px] sm:max-w-[160px] md:max-w-[200px]">
                 {project.metadata.familyName && project.metadata.familyName !== 'OTEdit-Style Font' && project.metadata.familyName !== '新規フォント'
                   ? project.metadata.familyName
                   : 'FontCreator'}
               </span>
               {project.metadata.styleName && project.metadata.styleName !== 'Regular' && (
                 <span
-                  className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                  className={`text-[9px] px-1.5 py-0.2 rounded font-mono hidden sm:inline-block ${
                     isLight ? 'bg-stone-100 text-stone-700 border border-stone-200' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                   }`}
                 >
@@ -275,7 +290,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
               )}
             </span>
             <span
-              className={`text-[10px] font-mono hidden sm:inline ${
+              className={`text-[10px] font-mono hidden md:inline ${
                 isLight ? 'text-stone-500' : 'text-emerald-400'
               }`}
             >
@@ -291,7 +306,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <button
           onClick={onUndo}
           disabled={!canUndo}
-          className={`hidden sm:flex p-1.5 sm:p-2 rounded-xl transition-colors ${
+          className={`flex p-1.5 sm:p-2 rounded-xl transition-colors ${
             canUndo
               ? isLight
                 ? 'text-stone-700 hover:bg-stone-100 active:scale-95'
@@ -307,7 +322,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <button
           onClick={onRedo}
           disabled={!canRedo}
-          className={`hidden sm:flex p-1.5 sm:p-2 rounded-xl transition-colors ${
+          className={`flex p-1.5 sm:p-2 rounded-xl transition-colors ${
             canRedo
               ? isLight
                 ? 'text-stone-700 hover:bg-stone-100 active:scale-95'
@@ -323,7 +338,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
 
         <div className={`h-5 w-[1px] mx-0.5 sm:mx-1 hidden md:block ${isLight ? 'bg-stone-200' : 'bg-[#222e25]'}`} />
 
-        {/* Test Waterfall Modal (Hidden on small tablets as it is already in Tools Menu and mobile bottom bar) */}
+        {/* Test Waterfall Modal */}
         <button
           onClick={onOpenTestModal}
           className={`hidden md:flex px-2.5 py-1.5 rounded-xl text-xs font-bold items-center space-x-1.5 transition-all shadow-xs active:scale-95 border ${
@@ -341,7 +356,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <button
           id="btn-header-radicals"
           onClick={onToggleRadicals}
-          className={`hidden sm:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-all active:scale-95 ${
+          className={`hidden md:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-all active:scale-95 ${
             showRadicals
               ? isLight
                 ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300 shadow-xs ring-2 ring-emerald-500/20'
@@ -353,14 +368,14 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           title="部首・パーツパレット (高品質部首・フォント抽出・康熙214部首)"
         >
           <Sparkles className={`w-3.5 h-3.5 ${showRadicals ? 'text-emerald-700 dark:text-emerald-200' : 'text-emerald-600 dark:text-emerald-400'}`} />
-          <span className="hidden md:inline font-bold">部首</span>
+          <span className="hidden lg:inline font-bold">部首</span>
         </button>
 
         {/* Toggle Metrics Drawer */}
         {onToggleMetricsDrawer && (
           <button
             onClick={onToggleMetricsDrawer}
-            className={`hidden md:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1 transition-colors ${
+            className={`hidden lg:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1 transition-colors ${
               showMetricsDrawer
                 ? isLight
                   ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
@@ -372,7 +387,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             title="メトリクス・変形パネル"
           >
             <Sliders className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">メトリクス</span>
+            <span className="hidden xl:inline">メトリクス</span>
           </button>
         )}
 
@@ -380,7 +395,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         {onToggleZenMode && (
           <button
             onClick={onToggleZenMode}
-            className={`hidden lg:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1 transition-all ${
+            className={`hidden xl:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1 transition-all ${
               isZenMode
                 ? isLight
                   ? 'bg-emerald-700 text-white font-bold shadow-xs'
@@ -404,6 +419,23 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             )}
           </button>
         )}
+
+        {/* Shortcuts Help Button */}
+        {onOpenShortcutsModal && (
+          <button
+            onClick={onOpenShortcutsModal}
+            className={`hidden 2xl:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1 transition-all ${
+              isLight
+                ? 'text-stone-600 hover:bg-stone-100 border border-stone-200/80'
+                : 'text-stone-300 hover:bg-[#1d2720] border border-[#222e25]'
+            }`}
+            title="キーボードショートカット一覧 [?]"
+          >
+            <Keyboard className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
+            <span>ショートカット</span>
+            <kbd className="px-1 py-0.2 rounded text-[10px] font-mono bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-700">?</kbd>
+          </button>
+        )}
       </div>
 
       {/* Right: Tools Dropdown & Theme & Save & TTF Export */}
@@ -412,7 +444,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <div className="relative" ref={toolsMenuRef}>
           <button
             onClick={() => setShowToolsMenu(!showToolsMenu)}
-            className={`px-2.5 sm:px-3 py-1.5 h-9 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs border active:scale-95 ${
+            className={`px-2 sm:px-3 py-1.5 h-9 rounded-xl text-xs font-bold flex items-center space-x-1 sm:space-x-1.5 transition-all shadow-xs border active:scale-95 ${
               showToolsMenu
                 ? isLight
                   ? 'bg-emerald-100 text-emerald-950 border-emerald-300 ring-2 ring-emerald-500/20'
@@ -424,9 +456,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             title="拡張ツール・制作スタジオ・ファイル管理メニュー"
           >
             <Sliders className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="font-bold">機能メニュー</span>
+            <span className="font-bold hidden xs:inline">機能メニュー</span>
+            <span className="font-bold xs:hidden">メニュー</span>
             <span
-              className={`inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+              className={`hidden sm:inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
                 isLight
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                   : 'bg-[#1a2d21] text-emerald-300 border border-emerald-800'
@@ -445,7 +478,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
 
           {showToolsMenu && (
             <div
-              className={`absolute right-0 top-full mt-2 w-[350px] sm:w-[460px] md:w-[500px] max-h-[calc(100vh-72px)] overflow-y-auto overscroll-contain rounded-2xl shadow-2xl border p-2.5 sm:p-3.5 z-50 flex flex-col gap-2.5 animate-in fade-in duration-150 ${
+              className={`fixed right-2 sm:right-4 top-[50px] w-[calc(100vw-16px)] sm:w-[460px] md:w-[500px] max-h-[calc(100vh-64px)] overflow-y-auto overscroll-contain rounded-2xl shadow-2xl border p-2.5 sm:p-3.5 z-50 flex flex-col gap-2.5 animate-in fade-in duration-150 ${
                 isLight
                   ? 'bg-white/98 backdrop-blur-md border-stone-200 text-stone-800 shadow-xl'
                   : 'bg-[#151f19]/98 backdrop-blur-md border-[#25362b] text-emerald-100 shadow-xl'
@@ -782,6 +815,23 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                     <Scale className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                     <span className="text-xs font-medium truncate">情報・商用利用</span>
                   </button>
+
+                  {onOpenShortcutsModal && (
+                    <button
+                      onClick={() => {
+                        onOpenShortcutsModal();
+                        setShowToolsMenu(false);
+                      }}
+                      className={`text-left p-2 rounded-xl border transition-all flex items-center space-x-2 col-span-2 ${
+                        isLight
+                          ? 'bg-stone-50 hover:bg-stone-100 border-stone-200 text-stone-800'
+                          : 'bg-[#1a251e] hover:bg-[#202d24] border-[#25362b] text-emerald-200'
+                      }`}
+                    >
+                      <Keyboard className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="text-xs font-medium truncate">キーボードショートカット集 [?]</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -817,7 +867,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <button
           id="btn-header-reset-project"
           onClick={() => setIsConfirmingNew(true)}
-          className={`hidden sm:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-all border ${
+          className={`hidden xl:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-all border shrink-0 ${
             isLight
               ? 'bg-stone-100 hover:bg-rose-50 text-stone-700 hover:text-rose-700 border-stone-200 hover:border-rose-300 active:scale-95'
               : 'bg-[#1e2c22] hover:bg-[#2b1b20] text-emerald-200 hover:text-rose-300 border-[#25362b] hover:border-rose-800 active:scale-95'
@@ -825,13 +875,13 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           title="プロジェクトをリセット・白紙から新規作成"
         >
           <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
-          <span className="hidden lg:inline">リセット</span>
+          <span className="hidden xl:inline">リセット</span>
         </button>
 
         {/* Save JSON Data */}
         <button
           onClick={handleSaveProjectJson}
-          className={`hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-colors border ${
+          className={`hidden lg:flex px-3 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-colors border shrink-0 ${
             isLight
               ? 'bg-stone-100 hover:bg-stone-200 text-stone-800 border-stone-200'
               : 'bg-[#1e2c22] hover:bg-[#283b2e] text-emerald-200 border-[#25362b]'
@@ -839,7 +889,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           title="セーブデータファイルを出力 (.json)"
         >
           <Save className="w-3.5 h-3.5" />
-          <span className="hidden md:inline">保存</span>
+          <span className="hidden lg:inline">保存</span>
         </button>
 
         {/* Font Info / Settings */}

@@ -51,9 +51,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onOpenQualityModal,
 }) => {
   const [format, setFormat] = useState<'ttf' | 'otf'>('ttf');
-  // Size Optimization: 'standard_jp' (1.35x), 'custom', 'raw' (1.0x)
-  const [sizePreset, setSizePreset] = useState<'standard_jp' | 'custom' | 'raw'>('standard_jp');
-  const [customScale, setCustomScale] = useState<number>(1.35);
+  // Size Optimization: 'raw' (1.0x キャンバス・下絵通り推奨), 'standard_jp' (1.35x), 'custom'
+  const [sizePreset, setSizePreset] = useState<'raw' | 'standard_jp' | 'custom'>('raw');
+  const [customScale, setCustomScale] = useState<number>(1.0);
   // Overlap removal & self-intersection prevention for single-stroke loops
   const [mergeOverlaps, setMergeOverlaps] = useState<boolean>(true);
   const [balanceSideBearings, setBalanceSideBearings] = useState<boolean>(true);
@@ -282,10 +282,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
 
             <p className="text-[11px] opacity-80 leading-relaxed">
-              手書き文字はキャンバスに対して小さめに描かれる傾向があります。標準設定ではAviUtl2やWord等の一般的な日本語フォント（MSゴシックや游ゴシック等）と同等のサイズ感になるよう自動で拡大スケーリングします。
+              キャンバス上の下絵（手本フォント）や字面枠に合わせて描いた場合は、<strong>「原寸のまま (100%)」</strong>を選ぶとキャンバスの見た目と全く同じ位置・サイズで正確に出力されます。キャンバス上で小さめに描いた文字を市販フォント同等の大粒サイズに自動拡大したい場合は「和文拡大 (135%)」をお選びください。
             </p>
 
             <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setSizePreset('raw')}
+                className={`p-2 rounded-lg border text-center transition-all ${
+                  sizePreset === 'raw'
+                    ? isLight
+                      ? 'border-emerald-600 bg-emerald-100/70 text-emerald-950 font-bold ring-1 ring-emerald-500'
+                      : 'border-emerald-500 bg-emerald-900/60 text-emerald-100 font-bold ring-1 ring-emerald-500'
+                    : isLight
+                    ? 'border-stone-200 hover:bg-white text-stone-700'
+                    : 'border-[#283b2e] hover:bg-[#202d24] text-emerald-300'
+                }`}
+              >
+                <div className="text-xs">原寸 (100%)</div>
+                <div className="text-[10px] opacity-75 font-normal mt-0.5">下絵・枠通り【推奨】</div>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setSizePreset('standard_jp')}
@@ -299,8 +316,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     : 'border-[#283b2e] hover:bg-[#202d24] text-emerald-300'
                 }`}
               >
-                <div className="text-xs">和文標準 (135%)</div>
-                <div className="text-[10px] opacity-75 font-normal mt-0.5">AviUtl2・動画推奨</div>
+                <div className="text-xs">和文拡大 (135%)</div>
+                <div className="text-[10px] opacity-75 font-normal mt-0.5">動画・AviUtl等</div>
               </button>
 
               <button
@@ -318,23 +335,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               >
                 <div className="text-xs">カスタム倍率</div>
                 <div className="text-[10px] opacity-75 font-normal mt-0.5">{Math.round(customScale * 100)}%</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSizePreset('raw')}
-                className={`p-2 rounded-lg border text-center transition-all ${
-                  sizePreset === 'raw'
-                    ? isLight
-                      ? 'border-emerald-600 bg-emerald-100/70 text-emerald-950 font-bold ring-1 ring-emerald-500'
-                      : 'border-emerald-500 bg-emerald-900/60 text-emerald-100 font-bold ring-1 ring-emerald-500'
-                    : isLight
-                    ? 'border-stone-200 hover:bg-white text-stone-700'
-                    : 'border-[#283b2e] hover:bg-[#202d24] text-emerald-300'
-                }`}
-              >
-                <div className="text-xs">原寸のまま (100%)</div>
-                <div className="text-[10px] opacity-75 font-normal mt-0.5">キャンバス通り</div>
               </button>
             </div>
 

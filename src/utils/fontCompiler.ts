@@ -332,9 +332,27 @@ export function compileFont(
           const anchorX = (shouldBalance && !isAsymmetric) ? origBbox.centerX : advWidth / 2;
           // In screen coords (0..1000), optical center of guide box is 500 (em-box center)
           const anchorY = 500;
+
+          // Safety boundary clamping: prevent expanding beyond em-box boundaries (0..1000)
+          // which would cause vertical clipping or line collision in Word / web renderers
+          let safeScale = scaleFactor;
+          if (scaleFactor > 1.0) {
+            const distTop = anchorY - origBbox.minY;
+            const distBottom = origBbox.maxY - anchorY;
+            if (distTop > 0) {
+              const maxScaleTop = (anchorY - 20) / distTop;
+              safeScale = Math.min(safeScale, maxScaleTop);
+            }
+            if (distBottom > 0) {
+              const maxScaleBottom = (980 - anchorY) / distBottom;
+              safeScale = Math.min(safeScale, maxScaleBottom);
+            }
+            safeScale = Math.max(1.0, safeScale);
+          }
+
           glyphContours = transformContours(glyphContours, (p) => ({
-            x: Math.round(anchorX + (p.x - anchorX) * scaleFactor),
-            y: Math.round(anchorY + (p.y - anchorY) * scaleFactor),
+            x: Math.round(anchorX + (p.x - anchorX) * safeScale),
+            y: Math.round(anchorY + (p.y - anchorY) * safeScale),
           }));
         }
 
@@ -424,7 +442,12 @@ export function compileFont(
   // Automatic Vertical Writing Alternates (OpenType vert / Unicode Vertical Forms)
   // If user has not explicitly drawn vertical forms, derive them automatically from horizontal counterparts
   // so vertical writing (縦書き) works without missing glyphs or horizontal bar bugs.
-  const verticalDerivations: { targetUnicode: number; sourceUnicode: number; action: 'rotate90' | 'shiftTopRight' | 'rotate90_center' }[] = [
+  const verticalDerivations: {
+    targetUnicode: number;
+    sourceUnicode: number;
+    action: 'rotate90' | 'shiftTopRight' | 'shiftTopRight_smallKana';
+    targetName?: string;
+  }[] = [
     { targetUnicode: 0xfe31, sourceUnicode: 0x30fc, action: 'rotate90' }, // 長音符 ー -> ︱
     { targetUnicode: 0xfe33, sourceUnicode: 0x2015, action: 'rotate90' }, // ダッシュ ― -> ︳
     { targetUnicode: 0xfe41, sourceUnicode: 0x300c, action: 'rotate90' }, // 鉤括弧 「 -> ﹁
@@ -441,7 +464,14 @@ export function compileFont(
     { targetUnicode: 0xfe4f, sourceUnicode: 0x301c, action: 'rotate90' }, // 波ダッシュ 〜 -> ︴
   ];
 
+  // List of vertical substitution pairs: { srcUnicode, targetUnicode, srcIndex?, vertIndex? }
+  const vertSubstPairs: { srcUnicode: number; targetUnicode: number; srcIndex?: number; vertIndex?: number }[] = [];
+
   for (const deriv of verticalDerivations) {
+    if (project.glyphs[deriv.sourceUnicode]) {
+      vertSubstPairs.push({ srcUnicode: deriv.sourceUnicode, targetUnicode: deriv.targetUnicode });
+    }
+
     if (!addedUnicodes.has(deriv.targetUnicode) && project.glyphs[deriv.sourceUnicode]) {
       const srcGlyph = project.glyphs[deriv.sourceUnicode];
       if (srcGlyph.contours && srcGlyph.contours.length > 0) {
@@ -734,6 +764,55 @@ export function compileFont(
     }
   }
 
+  // OpenType GSUB Layout Tables: 'vert' and 'vrt2' vertical writing substitution features
+  // Required for proper vertical text layout (writing-mode: vertical-rl, MS Word, InDesign, Illustrator, etc.)
+  if (font.substitution && typeof (font.substitution as any).addSingle === 'function' && vertSubstPairs.length > 0) {
+    try {
+      const unicodeToGlyphIndex = new Map<number, number>();
+      for (let i = 0; i < font.glyphs.length; i++) {
+        const g = font.glyphs.get(i);
+        if (typeof g.unicode === 'number' && g.unicode > 0) {
+          unicodeToGlyphIndex.set(g.unicode, i);
+        }
+        if (Array.isArray(g.unicodes)) {
+          for (const u of g.unicodes) {
+            if (typeof u === 'number' && u > 0) {
+              unicodeToGlyphIndex.set(u, i);
+            }
+          }
+        }
+      }
+
+      // Feature tags MUST be registered in alphabetical order in opentype.js ('vert' before 'vrt2')
+      const features = ['vert', 'vrt2'];
+      const scripts = ['DFLT', 'hani', 'kana', 'latn'];
+
+      for (const feature of features) {
+        for (const script of scripts) {
+          for (const pair of vertSubstPairs) {
+            const srcIndex = pair.srcIndex ?? unicodeToGlyphIndex.get(pair.srcUnicode);
+            const vertIndex = pair.vertIndex ?? unicodeToGlyphIndex.get(pair.targetUnicode);
+            if (
+              typeof srcIndex === 'number' &&
+              typeof vertIndex === 'number' &&
+              srcIndex >= 0 &&
+              vertIndex >= 0 &&
+              srcIndex !== vertIndex
+            ) {
+              try {
+                (font.substitution as any).addSingle(feature, { sub: srcIndex, by: vertIndex }, script);
+              } catch {
+                // Ignore any duplicate or subtable collision
+              }
+            }
+          }
+        }
+      }
+    } catch (gsubErr) {
+      console.warn('Failed to generate OpenType GSUB vertical writing table:', gsubErr);
+    }
+  }
+
   const buffer = font.toArrayBuffer();
 
   // Self-Validation: Verify binary TrueType can be parsed cleanly by OpenType parser
@@ -957,29 +1036,57 @@ export async function loadFontFromFile(
       (font.names as any)?.unicode?.version?.en ||
       font.names.version?.en ||
       '1.000',
-    unitsPerEm: font.unitsPerEm || 1000,
-    ascender: font.ascender || 800,
-    descender: font.descender || -200,
+    unitsPerEm: 1000,
+    ascender: Math.round(((font.ascender || 800) / (font.unitsPerEm || 1000)) * 1000),
+    descender: Math.round(((font.descender || -200) / (font.unitsPerEm || 1000)) * 1000),
   };
 
   const glyphs: Record<number, GlyphData> = {};
+  const upm = font.unitsPerEm || 1000;
+  const scale = 1000 / upm;
 
   for (let i = 0; i < font.glyphs.length; i++) {
     const g = font.glyphs.get(i);
-    if (!g.unicode) continue;
+    if (!g) continue;
 
-    const path = g.getPath(0, 0, font.unitsPerEm);
+    const unicodes: number[] = [];
+    if (typeof g.unicode === 'number' && g.unicode > 0) {
+      unicodes.push(g.unicode);
+    }
+    if (Array.isArray(g.unicodes)) {
+      for (const u of g.unicodes) {
+        if (typeof u === 'number' && u > 0 && !unicodes.includes(u)) {
+          unicodes.push(u);
+        }
+      }
+    }
+    if (unicodes.length === 0) continue;
+
+    // Retrieve normalized 1000 UPM path from opentype.js
+    const path = g.getPath(0, 0, 1000);
     const contours = openTypePathToContours(path, SCREEN_BASELINE_Y);
+    const normalizedAdvance = Math.round((g.advanceWidth ?? upm) * scale);
+    const normalizedLsb = Math.round((g.leftSideBearing ?? 50) * scale);
 
-    glyphs[g.unicode] = {
-      unicode: g.unicode,
-      char: String.fromCodePoint(g.unicode),
-      name: g.name || `uni${g.unicode.toString(16).toUpperCase()}`,
-      advanceWidth: g.advanceWidth || font.unitsPerEm,
-      lsb: g.leftSideBearing || 50,
-      contours: contours,
-      modified: true,
-    };
+    for (const u of unicodes) {
+      if (u <= 0 || u > 0x10ffff) continue;
+      let charStr = '';
+      try {
+        charStr = String.fromCodePoint(u);
+      } catch {
+        charStr = '';
+      }
+
+      glyphs[u] = {
+        unicode: u,
+        char: charStr,
+        name: g.name || (charStr ? `uni${u.toString(16).toUpperCase().padStart(4, '0')}` : `glyph${u}`),
+        advanceWidth: normalizedAdvance > 0 ? normalizedAdvance : 1000,
+        lsb: normalizedLsb,
+        contours: contours,
+        modified: true,
+      };
+    }
   }
 
   return { metadata, glyphs };

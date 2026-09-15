@@ -76,7 +76,7 @@ const GlyphGridCard = memo(
     const strokeCount = glyphData?.contours?.length || 0;
     const svgPath = useMemo(() => {
       if (!hasContours || !glyphData?.contours) return null;
-      return contoursToSvgPath(normalizeGlyphContoursWinding(glyphData.contours));
+      return contoursToSvgPath(glyphData.contours);
     }, [hasContours, glyphData?.contours]);
 
     const pair = KANA_PAIRS[item.char];
@@ -830,7 +830,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
             <form onSubmit={handleAddCustomChar} className="flex items-center gap-1 shrink-0">
               <input
                 type="text"
-                maxLength={1}
+                maxLength={4}
                 placeholder="文字直接"
                 value={customCharInput}
                 onChange={(e) => setCustomCharInput(e.target.value)}
