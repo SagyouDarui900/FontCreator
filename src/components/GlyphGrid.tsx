@@ -19,6 +19,9 @@ import {
   Wand2,
   ArrowLeftRight,
   ShieldCheck,
+  Check,
+  Layers,
+  Lock,
 } from 'lucide-react';
 import { FontProject, GlyphData } from '../types';
 import { UNICODE_CATEGORIES, getCategoryCharList, KANA_PAIRS } from '../data/unicodeTables';
@@ -144,17 +147,22 @@ const GlyphGridCard = memo(
             {item.code.toString(16).toUpperCase().padStart(4, '0')}
           </span>
 
-          {/* Status Indicator: Green dot if created, or subtle dash */}
-          {hasContours ? (
-            <span
-              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
-                isLight ? 'bg-emerald-600' : 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.8)]'
-              }`}
-              title={`作成済 (${strokeCount}画)`}
-            />
-          ) : (
-            <span className="inline-block w-1 h-1 rounded-full bg-stone-300 dark:bg-stone-700 opacity-30 shrink-0" />
-          )}
+          {/* Status Indicator: Green dot if created, lock badge if locked */}
+          <div className="flex items-center space-x-1 shrink-0">
+            {glyphData?.locked && (
+              <Lock className="w-2.5 h-2.5 text-amber-500 shrink-0" title="編集ロック中" />
+            )}
+            {hasContours ? (
+              <span
+                className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                  isLight ? 'bg-emerald-600' : 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.8)]'
+                }`}
+                title={`作成済 (${strokeCount}画)`}
+              />
+            ) : (
+              <span className="inline-block w-1 h-1 rounded-full bg-stone-300 dark:bg-stone-700 opacity-30 shrink-0" />
+            )}
+          </div>
         </div>
 
         {/* Single Center Character Display (Vector SVG if drawn, or Reference Glyph if undrawn) */}
@@ -293,6 +301,21 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [gridDensity, setGridDensity] = useState<GridDensity>('medium');
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState<boolean>(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close custom category dropdown on outside click
+  useEffect(() => {
+    const handleCategoryClickOutside = (e: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    };
+    if (isCategoryDropdownOpen) {
+      document.addEventListener('mousedown', handleCategoryClickOutside);
+      return () => document.removeEventListener('mousedown', handleCategoryClickOutside);
+    }
+  }, [isCategoryDropdownOpen]);
 
   // Resizable sidebar width with LocalStorage persistence
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -313,25 +336,51 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
   // Drag resizer handler for left sidebar
   const handleResizeStart = (e: React.PointerEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+
+    const target = e.currentTarget as HTMLElement;
+    try {
+      target.setPointerCapture?.(e.pointerId);
+    } catch (_) {}
+
     setIsResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
     const startX = e.clientX;
     const startWidth = sidebarWidth;
+    let rafId: number | null = null;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
       const delta = moveEvent.clientX - startX;
       const minW = 220;
-      const maxW = Math.min(window.innerWidth * 0.65, 750);
+      const maxW = Math.min(window.innerWidth * 0.7, 780);
       const newWidth = Math.max(minW, Math.min(maxW, Math.round(startWidth + delta)));
-      setSidebarWidth(newWidth);
+
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        setSidebarWidth(newWidth);
+      });
     };
 
     const handlePointerUp = (upEvent: PointerEvent) => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      try {
+        target.releasePointerCapture?.(upEvent.pointerId);
+      } catch (_) {}
+
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+
       const delta = upEvent.clientX - startX;
       const minW = 220;
-      const maxW = Math.min(window.innerWidth * 0.65, 750);
+      const maxW = Math.min(window.innerWidth * 0.7, 780);
       const finalWidth = Math.max(minW, Math.min(maxW, Math.round(startWidth + delta)));
       try {
         localStorage.setItem('fontforge_sidebar_width', String(finalWidth));
@@ -340,6 +389,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
   };
 
   const isLight = theme === 'light';
@@ -491,6 +541,102 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
     currentSelectedGlyph && currentSelectedGlyph.contours && currentSelectedGlyph.contours.length > 0
   );
 
+  // Grouped category definitions for custom in-app dropdown
+  const categoryGroups = useMemo(() => [
+    {
+      groupName: '作成状況',
+      items: [
+        { id: 'modified', name: '作成済み文字', count: `${modifiedCount}字` },
+      ],
+    },
+    {
+      groupName: 'かな',
+      items: [
+        { id: 'hiragana', name: 'ひらがな', count: '86字' },
+        { id: 'katakana', name: 'カタカナ', count: '90字' },
+      ],
+    },
+    {
+      groupName: '英数・記号',
+      items: [
+        { id: 'basic_latin_alnum', name: '半角英数', count: '62字' },
+        { id: 'ascii_symbols', name: '半角記号', count: '33字' },
+        { id: 'fullwidth_alnum', name: '全角英数', count: '62字' },
+        { id: 'symbols', name: '和文約物・全角記号', count: '65字' },
+        { id: 'vertical_forms', name: '縦書き約物・記号', count: '22字' },
+      ],
+    },
+    {
+      groupName: '小学校配当漢字 (教育漢字)',
+      items: [
+        { id: 'grade1', name: '小学1年漢字', count: '80字' },
+        { id: 'grade2', name: '小学2年漢字', count: '160字' },
+        { id: 'grade3', name: '小学3年漢字', count: '200字' },
+        { id: 'grade4', name: '小学4年漢字', count: '202字' },
+        { id: 'grade5', name: '小学5年漢字', count: '193字' },
+        { id: 'grade6', name: '小学6年漢字', count: '191字' },
+      ],
+    },
+    {
+      groupName: 'JIS水準漢字',
+      items: [
+        { id: 'jis_1', name: 'JIS第1水準漢字', count: '2,965字' },
+        { id: 'jis_2', name: 'JIS第2水準漢字', count: '3,390字' },
+      ],
+    },
+    {
+      groupName: 'その他',
+      items: [
+        { id: 'halfwidth', name: '半角カタカナ', count: '63字' },
+        { id: 'gaiji', name: '外字 (私用領域)', count: '64字' },
+      ],
+    },
+  ], [modifiedCount]);
+
+  const activeCategoryDisplayName = useMemo(() => {
+    if (activeCategoryId === 'modified') {
+      return `作成済み (${modifiedCount}字)`;
+    }
+    const found = UNICODE_CATEGORIES.find((c) => c.id === activeCategoryId);
+    if (!found) return 'ひらがな (86字)';
+    if (found.id === 'hiragana') return 'ひらがな (86字)';
+    if (found.id === 'katakana') return 'カタカナ (90字)';
+    if (found.id === 'basic_latin_alnum') return '半角英数 (62字)';
+    if (found.id === 'ascii_symbols') return '半角記号 (33字)';
+    if (found.id === 'fullwidth_alnum') return '全角英数 (62字)';
+    if (found.id === 'symbols') return '和文約物・記号 (65字)';
+    if (found.id === 'vertical_forms') return '縦書き約物 (22字)';
+    if (found.id === 'grade1') return '小学1年漢字 (80字)';
+    if (found.id === 'grade2') return '小学2年漢字 (160字)';
+    if (found.id === 'grade3') return '小学3年漢字 (200字)';
+    if (found.id === 'grade4') return '小学4年漢字 (202字)';
+    if (found.id === 'grade5') return '小学5年漢字 (193字)';
+    if (found.id === 'grade6') return '小学6年漢字 (191字)';
+    if (found.id === 'jis_1') return 'JIS第1水準 (2,965字)';
+    if (found.id === 'jis_2') return 'JIS第2水準 (3,390字)';
+    if (found.id === 'halfwidth') return '半角カタカナ (63字)';
+    if (found.id === 'gaiji') return '外字・私用領域 (64字)';
+    return found.name;
+  }, [activeCategoryId, modifiedCount]);
+
+  const quickCategoryTabs = useMemo(() => [
+    { id: 'modified', label: `作成済 (${modifiedCount})` },
+    { id: 'hiragana', label: 'ひらがな' },
+    { id: 'katakana', label: 'カタカナ' },
+    { id: 'basic_latin_alnum', label: '半角英数' },
+    { id: 'symbols', label: '記号' },
+    { id: 'grade1', label: '小1' },
+    { id: 'grade2', label: '小2' },
+    { id: 'grade3', label: '小3' },
+    { id: 'grade4', label: '小4' },
+    { id: 'grade5', label: '小5' },
+    { id: 'grade6', label: '小6' },
+    { id: 'jis_1', label: 'JIS第1' },
+    { id: 'jis_2', label: 'JIS第2' },
+    { id: 'halfwidth', label: '半角カナ' },
+    { id: 'gaiji', label: '外字' },
+  ], [modifiedCount]);
+
   if (!isOpen) return null;
 
   return (
@@ -520,11 +666,13 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
         {/* Left Sidebar Drag Resizer Handle */}
         {!effectiveIsOverlay && (
           <div
+            id="sidebar-resizer-handle"
             onPointerDown={handleResizeStart}
-            className={`absolute top-0 right-0 w-2.5 h-full cursor-col-resize z-30 transition-colors flex items-center justify-center group ${
-              isResizing ? 'bg-emerald-500/40 select-none' : 'hover:bg-emerald-500/25'
+            style={{ touchAction: 'none' }}
+            className={`absolute top-0 -right-2 w-4 h-full cursor-col-resize z-30 flex items-center justify-center group select-none transition-colors ${
+              isResizing ? 'bg-emerald-500/15' : 'hover:bg-emerald-500/10'
             }`}
-            title="左右にドラッグしてサイドバー幅を調整（ダブルクリックで330pxにリセット）"
+            title={`左右にドラッグしてサイドバー幅を調整 (${sidebarWidth}px) / ダブルクリックで初期値(330px)にリセット`}
             onDoubleClick={() => {
               setSidebarWidth(330);
               try {
@@ -533,12 +681,14 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
             }}
           >
             <div
-              className={`w-[3px] h-12 rounded-full transition-colors ${
+              className={`w-1 h-14 rounded-full transition-all shadow-xs flex items-center justify-center ${
                 isResizing
-                  ? 'bg-emerald-600 shadow-sm'
-                  : 'bg-stone-300/80 dark:bg-stone-600/80 group-hover:bg-emerald-500'
+                  ? 'bg-emerald-500 scale-110 shadow-emerald-500/40'
+                  : 'bg-stone-300 dark:bg-stone-600 group-hover:bg-emerald-500 group-hover:scale-105'
               }`}
-            />
+            >
+              <div className="w-0.5 h-6 rounded-full bg-white/50 dark:bg-black/40" />
+            </div>
           </div>
         )}
 
@@ -713,76 +863,138 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
             </div>
           </div>
 
-          {/* Row 2: Category Dropdown & Quick jumping pills */}
-          <div className="space-y-1.5">
-            <select
-              value={activeCategoryId}
-              onChange={(e) => {
-                setActiveCategoryId(e.target.value);
-                setSearchQuery('');
-                setCurrentPage(1);
-              }}
-              className={`w-full border rounded-md px-2.5 py-1 text-xs font-bold focus:outline-none transition-colors cursor-pointer ${
-                isLight
-                  ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 shadow-xs'
-                  : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 focus:border-emerald-500 shadow-xs'
-              }`}
-            >
-              <option value="modified">作成済み ({modifiedCount}字)</option>
-              <optgroup label="── かな ──">
-                <option value="hiragana">ひらがな (86字)</option>
-                <option value="katakana">カタカナ (90字)</option>
-              </optgroup>
-              <optgroup label="── 英数・記号 ──">
-                <option value="basic_latin_alnum">半角英数 (62字)</option>
-                <option value="ascii_symbols">半角記号 (33字)</option>
-                <option value="fullwidth_alnum">全角英数 (62字)</option>
-                <option value="symbols">和文約物・全角記号 (65字)</option>
-                <option value="vertical_forms">縦書き約物・記号 (22字)</option>
-              </optgroup>
-              <optgroup label="── 小学校配当漢字 ──">
-                <option value="grade1">小学1年漢字 (80字)</option>
-                <option value="grade2">小学2年漢字 (160字)</option>
-                <option value="grade3">小学3年漢字 (200字)</option>
-                <option value="grade4">小学4年漢字 (202字)</option>
-                <option value="grade5">小学5年漢字 (193字)</option>
-                <option value="grade6">小学6年漢字 (191字)</option>
-              </optgroup>
-              <optgroup label="── JIS水準漢字 ──">
-                <option value="jis_1">JIS第1水準漢字 (2,965字)</option>
-                <option value="jis_2">JIS第2水準漢字 (3,390字)</option>
-              </optgroup>
-              <optgroup label="── その他 ──">
-                <option value="halfwidth">半角カタカナ (63字)</option>
-                <option value="gaiji">外字・私用領域 (64字)</option>
-              </optgroup>
-            </select>
+          {/* Row 2: Custom In-App Category Popover & Smooth 1-Tap Swipeable Category Tabs */}
+          <div className="space-y-1.5 relative">
+            {/* Main Category Dropdown Trigger Button */}
+            <div className="relative" ref={categoryDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                  isLight
+                    ? isCategoryDropdownOpen
+                      ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-600/30'
+                      : 'bg-white border-[#c8ded3] text-stone-800 hover:border-emerald-600 hover:bg-emerald-50/50'
+                    : isCategoryDropdownOpen
+                    ? 'bg-emerald-950/80 border-emerald-400 text-emerald-200 ring-2 ring-emerald-500/30'
+                    : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 hover:border-emerald-500 hover:bg-[#141f18]'
+                }`}
+                title="カテゴリー一覧メニューを開く（タップで全分類から選択）"
+              >
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <Layers className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
+                  <span className="truncate">{activeCategoryDisplayName}</span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0 ml-1">
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isLight
+                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                        : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                    }`}
+                  >
+                    分類選択
+                  </span>
+                  {isCategoryDropdownOpen ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-stone-500" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-stone-500" />
+                  )}
+                </div>
+              </button>
 
-            {/* Quick Category Jump Pills */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar text-[10px]">
-              {[
-                { id: 'hiragana', label: 'ひらがな' },
-                { id: 'katakana', label: 'カタカナ' },
-                { id: 'grade1', label: '小1漢字' },
-                { id: 'jis_1', label: 'JIS第1' },
-                { id: 'basic_latin_alnum', label: '半角英数' },
-                { id: 'symbols', label: '記号' },
-              ].map((pill) => (
+              {/* Custom In-App Dropdown Popover (Zero OS Full-Screen takeover on Mobile) */}
+              {isCategoryDropdownOpen && (
+                <div
+                  className={`absolute top-full left-0 right-0 z-50 mt-1 max-h-72 overflow-y-auto rounded-xl shadow-2xl border backdrop-blur-md p-1.5 animate-in fade-in zoom-in-95 duration-150 ${
+                    isLight
+                      ? 'bg-white/98 border-emerald-200 shadow-emerald-950/15 text-stone-800'
+                      : 'bg-[#121c15]/98 border-[#2d4034] shadow-black/80 text-emerald-100'
+                  }`}
+                >
+                  {categoryGroups.map((group) => (
+                    <div key={group.groupName} className="mb-2 last:mb-0">
+                      <div
+                        className={`text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider ${
+                          isLight ? 'text-emerald-900/60' : 'text-emerald-400/60'
+                        }`}
+                      >
+                        {group.groupName}
+                      </div>
+                      <div className="space-y-0.5 mt-0.5">
+                        {group.items.map((item) => {
+                          const isSelected = activeCategoryId === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setActiveCategoryId(item.id);
+                                setSearchQuery('');
+                                setCurrentPage(1);
+                                setIsCategoryDropdownOpen(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left ${
+                                isSelected
+                                  ? isLight
+                                    ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                                    : 'bg-emerald-500 text-stone-950 font-bold shadow-xs'
+                                  : isLight
+                                  ? 'hover:bg-emerald-50 text-stone-800'
+                                  : 'hover:bg-[#1a281e] text-emerald-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 truncate">
+                                {isSelected ? (
+                                  <Check className="w-3.5 h-3.5 shrink-0" />
+                                ) : (
+                                  <div className="w-3.5 h-3.5 shrink-0" />
+                                )}
+                                <span className="truncate">{item.name}</span>
+                              </div>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono shrink-0 ml-1.5 ${
+                                  isSelected
+                                    ? isLight
+                                      ? 'bg-white/25 text-white'
+                                      : 'bg-stone-950/30 text-stone-950'
+                                    : isLight
+                                    ? 'bg-stone-100 text-stone-600'
+                                    : 'bg-[#1c2a21] text-emerald-400'
+                                }`}
+                              >
+                                {item.count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Quick 1-Tap Horizontal Swipeable Category Tabs (Direct Switching without any Modal/Picker) */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar touch-pan-x text-[10px] select-none">
+              {quickCategoryTabs.map((pill) => (
                 <button
                   key={pill.id}
+                  type="button"
                   onClick={() => {
                     setActiveCategoryId(pill.id);
                     setSearchQuery('');
                     setCurrentPage(1);
+                    setIsCategoryDropdownOpen(false);
                   }}
-                  className={`px-2 py-0.5 rounded-full font-medium shrink-0 transition-colors ${
+                  className={`px-2.5 py-1 rounded-full font-bold shrink-0 transition-all cursor-pointer ${
                     activeCategoryId === pill.id
                       ? isLight
-                        ? 'bg-emerald-700 text-white font-bold shadow-xs'
-                        : 'bg-emerald-500 text-stone-950 font-bold shadow-xs'
+                        ? 'bg-emerald-700 text-white shadow-xs'
+                        : 'bg-emerald-500 text-stone-950 shadow-xs'
                       : isLight
-                      ? 'bg-emerald-100/70 text-emerald-900 hover:bg-emerald-200/80'
-                      : 'bg-[#18261e] text-emerald-300 hover:bg-[#22352a]'
+                      ? 'bg-emerald-100/70 text-emerald-900 hover:bg-emerald-200/80 active:scale-95'
+                      : 'bg-[#18261e] text-emerald-300 hover:bg-[#22352a] active:scale-95'
                   }`}
                 >
                   {pill.label}

@@ -28,6 +28,11 @@ import {
   ShieldCheck,
   Paintbrush,
   Keyboard,
+  BookOpen,
+  HelpCircle,
+  Lock,
+  Unlock,
+  Eye,
 } from 'lucide-react';
 import { FontProject } from '../types';
 import { ThemeMode } from '../utils/theme';
@@ -49,6 +54,8 @@ interface HeaderProps {
   onOpenQualityModal?: () => void;
   onOpenGlyphSynthesisModal?: () => void;
   onOpenKerningModal?: () => void;
+  onOpenWeightInterpolationModal?: () => void;
+  onOpenGlyphCompareModal?: () => void;
   onOpenRadicalStudio: () => void;
   onToggleRadicals: () => void;
   showRadicals: boolean;
@@ -62,6 +69,8 @@ interface HeaderProps {
   onOpenShortcutsModal?: () => void;
   selectedChar: string;
   selectedUnicode: number;
+  isGlyphLocked?: boolean;
+  onToggleLockGlyph?: () => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
   onShowToast?: (text: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
@@ -82,6 +91,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onOpenQualityModal,
   onOpenGlyphSynthesisModal,
   onOpenKerningModal,
+  onOpenWeightInterpolationModal,
+  onOpenGlyphCompareModal,
   onOpenRadicalStudio,
   onToggleRadicals,
   showRadicals,
@@ -95,6 +106,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onOpenShortcutsModal,
   selectedChar,
   selectedUnicode,
+  isGlyphLocked = false,
+  onToggleLockGlyph,
   theme,
   onToggleTheme,
   onShowToast,
@@ -218,7 +231,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
 
   return (
     <header
-      className={`h-13 border-b flex items-center justify-between px-2 sm:px-4 shrink-0 z-30 select-none relative transition-colors overflow-x-auto scrollbar-none gap-2 sm:gap-3 ${
+      className={`h-12 sm:h-13 border-b flex items-center justify-between px-1.5 sm:px-3 shrink-0 z-30 select-none relative transition-colors overflow-x-auto scrollbar-none gap-1 sm:gap-2.5 ${
         isLight
           ? 'bg-white text-stone-800 border-stone-200 shadow-xs'
           : 'bg-[#121914] text-emerald-100 border-[#222e25] shadow-xs'
@@ -241,10 +254,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({
       />
 
       {/* Left: Sidebar Toggle & Brand & Project Info */}
-      <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+      <div className="flex items-center space-x-1 sm:space-x-2.5 shrink-0 min-w-0">
         <button
           onClick={onToggleGridDrawer}
-          className={`px-2 sm:px-2.5 py-1.5 rounded-xl transition-colors flex items-center space-x-1.5 text-xs font-bold ${
+          className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl transition-colors flex items-center space-x-1 sm:space-x-1.5 text-xs font-bold shrink-0 ${
             showGridDrawer
               ? isLight
                 ? 'bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-xs'
@@ -255,16 +268,16 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           }`}
           title="文字一覧（コード表）の表示/非表示"
         >
-          <Grid className="w-4 h-4" />
+          <Grid className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           <span className="hidden sm:inline">文字一覧</span>
         </button>
 
-        <div className={`h-5 w-[1px] hidden sm:block ${isLight ? 'bg-stone-200' : 'bg-[#222e25]'}`} />
+        <div className={`h-4 sm:h-5 w-[1px] hidden sm:block ${isLight ? 'bg-stone-200' : 'bg-[#222e25]'}`} />
 
         {/* Brand Logo & Name */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+        <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 min-w-0">
           <div
-            className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shadow-xs tracking-tighter ${
+            className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center font-bold text-[11px] sm:text-xs shadow-xs tracking-tighter shrink-0 ${
               isLight
                 ? 'bg-emerald-700 text-white'
                 : 'bg-emerald-500 text-stone-950'
@@ -272,16 +285,16 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           >
             FC
           </div>
-          <div className="flex flex-col">
-            <span className="text-xs font-bold tracking-wide flex items-center space-x-1.5">
-              <span className="truncate max-w-[80px] xs:max-w-[110px] sm:max-w-[160px] md:max-w-[200px]">
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-bold tracking-tight flex items-center space-x-1 min-w-0">
+              <span className="truncate max-w-[65px] xs:max-w-[90px] sm:max-w-[140px] md:max-w-[180px]">
                 {project.metadata.familyName && project.metadata.familyName !== 'OTEdit-Style Font' && project.metadata.familyName !== '新規フォント'
                   ? project.metadata.familyName
                   : 'FontCreator'}
               </span>
               {project.metadata.styleName && project.metadata.styleName !== 'Regular' && (
                 <span
-                  className={`text-[9px] px-1.5 py-0.2 rounded font-mono hidden sm:inline-block ${
+                  className={`text-[8.5px] px-1 py-0.2 rounded font-mono hidden md:inline-block ${
                     isLight ? 'bg-stone-100 text-stone-700 border border-stone-200' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                   }`}
                 >
@@ -289,162 +302,157 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 </span>
               )}
             </span>
-            <span
-              className={`text-[10px] font-mono hidden md:inline ${
-                isLight ? 'text-stone-500' : 'text-emerald-400'
-              }`}
-            >
-              編集中: <strong className={isLight ? 'text-emerald-700 font-sans' : 'text-amber-300 font-sans'}>{selectedChar || 'なし'}</strong>{' '}
-              (U+{selectedUnicode.toString(16).toUpperCase().padStart(4, '0')}) · {glyphCount}字
-            </span>
+            <div className="flex items-center space-x-1.5">
+              <span
+                className={`text-[9.5px] font-mono hidden md:inline truncate ${
+                  isLight ? 'text-stone-500' : 'text-emerald-400'
+                }`}
+              >
+                編集中: <strong className={isLight ? 'text-emerald-700 font-sans' : 'text-amber-300 font-sans'}>{selectedChar || 'なし'}</strong>{' '}
+                (U+{selectedUnicode.toString(16).toUpperCase().padStart(4, '0')}) · {glyphCount}字
+              </span>
+              {onToggleLockGlyph && (
+                <button
+                  id="btn-header-lock-glyph"
+                  onClick={onToggleLockGlyph}
+                  className={`p-1 px-1.5 rounded-lg transition-all flex items-center space-x-1 border text-[10px] font-bold shrink-0 ${
+                    isGlyphLocked
+                      ? isLight
+                        ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-xs ring-1 ring-amber-400/30'
+                        : 'bg-amber-950/80 text-amber-300 border-amber-700 shadow-xs ring-1 ring-amber-500/30'
+                      : isLight
+                      ? 'bg-stone-50 hover:bg-stone-100 text-stone-500 hover:text-stone-800 border-stone-200'
+                      : 'bg-[#18241d] hover:bg-[#202f26] text-stone-400 hover:text-emerald-300 border-[#25362b]'
+                  }`}
+                  title={
+                    isGlyphLocked
+                      ? `「${selectedChar}」は編集ロック（保護）されています。クリックでロック解除`
+                      : `「${selectedChar}」を編集ロック（誤操作や意図しない変更を防止）`
+                  }
+                >
+                  {isGlyphLocked ? (
+                    <>
+                      <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                      <span className="hidden sm:inline text-amber-800 dark:text-amber-300">ロック中</span>
+                    </>
+                  ) : (
+                    <>
+                      <Unlock className="w-3 h-3 text-stone-400" />
+                      <span className="hidden sm:inline">ロック</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Center: Undo/Redo & Quick Actions */}
+      {/* Center: Undo/Redo & Essential Preview / Guide */}
       <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
-        <button
-          onClick={onUndo}
-          disabled={!canUndo}
-          className={`flex p-1.5 sm:p-2 rounded-xl transition-colors ${
-            canUndo
-              ? isLight
-                ? 'text-stone-700 hover:bg-stone-100 active:scale-95'
-                : 'text-emerald-200 hover:bg-[#1d2720] active:scale-95'
-              : isLight
-              ? 'text-stone-300 cursor-not-allowed'
-              : 'text-stone-600 cursor-not-allowed'
+        {/* Undo / Redo Group */}
+        <div
+          className={`flex items-center rounded-xl border p-0.5 ${
+            isLight ? 'bg-stone-100/80 border-stone-200' : 'bg-[#18241d] border-[#223025]'
           }`}
-          title="元に戻す (Ctrl+Z)"
         >
-          <Undo2 className="w-4 h-4" />
-        </button>
-        <button
-          onClick={onRedo}
-          disabled={!canRedo}
-          className={`flex p-1.5 sm:p-2 rounded-xl transition-colors ${
-            canRedo
-              ? isLight
-                ? 'text-stone-700 hover:bg-stone-100 active:scale-95'
-                : 'text-emerald-200 hover:bg-[#1d2720] active:scale-95'
-              : isLight
-              ? 'text-stone-300 cursor-not-allowed'
-              : 'text-stone-600 cursor-not-allowed'
-          }`}
-          title="やり直す (Ctrl+Y)"
-        >
-          <Redo2 className="w-4 h-4" />
-        </button>
+          <button
+            onClick={onUndo}
+            disabled={!canUndo}
+            className={`p-1.5 rounded-lg transition-colors ${
+              canUndo
+                ? isLight
+                  ? 'text-stone-700 hover:bg-white active:scale-95 shadow-xs'
+                  : 'text-emerald-200 hover:bg-[#202f26] active:scale-95 shadow-xs'
+                : isLight
+                ? 'text-stone-300 cursor-not-allowed'
+                : 'text-stone-600 cursor-not-allowed'
+            }`}
+            title="元に戻す (Ctrl+Z)"
+          >
+            <Undo2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+          <button
+            onClick={onRedo}
+            disabled={!canRedo}
+            className={`p-1.5 rounded-lg transition-colors ${
+              canRedo
+                ? isLight
+                  ? 'text-stone-700 hover:bg-white active:scale-95 shadow-xs'
+                  : 'text-emerald-200 hover:bg-[#202f26] active:scale-95 shadow-xs'
+                : isLight
+                ? 'text-stone-300 cursor-not-allowed'
+                : 'text-stone-600 cursor-not-allowed'
+            }`}
+            title="やり直す (Ctrl+Y)"
+          >
+            <Redo2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+        </div>
 
-        <div className={`h-5 w-[1px] mx-0.5 sm:mx-1 hidden md:block ${isLight ? 'bg-stone-200' : 'bg-[#222e25]'}`} />
+        <div className={`h-4 sm:h-5 w-[1px] hidden sm:block ${isLight ? 'bg-stone-200' : 'bg-[#222e25]'}`} />
 
         {/* Test Waterfall Modal */}
         <button
           onClick={onOpenTestModal}
-          className={`hidden md:flex px-2.5 py-1.5 rounded-xl text-xs font-bold items-center space-x-1.5 transition-all shadow-xs active:scale-95 border ${
+          className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs active:scale-95 border ${
             isLight
-              ? 'bg-stone-100 text-stone-800 hover:bg-stone-200 border-stone-200'
-              : 'bg-[#1d2720] text-emerald-200 hover:bg-[#253329] border-[#25362b]'
+              ? 'bg-stone-100/90 text-stone-800 hover:bg-stone-200/90 border-stone-200'
+              : 'bg-[#18241d] text-emerald-200 hover:bg-[#202f26] border-[#25362b]'
           }`}
-          title="フォント試し打ち・文章プレビュー"
+          title="フォント試し打ち・文章リアルタイムプレビュー"
         >
           <Play className="w-3.5 h-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
-          <span>試し打ち</span>
+          <span className="hidden sm:inline">試し打ち</span>
         </button>
+
+        {/* Manual & Tutorial & Shortcuts Guide Button */}
+        {onOpenShortcutsModal && (
+          <button
+            onClick={onOpenShortcutsModal}
+            className={`px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs border active:scale-95 ${
+              isLight
+                ? 'bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-900 border-emerald-200 hover:border-emerald-300'
+                : 'bg-[#1a2d21] hover:bg-[#223b2c] text-emerald-200 border-emerald-800/60 hover:border-emerald-700'
+            }`}
+            title="説明書・チュートリアル・ショートカット集 [?]"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="hidden md:inline">説明書・ガイド</span>
+            <span className="md:hidden">ガイド</span>
+            <kbd className="hidden lg:inline-block px-1 py-0.2 rounded text-[10px] font-mono font-bold bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-700 dark:text-stone-300">
+              ?
+            </kbd>
+          </button>
+        )}
 
         {/* Kanji Radicals palette toggle */}
         <button
           id="btn-header-radicals"
           onClick={onToggleRadicals}
-          className={`hidden md:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-all active:scale-95 ${
+          className={`hidden xl:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-all active:scale-95 ${
             showRadicals
               ? isLight
-                ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300 shadow-xs ring-2 ring-emerald-500/20'
-                : 'bg-emerald-600 text-white font-bold shadow-xs ring-2 ring-emerald-400/20'
+                ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300 shadow-xs'
+                : 'bg-emerald-700 text-white font-bold shadow-xs'
               : isLight
-              ? 'text-stone-700 hover:bg-emerald-50 hover:text-emerald-900 border border-stone-200/90'
-              : 'text-stone-300 hover:bg-[#1d2720] hover:text-emerald-200 border border-[#222e25]'
+              ? 'text-stone-600 hover:bg-stone-100 border border-stone-200/80'
+              : 'text-stone-300 hover:bg-[#1d2720] border border-[#222e25]'
           }`}
-          title="部首・パーツパレット (高品質部首・フォント抽出・康熙214部首)"
+          title="部首パレット (康熙214部首・高品質パーツ)"
         >
-          <Sparkles className={`w-3.5 h-3.5 ${showRadicals ? 'text-emerald-700 dark:text-emerald-200' : 'text-emerald-600 dark:text-emerald-400'}`} />
-          <span className="hidden lg:inline font-bold">部首</span>
+          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+          <span>部首</span>
         </button>
-
-        {/* Toggle Metrics Drawer */}
-        {onToggleMetricsDrawer && (
-          <button
-            onClick={onToggleMetricsDrawer}
-            className={`hidden lg:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1 transition-colors ${
-              showMetricsDrawer
-                ? isLight
-                  ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
-                  : 'bg-emerald-600 text-white font-bold'
-                : isLight
-                ? 'text-stone-600 hover:bg-stone-100 border border-stone-200/80'
-                : 'text-stone-300 hover:bg-[#1d2720] border border-[#222e25]'
-            }`}
-            title="メトリクス・変形パネル"
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">メトリクス</span>
-          </button>
-        )}
-
-        {/* Wide / Zen Mode Toggle */}
-        {onToggleZenMode && (
-          <button
-            onClick={onToggleZenMode}
-            className={`hidden xl:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1 transition-all ${
-              isZenMode
-                ? isLight
-                  ? 'bg-emerald-700 text-white font-bold shadow-xs'
-                  : 'bg-emerald-500 text-stone-950 font-bold shadow-xs'
-                : isLight
-                ? 'text-stone-600 hover:bg-stone-100 border border-stone-200/80'
-                : 'text-stone-300 hover:bg-[#1d2720] border border-[#222e25]'
-            }`}
-            title="全面作図・集中モード (サイドバー収納)"
-          >
-            {isZenMode ? (
-              <>
-                <Minimize className="w-3.5 h-3.5" />
-                <span>標準表示</span>
-              </>
-            ) : (
-              <>
-                <Maximize className="w-3.5 h-3.5" />
-                <span>全面作図</span>
-              </>
-            )}
-          </button>
-        )}
-
-        {/* Shortcuts Help Button */}
-        {onOpenShortcutsModal && (
-          <button
-            onClick={onOpenShortcutsModal}
-            className={`hidden 2xl:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1 transition-all ${
-              isLight
-                ? 'text-stone-600 hover:bg-stone-100 border border-stone-200/80'
-                : 'text-stone-300 hover:bg-[#1d2720] border border-[#222e25]'
-            }`}
-            title="キーボードショートカット一覧 [?]"
-          >
-            <Keyboard className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
-            <span>ショートカット</span>
-            <kbd className="px-1 py-0.2 rounded text-[10px] font-mono bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-700">?</kbd>
-          </button>
-        )}
       </div>
 
-      {/* Right: Tools Dropdown & Theme & Save & TTF Export */}
+      {/* Right: Clean Tools Dropdown & Theme & Settings & TTF Export */}
       <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
         {/* Unified Tools Dropdown */}
         <div className="relative" ref={toolsMenuRef}>
           <button
             onClick={() => setShowToolsMenu(!showToolsMenu)}
-            className={`px-2 sm:px-3 py-1.5 h-9 rounded-xl text-xs font-bold flex items-center space-x-1 sm:space-x-1.5 transition-all shadow-xs border active:scale-95 ${
+            className={`px-2 sm:px-2.5 py-1 sm:py-1.5 h-8 sm:h-9 rounded-lg sm:rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs border active:scale-95 ${
               showToolsMenu
                 ? isLight
                   ? 'bg-emerald-100 text-emerald-950 border-emerald-300 ring-2 ring-emerald-500/20'
@@ -453,11 +461,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 ? 'bg-white hover:bg-emerald-50/70 text-stone-700 hover:text-emerald-900 border-stone-200 hover:border-emerald-300'
                 : 'bg-[#151f19] hover:bg-[#1d2b22] text-emerald-200 border-[#25362b] hover:border-emerald-700/60'
             }`}
-            title="拡張ツール・制作スタジオ・ファイル管理メニュー"
+            title="機能メニュー（制作スタジオ・自動化・ファイル管理）"
           >
             <Sliders className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="font-bold hidden xs:inline">機能メニュー</span>
-            <span className="font-bold xs:hidden">メニュー</span>
+            <span className="font-bold">機能</span>
             <span
               className={`hidden sm:inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
                 isLight
@@ -679,6 +686,56 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                     </div>
                   </button>
 
+                  {/* Weight Interpolation & Family Generation */}
+                  {onOpenWeightInterpolationModal && (
+                    <button
+                      onClick={() => {
+                        onOpenWeightInterpolationModal();
+                        setShowToolsMenu(false);
+                      }}
+                      className={`text-left p-2 rounded-xl border transition-all flex items-start space-x-2 group ${
+                        isLight
+                          ? 'bg-stone-50 hover:bg-emerald-50/60 border-stone-200 hover:border-emerald-300'
+                          : 'bg-[#1a251e] hover:bg-[#202f26] border-[#25362b] hover:border-emerald-700/60'
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                        <Sliders className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold truncate">複数ウェイト自動補間</div>
+                        <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-snug line-clamp-2">
+                          太さ一括増減・ファミリー展開・2マスター間幾何補間
+                        </div>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Glyph Overlay Compare */}
+                  {onOpenGlyphCompareModal && (
+                    <button
+                      onClick={() => {
+                        onOpenGlyphCompareModal();
+                        setShowToolsMenu(false);
+                      }}
+                      className={`text-left p-2 rounded-xl border transition-all flex items-start space-x-2 group ${
+                        isLight
+                          ? 'bg-stone-50 hover:bg-emerald-50/60 border-stone-200 hover:border-emerald-300'
+                          : 'bg-[#1a251e] hover:bg-[#202f26] border-[#25362b] hover:border-emerald-700/60'
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                        <Eye className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold truncate">グリフ重ね合わせ比較</div>
+                        <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-snug line-clamp-2">
+                          類似文字・骨格の半透明重ね合わせバランス検査
+                        </div>
+                      </div>
+                    </button>
+                  )}
+
                   {/* Radical Studio */}
                   <button
                     onClick={() => {
@@ -824,12 +881,12 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                       }}
                       className={`text-left p-2 rounded-xl border transition-all flex items-center space-x-2 col-span-2 ${
                         isLight
-                          ? 'bg-stone-50 hover:bg-stone-100 border-stone-200 text-stone-800'
-                          : 'bg-[#1a251e] hover:bg-[#202d24] border-[#25362b] text-emerald-200'
+                          ? 'bg-emerald-50/70 hover:bg-emerald-100/70 border-emerald-200 text-emerald-950'
+                          : 'bg-[#1a2d21] hover:bg-[#223b2c] border-emerald-800/60 text-emerald-200'
                       }`}
                     >
-                      <Keyboard className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      <span className="text-xs font-medium truncate">キーボードショートカット集 [?]</span>
+                      <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="text-xs font-bold truncate">説明書・チュートリアル・ショートカット集 [?]</span>
                     </button>
                   )}
                 </div>
@@ -855,66 +912,37 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         {/* Dark/Light Theme Toggle */}
         <button
           onClick={onToggleTheme}
-          className={`p-2 rounded-xl transition-colors ${
+          className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl transition-colors shrink-0 ${
             isLight ? 'text-stone-600 hover:bg-stone-100' : 'text-emerald-300 hover:bg-[#1d2720]'
           }`}
           title={isLight ? 'ダークモードに切り替え' : 'ライトモードに切り替え'}
         >
-          {isLight ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-amber-300" />}
-        </button>
-
-        {/* Reset Project Button */}
-        <button
-          id="btn-header-reset-project"
-          onClick={() => setIsConfirmingNew(true)}
-          className={`hidden xl:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-all border shrink-0 ${
-            isLight
-              ? 'bg-stone-100 hover:bg-rose-50 text-stone-700 hover:text-rose-700 border-stone-200 hover:border-rose-300 active:scale-95'
-              : 'bg-[#1e2c22] hover:bg-[#2b1b20] text-emerald-200 hover:text-rose-300 border-[#25362b] hover:border-rose-800 active:scale-95'
-          }`}
-          title="プロジェクトをリセット・白紙から新規作成"
-        >
-          <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
-          <span className="hidden xl:inline">リセット</span>
-        </button>
-
-        {/* Save JSON Data */}
-        <button
-          onClick={handleSaveProjectJson}
-          className={`hidden lg:flex px-3 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-colors border shrink-0 ${
-            isLight
-              ? 'bg-stone-100 hover:bg-stone-200 text-stone-800 border-stone-200'
-              : 'bg-[#1e2c22] hover:bg-[#283b2e] text-emerald-200 border-[#25362b]'
-          }`}
-          title="セーブデータファイルを出力 (.json)"
-        >
-          <Save className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">保存</span>
+          {isLight ? <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />}
         </button>
 
         {/* Font Info / Settings */}
         <button
           onClick={onOpenFontInfoModal}
-          className={`p-2 rounded-xl transition-colors ${
+          className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl transition-colors shrink-0 ${
             isLight ? 'text-stone-600 hover:bg-stone-100' : 'text-emerald-300 hover:bg-[#1d2720]'
           }`}
           title="フォント詳細情報・メトリクス設定"
         >
-          <Settings className="w-4 h-4" />
+          <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </button>
 
         {/* Export Font Modal Prominent Trigger */}
         <button
           onClick={handleExportTtf}
-          className={`px-2.5 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1 sm:space-x-1.5 transition-all shadow-md active:scale-95 shrink-0 ${
+          className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 h-8 sm:h-9 rounded-lg sm:rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-md active:scale-95 shrink-0 ${
             isLight
               ? 'bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold shadow-xs'
               : 'bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-extrabold shadow-xs'
           }`}
           title="OSやiPad・アプリで使えるフォントを出力"
         >
-          <Download className="w-4 h-4 shrink-0" />
-          <span className="hidden sm:inline">フォント</span>
+          <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          <span className="hidden xs:inline">フォント</span>
           <span>出力</span>
         </button>
       </div>

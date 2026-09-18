@@ -21,6 +21,40 @@ export interface KangxiRadicalItem {
   exampleChars?: string;
 }
 
+export type RadicalFontPreset = 'serif' | 'sans' | 'maru';
+
+export interface FontStyleOption {
+  id: RadicalFontPreset;
+  label: string;
+  subLabel: string;
+  fontFamily: string;
+  fontWeight: number;
+}
+
+export const RADICAL_FONT_OPTIONS: FontStyleOption[] = [
+  {
+    id: 'serif',
+    label: '明朝体',
+    subLabel: '明朝体 (Noto Serif JP)',
+    fontFamily: "'Noto Serif JP', serif",
+    fontWeight: 600,
+  },
+  {
+    id: 'sans',
+    label: 'ゴシック体',
+    subLabel: 'ゴシック体 (Noto Sans JP)',
+    fontFamily: "'Noto Sans JP', sans-serif",
+    fontWeight: 600,
+  },
+  {
+    id: 'maru',
+    label: '丸ゴシック',
+    subLabel: '丸ゴシック (Zen Maru Gothic)',
+    fontFamily: "'Zen Maru Gothic', sans-serif",
+    fontWeight: 700,
+  },
+];
+
 const radicalContoursCache = new Map<string, PathContour[]>();
 
 export const DEFAULT_RADICAL_FONT_FAMILY = "'Noto Serif JP', serif";
@@ -380,3 +414,24 @@ export const KANGXI_RADICALS_CATALOG: KangxiRadicalItem[] = [
   { number: 195, char: '魚', name: 'うお・さかなへん', reading: 'ギョ', strokes: 11, category: 'hen', exampleChars: '鮮鯨鯛' },
   { number: 196, char: '鳥', name: 'とり', reading: 'チョウ', strokes: 11, category: 'tsukuri', exampleChars: '鳴鳩鴨' },
 ];
+
+/**
+ * Standard default radical definitions for Radical Studio
+ */
+export const INITIAL_STUDIO_RADICAL_DEFS: {
+  id: string;
+  name: string;
+  char: string;
+  category: 'hen' | 'tsukuri' | 'kanmuri' | 'ashi' | 'tare' | 'nyo' | 'kamae';
+  description: string;
+}[] = [
+  { id: 'init_sanzui', name: 'さんずい (氵)', char: '氵', category: 'hen', description: '水・液体に関する偏' },
+  { id: 'init_kihen', name: 'きへん (木)', char: '木', category: 'hen', description: '樹木・木材に関する偏' },
+  { id: 'init_ninben', name: 'にんべん (亻)', char: '亻', category: 'hen', description: '人間・動作に関する偏' },
+  { id: 'init_gonben', name: 'ごんべん (言)', char: '言', category: 'hen', description: '言葉・伝達に関する偏' },
+  { id: 'init_kusakanmuri', name: 'くさかんむり (艹)', char: '艹', category: 'kanmuri', description: '草木・植物に関する冠' },
+  { id: 'init_tehen', name: 'てへん (扌)', char: '扌', category: 'hen', description: '手・動作に関する偏' },
+  { id: 'init_ukanmuri', name: 'うかんむり (宀)', char: '宀', category: 'kanmuri', description: '屋根・家屋に関する冠' },
+  { id: 'init_shinnyo', name: 'しんにょう (⻌)', char: '⻌', category: 'nyo', description: '道・移動・進行に関する繞' },
+];
+

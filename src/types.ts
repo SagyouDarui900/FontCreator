@@ -76,6 +76,7 @@ export interface GlyphData {
   contours: PathContour[];
   modified?: boolean;
   notes?: string;
+  locked?: boolean;
 }
 
 export interface CustomGuideline {
@@ -153,6 +154,19 @@ export interface ShapePreset {
   category: 'basic' | 'polygon' | 'symbol' | 'decorative';
   description: string;
   iconSvgPath?: string;
+}
+
+export interface GlyphOverlaySettings {
+  enabled: boolean;
+  referenceChar?: string;
+  referenceUnicode?: number;
+  opacity: number; // 0.1 to 1.0
+  color: string; // Hex color code
+  renderMode: 'outline' | 'fill' | 'difference';
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+  showMetrics: boolean;
 }
 
 export interface TraceSettings {

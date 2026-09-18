@@ -111,13 +111,11 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
       ...prev,
       offsetX: 0,
       offsetY: 0,
-      scale: 1,
       rotation: 0,
-      contrast: 1,
-      brightness: 1,
-      grayscale: false,
-      invert: false,
     }));
+    if (onShowToast) {
+      onShowToast('下絵の位置を中央(0, 0)にリセットしました', 'info');
+    }
   };
 
   return (
@@ -350,7 +348,7 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px]">
                       <span className={isLight ? 'text-stone-600' : 'text-emerald-400'}>拡大・縮小倍率</span>
-                      <span className="font-mono">{Math.round(traceSettings.scale * 100)}%</span>
+                      <span className="font-mono">{Math.round((traceSettings.scale ?? 1) * 100)}%</span>
                     </div>
                     <input
                       type="range"
@@ -361,6 +359,43 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
                       onChange={(e) => setTraceSettings((s) => ({ ...s, scale: Number(e.target.value) }))}
                       className="w-full accent-emerald-700"
                     />
+                    {/* Quick Fit Presets */}
+                    <div className="flex items-center space-x-1.5 pt-1">
+                      <span className="text-[10px] text-stone-500">推奨サイズ:</span>
+                      <button
+                        type="button"
+                        onClick={() => setTraceSettings((s) => ({ ...s, scale: 0.78 }))}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                          Math.abs((traceSettings.scale ?? 1) - 0.78) < 0.02
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-300'
+                        }`}
+                      >
+                        仮名 78%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTraceSettings((s) => ({ ...s, scale: 0.85 }))}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                          Math.abs((traceSettings.scale ?? 1) - 0.85) < 0.02
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+                        }`}
+                      >
+                        漢字 85%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTraceSettings((s) => ({ ...s, scale: 1.0 }))}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                          Math.abs((traceSettings.scale ?? 1) - 1.0) < 0.02
+                            ? 'bg-sky-600 text-white'
+                            : 'bg-sky-100 text-sky-900 hover:bg-sky-200 dark:bg-sky-950 dark:text-sky-300'
+                        }`}
+                      >
+                        100%
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-1">

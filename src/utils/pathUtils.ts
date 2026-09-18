@@ -755,6 +755,11 @@ export function isPointNearContour(
     return false;
   }
 
+  // If point is inside a closed contour, treat as hit
+  if (contour.closed && isPointInContour(point, contour)) {
+    return true;
+  }
+
   // 1. Check anchor nodes
   for (const node of contour.nodes) {
     if (Math.hypot(node.x - point.x, node.y - point.y) <= threshold) {
@@ -6095,6 +6100,103 @@ export function generateStraightStrokePoints(
   }
   return pts;
 }
+
+/**
+ * Perform vector point-by-point geometric interpolation between Master Contours A and B.
+ * @param masterA Starting master contours (t = 0)
+ * @param masterB Target master contours (t = 1)
+ * @param t Interpolation factor (0.0 to 1.0)
+ */
+export function interpolateContours(
+  masterA: PathContour[],
+  masterB: PathContour[],
+  t: number
+): PathContour[] {
+  const clampedT = Math.max(0, Math.min(1, t));
+  if (clampedT === 0 || !masterB || masterB.length === 0) return masterA;
+  if (clampedT === 1 || !masterA || masterA.length === 0) return masterB;
+
+  const count = Math.max(masterA.length, masterB.length);
+  const result: PathContour[] = [];
+
+  for (let cIdx = 0; cIdx < count; cIdx++) {
+    const cA = masterA[cIdx % masterA.length];
+    const cB = masterB[cIdx % masterB.length];
+
+    if (!cA || !cB) continue;
+
+    const nodesA = cA.nodes;
+    const nodesB = cB.nodes;
+
+    // Direct 1:1 node matching if topology aligns
+    if (nodesA.length === nodesB.length) {
+      const interpolatedNodes: BezierNode[] = nodesA.map((nA, i) => {
+        const nB = nodesB[i];
+        const x = Math.round(nA.x * (1 - clampedT) + nB.x * clampedT);
+        const y = Math.round(nA.y * (1 - clampedT) + nB.y * clampedT);
+
+        let handleIn: Point | null = null;
+        if (nA.handleIn || nB.handleIn) {
+          const hInAx = nA.handleIn ? nA.handleIn.x : nA.x;
+          const hInAy = nA.handleIn ? nA.handleIn.y : nA.y;
+          const hInBx = nB.handleIn ? nB.handleIn.x : nB.x;
+          const hInBy = nB.handleIn ? nB.handleIn.y : nB.y;
+          handleIn = {
+            x: Math.round(hInAx * (1 - clampedT) + hInBx * clampedT),
+            y: Math.round(hInAy * (1 - clampedT) + hInBy * clampedT),
+          };
+        }
+
+        let handleOut: Point | null = null;
+        if (nA.handleOut || nB.handleOut) {
+          const hOutAx = nA.handleOut ? nA.handleOut.x : nA.x;
+          const hOutAy = nA.handleOut ? nA.handleOut.y : nA.y;
+          const hOutBx = nB.handleOut ? nB.handleOut.x : nB.x;
+          const hOutBy = nB.handleOut ? nB.handleOut.y : nB.y;
+          handleOut = {
+            x: Math.round(hOutAx * (1 - clampedT) + hOutBx * clampedT),
+            y: Math.round(hOutAy * (1 - clampedT) + hOutBy * clampedT),
+          };
+        }
+
+        return {
+          id: `interp-${cIdx}-${i}`,
+          x,
+          y,
+          handleIn,
+          handleOut,
+          type: nA.type || nB.type,
+        };
+      });
+
+      result.push({
+        id: `interp-contour-${cIdx}`,
+        nodes: interpolatedNodes,
+        closed: cA.closed && cB.closed,
+      });
+    } else {
+      // Fallback for unequal node count: blend via bounding boxes & weight offsets
+      const bboxA = getContoursBoundingBox([cA]);
+      const bboxB = getContoursBoundingBox([cB]);
+      const scaleX = (bboxB.width || 1) / (bboxA.width || 1);
+      const scaleY = (bboxB.height || 1) / (bboxA.height || 1);
+      const currentScaleX = 1 + (scaleX - 1) * clampedT;
+      const currentScaleY = 1 + (scaleY - 1) * clampedT;
+      const dx = (bboxB.centerX - bboxA.centerX) * clampedT;
+      const dy = (bboxB.centerY - bboxA.centerY) * clampedT;
+
+      const morphed = transformContours([cA], (p) => ({
+        x: Math.round(bboxA.centerX + (p.x - bboxA.centerX) * currentScaleX + dx),
+        y: Math.round(bboxA.centerY + (p.y - bboxA.centerY) * currentScaleY + dy),
+      }));
+
+      result.push(...morphed);
+    }
+  }
+
+  return result;
+}
+
 
 
 

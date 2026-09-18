@@ -590,7 +590,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
               </label>
               <input
                 type="number"
-                value={advanceWidth}
+                value={advanceWidth ?? 1000}
                 onChange={(e) => {
                   onChangeAdvanceWidth(Number(e.target.value) || 1000);
                   onCommitHistory();
@@ -614,7 +614,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
               </label>
               <input
                 type="number"
-                value={lsb}
+                value={lsb ?? 50}
                 onChange={(e) => {
                   onChangeLsb(Number(e.target.value) || 0);
                   onCommitHistory();

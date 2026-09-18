@@ -1,5 +1,6 @@
 import * as opentype from 'opentype.js';
 import { FontMetadata, FontProject, GlyphData, PathContour } from '../types';
+import { DEFAULT_SAMPLE_GLYPHS } from '../data/defaultSampleGlyphs';
 import {
   generateId,
   rotateContours,
@@ -108,7 +109,8 @@ export function contoursToOpenTypePath(
  */
 export function openTypePathToContours(
   otPath: opentype.Path,
-  baselineY: number = SCREEN_BASELINE_Y
+  baselineY: number = SCREEN_BASELINE_Y,
+  isScreenCoords: boolean = true
 ): PathContour[] {
   const contours: PathContour[] = [];
   let currentContour: PathContour | null = null;
@@ -123,8 +125,8 @@ export function openTypePathToContours(
       if (currentContour && currentContour.nodes.length > 0) {
         contours.push(currentContour);
       }
-      const nodeX = cmd.x;
-      const nodeY = baselineY - cmd.y;
+      const nodeX = Math.round(cmd.x);
+      const nodeY = isScreenCoords ? Math.round(cmd.y) : Math.round(baselineY - cmd.y);
       currentContour = {
         id: generateId(),
         closed: false,
@@ -142,8 +144,8 @@ export function openTypePathToContours(
       if (!currentContour) {
         currentContour = { id: generateId(), closed: false, nodes: [] };
       }
-      const nodeX = cmd.x;
-      const nodeY = baselineY - cmd.y;
+      const nodeX = Math.round(cmd.x);
+      const nodeY = isScreenCoords ? Math.round(cmd.y) : Math.round(baselineY - cmd.y);
       currentContour.nodes.push({
         id: generateId(),
         x: nodeX,
@@ -155,10 +157,16 @@ export function openTypePathToContours(
       if (!currentContour) {
         currentContour = { id: generateId(), closed: false, nodes: [] };
       }
-      const cp1 = { x: cmd.x1, y: baselineY - cmd.y1 };
-      const cp2 = { x: cmd.x2, y: baselineY - cmd.y2 };
-      const nodeX = cmd.x;
-      const nodeY = baselineY - cmd.y;
+      const cp1 = {
+        x: Math.round(cmd.x1),
+        y: isScreenCoords ? Math.round(cmd.y1) : Math.round(baselineY - cmd.y1),
+      };
+      const cp2 = {
+        x: Math.round(cmd.x2),
+        y: isScreenCoords ? Math.round(cmd.y2) : Math.round(baselineY - cmd.y2),
+      };
+      const nodeX = Math.round(cmd.x);
+      const nodeY = isScreenCoords ? Math.round(cmd.y) : Math.round(baselineY - cmd.y);
 
       // Assign handleOut to previous node
       if (currentContour.nodes.length > 0) {
@@ -178,10 +186,10 @@ export function openTypePathToContours(
       if (!currentContour) {
         currentContour = { id: generateId(), closed: false, nodes: [] };
       }
-      const qx = cmd.x1;
-      const qy = baselineY - cmd.y1;
-      const nodeX = cmd.x;
-      const nodeY = baselineY - cmd.y;
+      const qx = Math.round(cmd.x1);
+      const qy = isScreenCoords ? Math.round(cmd.y1) : Math.round(baselineY - cmd.y1);
+      const nodeX = Math.round(cmd.x);
+      const nodeY = isScreenCoords ? Math.round(cmd.y) : Math.round(baselineY - cmd.y);
 
       const cp1x = lastPoint.x + (2 / 3) * (qx - lastPoint.x);
       const cp1y = lastPoint.y + (2 / 3) * (qy - lastPoint.y);
@@ -189,14 +197,14 @@ export function openTypePathToContours(
       const cp2y = nodeY + (2 / 3) * (qy - nodeY);
 
       if (currentContour.nodes.length > 0) {
-        currentContour.nodes[currentContour.nodes.length - 1].handleOut = { x: cp1x, y: cp1y };
+        currentContour.nodes[currentContour.nodes.length - 1].handleOut = { x: Math.round(cp1x), y: Math.round(cp1y) };
       }
 
       currentContour.nodes.push({
         id: generateId(),
         x: nodeX,
         y: nodeY,
-        handleIn: { x: cp2x, y: cp2y },
+        handleIn: { x: Math.round(cp2x), y: Math.round(cp2y) },
         type: 'smooth',
       });
       lastPoint = { x: nodeX, y: nodeY };
@@ -555,17 +563,50 @@ export function compileFont(
   font.tables.os2.sFamilyClass = 0;
   font.tables.os2.panose = [2, 0, 5, 3, 0, 0, 0, 0, 0, 0];
 
-  // OS/2 Table: Code Page Ranges (Crucial for Windows Japanese IME & Font Selection)
+  // Calculate accurate OpenType OS/2 ulUnicodeRange flags from glyphs in project
+  let uRange1 = 0x00000001; // Basic Latin (0x20-0x7E)
+  let uRange2 = 0x00000000;
+  let uRange3 = 0x00000000;
+  let uRange4 = 0x00000000;
+
+  let hasHiragana = false;
+  let hasKatakana = false;
+  let hasKanji = false;
+  let hasCjkSymbols = false;
+
+  for (const glyph of glyphsList) {
+    const u = typeof glyph.unicode === 'number' ? glyph.unicode : 0;
+    if (u >= 0x0080 && u <= 0x00ff) uRange1 |= 0x00000002; // Latin-1 Supplement
+    if (u >= 0x0100 && u <= 0x017f) uRange1 |= 0x00000004; // Latin Extended-A
+    if (u >= 0x0180 && u <= 0x024f) uRange1 |= 0x00000008; // Latin Extended-B
+    if (u >= 0x3000 && u <= 0x303f) { uRange2 |= 0x00010000; hasCjkSymbols = true; } // Bit 48: CJK Symbols & Punctuation
+    if (u >= 0x3040 && u <= 0x309f) { uRange2 |= 0x00020000; hasHiragana = true; } // Bit 49: Hiragana
+    if (u >= 0x30a0 && u <= 0x30ff) { uRange2 |= 0x00040000; hasKatakana = true; } // Bit 50: Katakana
+    if (u >= 0x31f0 && u <= 0x31ff) { uRange2 |= 0x01000000; } // Bit 56: Katakana Phonetic Extensions
+    if (u >= 0x3200 && u <= 0x32ff) { uRange2 |= 0x02000000; } // Bit 57: Enclosed CJK Letters and Months
+    if (u >= 0x3300 && u <= 0x33ff) { uRange2 |= 0x04000000; } // Bit 58: CJK Compatibility
+    if (u >= 0x4e00 && u <= 0x9fff) { uRange2 |= 0x08000000; hasKanji = true; } // Bit 59: CJK Unified Ideographs
+    if (u >= 0xf900 && u <= 0xfaff) { uRange2 |= 0x20000000; } // Bit 61: CJK Compatibility Ideographs
+    if (u >= 0xff00 && u <= 0xffef) { uRange3 |= 0x00000010; } // Bit 68: Halfwidth and Fullwidth Forms
+  }
+
+  // Always enable Japanese script bitflags by default so OS treats font as Japanese
+  uRange2 |= 0x00030000; // Hiragana & CJK Symbols
+  if (hasKatakana || !hasHiragana) uRange2 |= 0x00040000; // Katakana
+  if (hasKanji) uRange2 |= 0x08000000; // Kanji
+
+  // OS/2 Table: Code Page Ranges (Crucial for Windows Japanese IME, DirectWrite & Font Selection)
   // Bit 17 (0x00020000) = JIS/Japanese (CP 932 - Shift-JIS)
   // Bit 0  (0x00000001) = Latin 1 (CP 1252)
+  // Intentionally do NOT set Bit 18 (CP 936 Simplified Chinese) or Bit 20 (CP 950 Traditional Chinese)
   font.tables.os2.ulCodePageRange1 = 0x00020001;
   font.tables.os2.ulCodePageRange2 = 0x00000000;
 
-  // OS/2 Table: Unicode Ranges (Basic Latin, CJK Symbols, Hiragana, Katakana, CJK Ideographs)
-  font.tables.os2.ulUnicodeRange1 = 0x8000002f; // Basic Latin, Latin-1 Supplement, Latin Extended
-  font.tables.os2.ulUnicodeRange2 = 0x70000000; // CJK Symbols and Punctuation, Hiragana, Katakana
-  font.tables.os2.ulUnicodeRange3 = 0x00000008; // CJK Unified Ideographs
-  font.tables.os2.ulUnicodeRange4 = 0x00000000;
+  // OS/2 Table: Unicode Ranges
+  font.tables.os2.ulUnicodeRange1 = uRange1;
+  font.tables.os2.ulUnicodeRange2 = uRange2;
+  font.tables.os2.ulUnicodeRange3 = uRange3;
+  font.tables.os2.ulUnicodeRange4 = uRange4;
   font.tables.os2.achVendID = 'OTED';
 
   // OS/2 Table: Windows & Typographic Line Metrics
@@ -647,6 +688,18 @@ export function compileFont(
     if (project.metadata.description) {
       platNames.description = { en: project.metadata.description, ja: project.metadata.description };
     }
+
+    // Name ID 19 (Sample Text): Used by Windows 11 Font Settings & macOS Font Book preview
+    const sampleJaChars = Object.values(project.glyphs)
+      .map((g) => g.char)
+      .filter((c) => c && c.trim() && /[ぁ-んァ-ヶー\u4e00-\u9faf]/.test(c))
+      .slice(0, 12)
+      .join('');
+    const sampleJa = sampleJaChars.length >= 3 ? sampleJaChars : 'あいうえお かきくけこ';
+    platNames.sampleText = {
+      ja: sampleJa,
+      en: 'The quick brown fox jumps over the lazy dog',
+    };
   }
 
   // -------------------------------------------------------------
@@ -1062,9 +1115,9 @@ export async function loadFontFromFile(
     }
     if (unicodes.length === 0) continue;
 
-    // Retrieve normalized 1000 UPM path from opentype.js
-    const path = g.getPath(0, 0, 1000);
-    const contours = openTypePathToContours(path, SCREEN_BASELINE_Y);
+    // Retrieve normalized 1000 UPM path from opentype.js at standard screen baseline
+    const path = g.getPath(0, SCREEN_BASELINE_Y, 1000);
+    const contours = openTypePathToContours(path, SCREEN_BASELINE_Y, true);
     const normalizedAdvance = Math.round((g.advanceWidth ?? upm) * scale);
     const normalizedLsb = Math.round((g.leftSideBearing ?? 50) * scale);
 
@@ -1110,167 +1163,11 @@ export function createDefaultProject(): FontProject {
     xHeight: 500,
   };
 
-  // Pre-seed a few starter glyphs so the user can immediately see and test
+  // Pre-seed starter glyphs with authentic Japanese & Latin outlines
   const sampleGlyphs: Record<number, GlyphData> = {};
-
-  // 半角空白 (U+0020 / 32)
-  sampleGlyphs[32] = {
-    unicode: 32,
-    char: ' ',
-    name: 'space',
-    advanceWidth: 500,
-    lsb: 0,
-    modified: true,
-    contours: [],
-  };
-
-  // 全角空白 (U+3000 / 12288)
-  sampleGlyphs[12288] = {
-    unicode: 12288,
-    char: '　',
-    name: 'uni3000',
-    advanceWidth: 1000,
-    lsb: 0,
-    modified: true,
-    contours: [],
-  };
-
-  // 'A' (65) sample vector outline
-  sampleGlyphs[65] = {
-    unicode: 65,
-    char: 'A',
-    name: 'A',
-    advanceWidth: 700,
-    lsb: 40,
-    modified: true,
-    contours: [
-      // Outer triangle
-      {
-        id: generateId(),
-        closed: true,
-        nodes: [
-          { id: generateId(), x: 350, y: 150, type: 'corner' },
-          { id: generateId(), x: 620, y: 800, type: 'corner' },
-          { id: generateId(), x: 520, y: 800, type: 'corner' },
-          { id: generateId(), x: 440, y: 610, type: 'corner' },
-          { id: generateId(), x: 260, y: 610, type: 'corner' },
-          { id: generateId(), x: 180, y: 800, type: 'corner' },
-          { id: generateId(), x: 80, y: 800, type: 'corner' },
-        ],
-      },
-      // Inner cut
-      {
-        id: generateId(),
-        closed: true,
-        nodes: [
-          { id: generateId(), x: 350, y: 280, type: 'corner' },
-          { id: generateId(), x: 290, y: 520, type: 'corner' },
-          { id: generateId(), x: 410, y: 520, type: 'corner' },
-        ],
-      },
-    ],
-  };
-
-  // 'あ' (12354 / U+3042) starter
-  sampleGlyphs[12354] = {
-    unicode: 12354,
-    char: 'あ',
-    name: 'uni3042',
-    advanceWidth: 1000,
-    lsb: 50,
-    modified: true,
-    contours: [
-      // Stroke 1: top horizontal bar
-      {
-        id: generateId(),
-        closed: true,
-        nodes: [
-          { id: generateId(), x: 250, y: 280, handleOut: { x: 450, y: 260 }, type: 'smooth' },
-          { id: generateId(), x: 750, y: 260, type: 'corner' },
-          { id: generateId(), x: 740, y: 340, handleOut: { x: 450, y: 340 }, type: 'smooth' },
-          { id: generateId(), x: 240, y: 340, type: 'corner' },
-        ],
-      },
-      // Stroke 2: vertical curved line
-      {
-        id: generateId(),
-        closed: true,
-        nodes: [
-          { id: generateId(), x: 480, y: 160, handleOut: { x: 500, y: 400 }, type: 'smooth' },
-          { id: generateId(), x: 460, y: 780, type: 'corner' },
-          { id: generateId(), x: 390, y: 770, handleOut: { x: 420, y: 400 }, type: 'smooth' },
-          { id: generateId(), x: 400, y: 160, type: 'corner' },
-        ],
-      },
-      // Stroke 3: the round loop (outer contour)
-      {
-        id: generateId(),
-        closed: true,
-        nodes: [
-          { id: generateId(), x: 320, y: 420, handleOut: { x: 620, y: 360 }, type: 'smooth' },
-          { id: generateId(), x: 800, y: 560, handleOut: { x: 820, y: 750 }, type: 'smooth' },
-          { id: generateId(), x: 580, y: 840, handleOut: { x: 350, y: 820 }, type: 'smooth' },
-          { id: generateId(), x: 240, y: 640, handleOut: { x: 220, y: 500 }, type: 'smooth' },
-        ],
-      },
-      // Stroke 4: the round loop (inner hole, counter-clockwise)
-      {
-        id: generateId(),
-        closed: true,
-        nodes: [
-          { id: generateId(), x: 320, y: 580, handleOut: { x: 390, y: 720 }, type: 'smooth' },
-          { id: generateId(), x: 520, y: 730, handleOut: { x: 640, y: 680 }, type: 'smooth' },
-          { id: generateId(), x: 620, y: 560, handleOut: { x: 500, y: 460 }, type: 'smooth' },
-          { id: generateId(), x: 380, y: 460, handleOut: { x: 310, y: 480 }, type: 'smooth' },
-        ],
-      },
-    ],
-  };
-
-  // '日' (26085 / U+65E5)
-  sampleGlyphs[26085] = {
-    unicode: 26085,
-    char: '日',
-    name: 'uni65E5',
-    advanceWidth: 1000,
-    lsb: 80,
-    modified: true,
-    contours: [
-      // Outer frame
-      {
-        id: generateId(),
-        closed: true,
-        nodes: [
-          { id: generateId(), x: 200, y: 160, type: 'corner' },
-          { id: generateId(), x: 800, y: 160, type: 'corner' },
-          { id: generateId(), x: 800, y: 840, type: 'corner' },
-          { id: generateId(), x: 200, y: 840, type: 'corner' },
-        ],
-      },
-      // Top inner box
-      {
-        id: generateId(),
-        closed: true,
-        nodes: [
-          { id: generateId(), x: 280, y: 240, type: 'corner' },
-          { id: generateId(), x: 720, y: 240, type: 'corner' },
-          { id: generateId(), x: 720, y: 460, type: 'corner' },
-          { id: generateId(), x: 280, y: 460, type: 'corner' },
-        ],
-      },
-      // Bottom inner box
-      {
-        id: generateId(),
-        closed: true,
-        nodes: [
-          { id: generateId(), x: 280, y: 540, type: 'corner' },
-          { id: generateId(), x: 720, y: 540, type: 'corner' },
-          { id: generateId(), x: 720, y: 760, type: 'corner' },
-          { id: generateId(), x: 280, y: 760, type: 'corner' },
-        ],
-      },
-    ],
-  };
+  for (const [key, glyph] of Object.entries(DEFAULT_SAMPLE_GLYPHS)) {
+    sampleGlyphs[Number(key)] = JSON.parse(JSON.stringify(glyph));
+  }
 
   return {
     id: `project-${Date.now()}`,

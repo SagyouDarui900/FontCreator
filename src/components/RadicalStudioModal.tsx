@@ -57,6 +57,7 @@ import {
   PathContour,
   BezierNode,
   Point,
+  StrokePoint,
   ToolMode,
   BrushStyle,
   ShapeType,
@@ -91,14 +92,92 @@ import {
   unionContours,
   normalizeGlyphContoursWinding,
   SHAPE_PRESETS,
+  PEN_PRESETS,
 } from '../utils/pathUtils';
 import { parseSvgStringToContours } from '../utils/svgParser';
 import { SCREEN_BASELINE_Y } from '../utils/fontCompiler';
 import { ThemeMode } from '../utils/theme';
 import { KANJI_RADICALS } from '../data/kanjiRadicals';
-import { getOrExtractRadicalContours } from '../utils/radicalExtractor';
+import {
+  getOrExtractRadicalContours,
+  RADICAL_FONT_OPTIONS,
+  FontStyleOption,
+  POPULAR_RADICALS_QUICK_PRESETS,
+  INITIAL_STUDIO_RADICAL_DEFS,
+} from '../utils/radicalExtractor';
 
 export const CUSTOM_PARTS_STORAGE_KEY = 'font_editor_custom_parts_v1';
+
+export interface StudioRadicalPresetItem {
+  id: string;
+  name: string;
+  char: string;
+  category: PartCategory;
+  description: string;
+}
+
+// Comprehensive catalog of standard kanji radicals for Radical Studio
+export const STUDIO_RADICAL_PRESETS: StudioRadicalPresetItem[] = [
+  // 偏 (Hen)
+  { id: 'rad_ninben', char: '亻', name: 'にんべん', category: 'hen', description: '人・動作に関する偏 (休, 作, 体, 信, 健)' },
+  { id: 'rad_sanzui', char: '氵', name: 'さんずい', category: 'hen', description: '水・液体に関する偏 (海, 湖, 清, 河, 汁)' },
+  { id: 'rad_kihen', char: '木', name: 'きへん', category: 'hen', description: '樹木・木製品に関する偏 (林, 村, 校, 板, 柱)' },
+  { id: 'rad_tehen', char: '扌', name: 'てへん', category: 'hen', description: '手・動作に関する偏 (持, 打, 投, 指, 技)' },
+  { id: 'rad_gonben', char: '言', name: 'ごんべん', category: 'hen', description: '言葉・話すことに関する偏 (話, 語, 読, 記, 談)' },
+  { id: 'rad_itohen', char: '糸', name: 'いとへん', category: 'hen', description: '織物・糸に関する偏 (線, 細, 組, 約, 結)' },
+  { id: 'rad_nogihen', char: '禾', name: 'のぎへん', category: 'hen', description: '穀物・稲に関する偏 (秋, 科, 秒, 和, 税)' },
+  { id: 'rad_kanehen', char: '金', name: 'かねへん', category: 'hen', description: '金属・鉱物に関する偏 (鉄, 銀, 銅, 針, 鉱)' },
+  { id: 'rad_hihen_sun', char: '日', name: 'ひへん', category: 'hen', description: '太陽・時間に関する偏 (晴, 明, 時, 暗, 昨)' },
+  { id: 'rad_tsukihen', char: '月', name: 'つきへん・肉月', category: 'hen', description: '人体・肉に関する偏 (服, 胴, 腕, 脚, 脳)' },
+  { id: 'rad_kuchihen', char: '口', name: 'くちへん', category: 'hen', description: '口・発声に関する偏 (味, 叫, 吸, 呼, 鳴)' },
+  { id: 'rad_tsuchihen', char: '土', name: 'つちへん', category: 'hen', description: '土地・土壌に関する偏 (地, 坂, 場, 城, 境)' },
+  { id: 'rad_onnahen', char: '女', name: 'おんなへん', category: 'hen', description: '女性・家族に関する偏 (妹, 姉, 好, 姓, 娘)' },
+  { id: 'rad_risshinben', char: '忄', name: 'りっしんべん', category: 'hen', description: '心・感情に関する偏 (情, 快, 忙, 性, 悩)' },
+  { id: 'rad_hihen_fire', char: '火', name: 'ひへん', category: 'hen', description: '火・熱に関する偏 (灯, 炊, 焼, 煙, 燃)' },
+  { id: 'rad_kurumahen', char: '車', name: 'くるまへん', category: 'hen', description: '乗り物・輸送に関する偏 (転, 輪, 軽, 輸, 軌)' },
+  { id: 'rad_kaihen', char: '貝', name: 'かいへん', category: 'hen', description: '財貨・金銭に関する偏 (買, 販, 財, 貯, 貴)' },
+  { id: 'rad_mehen', char: '目', name: 'めへん', category: 'hen', description: '目・視覚に関する偏 (眼, 眠, 眺, 睡, 盲)' },
+  { id: 'rad_ashihen', char: '足', name: 'あしへん', category: 'hen', description: '足・歩行に関する偏 (路, 踏, 跳, 跡, 踊)' },
+  { id: 'rad_shokuhen', char: '食', name: 'しょくへん', category: 'hen', description: '食事・食物に関する偏 (飲, 館, 飯, 飼, 飢)' },
+  { id: 'rad_mushihen', char: '虫', name: 'むしへん', category: 'hen', description: '小動物・昆虫に関する偏 (蝶, 蚊, 蛇, 蜂, 蚕)' },
+  { id: 'rad_sakanahen', char: '魚', name: 'さかなへん', category: 'hen', description: '魚類・海産物に関する偏 (鮮, 鯨, 鮭, 鮎, 鯉)' },
+  { id: 'rad_kozatohen', char: '阝', name: 'こざとへん', category: 'hen', description: '丘陵・地形に関する偏 (防, 階, 限, 陸, 隊)' },
+  { id: 'rad_yumihen', char: '弓', name: 'ゆみへん', category: 'hen', description: '弓・弾力に関する偏 (引, 張, 強, 弦, 弧)' },
+
+  // 旁 (Tsukuri)
+  { id: 'rad_rittou', char: '刂', name: 'りっとう', category: 'tsukuri', description: '刃物・切断に関する旁 (列, 刻, 創, 割, 判)' },
+  { id: 'rad_chikara', char: '力', name: 'ちから', category: 'tsukuri', description: '力・労働に関する旁 (助, 動, 効, 勇, 勢)' },
+  { id: 'rad_nobun', char: '攵', name: 'のぶん・ぼくづくり', category: 'tsukuri', description: '動作・活動に関する旁 (改, 教, 敬, 数, 救)' },
+  { id: 'rad_furutori', char: '隹', name: 'ふるとり', category: 'tsukuri', description: '小鳥に関する旁 (集, 難, 雀, 雅, 雇)' },
+  { id: 'rad_oogai', char: '頁', name: 'おおがい', category: 'tsukuri', description: '頭部・顔に関する旁 (頭, 額, 願, 順, 頂)' },
+  { id: 'rad_oozato', char: '阝', name: 'おおざと', category: 'tsukuri', description: '村落・都市に関する旁 (都, 部, 郷, 郵, 郡)' },
+  { id: 'rad_miru', char: '見', name: 'みる', category: 'tsukuri', description: '視覚に関する旁 (視, 親, 観, 覚, 規)' },
+  { id: 'rad_tori', char: '鳥', name: 'とり', category: 'tsukuri', description: '鳥類に関する旁 (鳴, 鴎, 鶏, 鴨, 鳩)' },
+
+  // 冠 (Kanmuri)
+  { id: 'rad_kusakanmuri', char: '艹', name: 'くさかんむり', category: 'kanmuri', description: '草木・植物に関する冠 (花, 草, 茶, 苗, 華)' },
+  { id: 'rad_ukanmuri', char: '宀', name: 'うかんむり', category: 'kanmuri', description: '屋根・家屋に関する冠 (家, 安, 室, 宿, 守)' },
+  { id: 'rad_takekanmuri', char: '⺮', name: 'たけかんむり', category: 'kanmuri', description: '竹・竹製品に関する冠 (竹, 笑, 等, 筆, 笛)' },
+  { id: 'rad_amekanmuri', char: '⻗', name: 'あめかんむり', category: 'kanmuri', description: '気象・雨に関する冠 (雪, 雲, 電, 震, 霜)' },
+  { id: 'rad_hitoyane', char: '𠆢', name: 'ひとやね', category: 'kanmuri', description: '人・覆いに関する冠 (今, 会, 合, 全, 令)' },
+  { id: 'rad_wakanmuri', char: '冖', name: 'わかんむり', category: 'kanmuri', description: '覆い布に関する冠 (冠, 冥, 冨, 冤)' },
+  { id: 'rad_nabebuta', char: '亠', name: 'なべぶた', category: 'kanmuri', description: '頭部・被せ物に関する冠 (交, 京, 亭, 亡, 夜)' },
+  { id: 'rad_anakanmuri', char: '穴', name: 'あなかんむり', category: 'kanmuri', description: '洞穴・空間に関する冠 (空, 究, 突, 窒, 窓)' },
+
+  // 脚 (Ashi)
+  { id: 'rad_kokoro', char: '心', name: 'こころ', category: 'ashi', description: '心・思考に関する脚 (思, 息, 忍, 忠, 志)' },
+  { id: 'rad_rekka', char: '灬', name: 'れっか・れんが', category: 'ashi', description: '火・熱に関する脚 (熱, 点, 然, 照, 烈)' },
+  { id: 'rad_hitoashi', char: '儿', name: 'ひとあし', category: 'ashi', description: '人の足・歩行に関する脚 (兄, 先, 光, 免, 児)' },
+  { id: 'rad_sara', char: '皿', name: 'さら', category: 'ashi', description: '器・食器に関する脚 (盆, 盛, 益, 盟, 盗)' },
+
+  // 構え・繞・垂れ (Kamae, Nyo, Tare)
+  { id: 'rad_mongamae', char: '門', name: 'もんがまえ', category: 'kamae', description: '出入口・門に関する構え (開, 閉, 問, 関, 間)' },
+  { id: 'rad_kunigamae', char: '囗', name: 'くにがまえ', category: 'kamae', description: '囲い・領域に関する構え (国, 園, 回, 囲, 団)' },
+  { id: 'rad_shinnyo', char: '⻌', name: 'しんにょう', category: 'nyo', description: '道・移動に関する繞 (道, 通, 進, 近, 運)' },
+  { id: 'rad_madare', char: '广', name: 'まだれ', category: 'tare', description: '建物・屋敷に関する垂れ (広, 店, 座, 庫, 庁)' },
+  { id: 'rad_yamaidare', char: '疒', name: 'やまいだれ', category: 'tare', description: '病気・症状に関する垂れ (病, 痛, 療, 痕, 疾)' },
+  { id: 'rad_shikabane', char: '尸', name: 'しかばね', category: 'tare', description: '身体・住まいに関する垂れ (屋, 展, 屈, 局, 居)' },
+];
 
 interface RadicalStudioModalProps {
   isOpen: boolean;
@@ -217,11 +296,19 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   const [leftSidebarTab, setLeftSidebarTab] = useState<'presets' | 'custom'>('presets');
   const [activeCategory, setActiveCategory] = useState<PartCategory>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedFontStyle, setSelectedFontStyle] = useState<FontStyleOption>(RADICAL_FONT_OPTIONS[0]);
+  const [isLoadingPreset, setIsLoadingPreset] = useState<boolean>(false);
+  const [isImportingAll, setIsImportingAll] = useState<boolean>(false);
 
   // Editor Tools & Viewport
   const [toolMode, setToolMode] = useState<ToolMode>('select');
   const [brushWidth, setBrushWidth] = useState<number>(36);
   const [brushStyle, setBrushStyle] = useState<BrushStyle>('brush');
+  const [pressureSensitivity, setPressureSensitivity] = useState<'high' | 'normal' | 'low' | 'off'>('normal');
+  const [isStraightMode, setIsStraightMode] = useState<boolean>(false);
+  const [showBrushPresetsMenu, setShowBrushPresetsMenu] = useState<boolean>(false);
+  const [showBrushWidthMenu, setShowBrushWidthMenu] = useState<boolean>(false);
+  const [showPenShortcutsHelp, setShowPenShortcutsHelp] = useState<boolean>(false);
   const [zoom, setZoom] = useState<number>(0.55);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 200, y: 140 });
   const [isPanning, setIsPanning] = useState(false);
@@ -248,9 +335,15 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   const [isDraggingContour, setIsDraggingContour] = useState(false);
   const [dragStartPoint, setDragStartPoint] = useState<Point>({ x: 0, y: 0 });
 
-  // Brush / Shape / Pen tool in-progress state
+  // Brush / Shape / Pen tool in-progress state & high-performance drawing refs
   const [isDrawingStroke, setIsDrawingStroke] = useState(false);
   const [currentStrokePoints, setCurrentStrokePoints] = useState<Point[]>([]);
+  const brushStrokePointsRef = useRef<StrokePoint[]>([]);
+  const activeBrushPathRef = useRef<SVGPathElement>(null);
+  const brushRafIdRef = useRef<number | null>(null);
+  const isPenDraggingHandleRef = useRef<boolean>(false);
+  const [isPenNearFirstNode, setIsPenNearFirstNode] = useState<boolean>(false);
+
   const [shapeStartPoint, setShapeStartPoint] = useState<Point | null>(null);
   const [shapeCurrentPoint, setShapeCurrentPoint] = useState<Point | null>(null);
   const [activeShapeType, setActiveShapeType] = useState<ShapeType>('rect');
@@ -338,7 +431,94 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     setActivePenContour(null);
   }, [selectedPartId]);
 
-  if (!isOpen) return null;
+  // Global Keyboard Shortcuts within Studio Modal
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input or textarea
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      // Undo / Redo
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else if (activePenContour && activePenContour.nodes.length > 0) {
+          handleUndoPartPenNode();
+        } else {
+          handleUndo();
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      // Tool Switching Shortcuts
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key === 'v' || e.key === 'V') {
+          e.preventDefault();
+          setToolMode('select');
+        } else if (e.key === 'p' || e.key === 'P') {
+          e.preventDefault();
+          setToolMode('pen');
+        } else if (e.key === 'b' || e.key === 'B') {
+          e.preventDefault();
+          setToolMode('brush');
+        } else if (e.key === 'e' || e.key === 'E') {
+          e.preventDefault();
+          setToolMode('eraser');
+        } else if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          setToolMode('hand');
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          if (activePenContour) {
+            handleUndoPartPenNode();
+          } else if (selectedNodeId) {
+            handleDeleteSelectedNode();
+          } else if (selectedContourId) {
+            handleDeleteSelectedContour();
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (activePenContour && activePenContour.nodes.length >= 2) {
+            handleFinishPartPenContour(true);
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          if (activePenContour) {
+            handleResetPartPenContour();
+          } else {
+            setSelectedNodeId(null);
+            setSelectedContourId(null);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isOpen,
+    activePenContour,
+    selectedNodeId,
+    selectedContourId,
+    undoStack,
+    redoStack,
+    activePart,
+  ]);
 
   // History management
   const commitPartChange = (newContours: PathContour[]) => {
@@ -580,58 +760,84 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     notify(`編集中文字「${selectedChar}」の輪郭（${clonedContours.length}本）をパーツとして取り込みました`, 'success');
   };
 
-  // Load a preset radical into canvas for editing / fine-tuning
-  const handleLoadPreset = async (radical: (typeof KANJI_RADICALS)[0]) => {
-    let targetPart = parts.find((p) => p.name === radical.name);
-    if (!targetPart) {
-      const newId = generateId();
-      let clonedContours: PathContour[] = JSON.parse(JSON.stringify(radical.contours));
-      try {
-        const extracted = await getOrExtractRadicalContours(radical.char || radical.name, 'full');
-        if (extracted && extracted.length > 0) {
-          clonedContours = extracted;
-        }
-      } catch {
-        // fallback
+  // Load a preset radical into canvas for editing / fine-tuning with high-fidelity font vector extraction
+  const handleLoadPreset = async (preset: StudioRadicalPresetItem) => {
+    setIsLoadingPreset(true);
+    try {
+      // Extract pristine high-resolution vector contours from the selected font style
+      let contours = await getOrExtractRadicalContours(
+        preset.char,
+        'full',
+        selectedFontStyle.fontFamily,
+        selectedFontStyle.fontWeight
+      );
+      if (!contours || contours.length === 0) {
+        const fallbackRad = KANJI_RADICALS.find((r) => r.name === preset.name || r.char === preset.char);
+        contours = fallbackRad?.contours || [];
       }
 
-      const newPart: CustomPart = {
-        id: newId,
-        name: radical.name,
-        category: (radical.category as PartCategory) || 'hen',
-        description: `${radical.name}の標準部首パーツ`,
-        contours: clonedContours,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      setParts((prev) => [newPart, ...prev]);
-      targetPart = newPart;
+      const styleLabel = selectedFontStyle.label;
+      const partName = `${preset.name} (${styleLabel})`;
+
+      // Check if this part already exists with this exact name or base name
+      let targetPart = parts.find((p) => p.name === partName || p.name === preset.name);
+      if (targetPart) {
+        // Update its contours with the newly extracted high-quality contours
+        const updatedParts = parts.map((p) =>
+          p.id === targetPart!.id
+            ? { ...p, contours: JSON.parse(JSON.stringify(contours)), description: `${preset.name}・${selectedFontStyle.subLabel}の高品質ベクター部首`, updatedAt: Date.now() }
+            : p
+        );
+        setParts(updatedParts);
+      } else {
+        const newPart: CustomPart = {
+          id: generateId(),
+          name: partName,
+          category: preset.category,
+          description: `${preset.name}・${selectedFontStyle.subLabel}の高品質ベクター部首`,
+          contours: JSON.parse(JSON.stringify(contours)),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        setParts((prev) => [newPart, ...prev]);
+        targetPart = newPart;
+      }
+      setSelectedPartId(targetPart.id);
+      notify(`部首「${preset.name}」を${selectedFontStyle.label}の高精度ベクターとしてキャンバスに読み込みました`, 'success');
+    } catch (err) {
+      console.error('Failed to extract preset contours:', err);
+      notify('部首ベクターの抽出に失敗しました', 'error');
+    } finally {
+      setIsLoadingPreset(false);
     }
-    setSelectedPartId(targetPart.id);
-    notify(`部首「${radical.name}」を編集キャンバスに読み込みました`, 'info');
   };
 
   // Direct 1-click insertion from Preset into current editing character
   const handleInsertPresetDirectly = async (
-    radical: (typeof KANJI_RADICALS)[0],
+    preset: StudioRadicalPresetItem,
     placement: RadicalPlacement = 'original',
     closeAfter: boolean = false
   ) => {
-    let cloned: PathContour[] = JSON.parse(JSON.stringify(radical.contours));
     try {
-      const extracted = await getOrExtractRadicalContours(radical.char || radical.name, 'full');
-      if (extracted && extracted.length > 0) {
-        cloned = extracted;
+      let contours = await getOrExtractRadicalContours(
+        preset.char,
+        'full',
+        selectedFontStyle.fontFamily,
+        selectedFontStyle.fontWeight
+      );
+      if (!contours || contours.length === 0) {
+        const fallbackRad = KANJI_RADICALS.find((r) => r.name === preset.name || r.char === preset.char);
+        contours = fallbackRad?.contours || [];
+      }
+
+      const positioned = transformContoursForPlacement(contours, placement, preset.category);
+      onInsertToCurrentGlyph(positioned);
+      notify(`部首「${preset.name} (${selectedFontStyle.label})」を文字「${selectedChar}」に挿入しました`, 'success');
+      if (closeAfter) {
+        onClose();
       }
     } catch {
-      // fallback
-    }
-
-    const positioned = transformContoursForPlacement(cloned, placement, radical.category);
-    onInsertToCurrentGlyph(positioned);
-    notify(`部首「${radical.name}」を文字「${selectedChar}」に挿入しました`, 'success');
-    if (closeAfter) {
-      onClose();
+      notify('部首の挿入に失敗しました', 'error');
     }
   };
 
@@ -659,29 +865,135 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     }
   };
 
-  // Import all standard kanji radicals into parts library
-  const handleImportDefaultRadicals = () => {
-    const existingNames = new Set(parts.map((p) => p.name));
-    const newRadicals: CustomPart[] = KANJI_RADICALS.filter(
-      (r) => !existingNames.has(r.name)
-    ).map((r) => ({
-      id: generateId(),
-      name: r.name,
-      category: (r.category as PartCategory) || 'hen',
-      description: `${r.name}の実用部首パーツ`,
-      contours: JSON.parse(JSON.stringify(r.contours)),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }));
-
-    if (newRadicals.length === 0) {
-      notify('すべての定番部首はすでにライブラリに登録されています', 'info');
-      return;
+  // Upgrade / refresh default initial parts with authentic typography contours
+  const handleUpgradeDefaultParts = async (
+    fontStyle: FontStyleOption = selectedFontStyle,
+    silent: boolean = false
+  ) => {
+    if (!silent) {
+      notify(`初期部首パーツを「${fontStyle.label}」の高精度ベクターに更新しています...`, 'info');
     }
+    try {
+      const updatedParts = [...parts];
+      let updatedCount = 0;
 
-    setParts((prev) => [...prev, ...newRadicals]);
-    notify(`${newRadicals.length}件の高品質定番部首パーツを一括登録しました`, 'success');
+      for (const def of INITIAL_STUDIO_RADICAL_DEFS) {
+        const contours = await getOrExtractRadicalContours(
+          def.char,
+          'full',
+          fontStyle.fontFamily,
+          fontStyle.fontWeight
+        );
+        if (contours && contours.length > 0) {
+          const idx = updatedParts.findIndex(
+            (p) => p.name === def.name || p.name.startsWith(def.name.split(' ')[0])
+          );
+          if (idx >= 0) {
+            updatedParts[idx] = {
+              ...updatedParts[idx],
+              contours: JSON.parse(JSON.stringify(contours)),
+              description: `${def.description} (${fontStyle.label}・高精度ベクター)`,
+              updatedAt: Date.now(),
+            };
+            updatedCount++;
+          } else {
+            updatedParts.push({
+              id: generateId(),
+              name: def.name,
+              category: def.category as PartCategory,
+              description: `${def.description} (${fontStyle.label}・高精度ベクター)`,
+              contours: JSON.parse(JSON.stringify(contours)),
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            });
+            updatedCount++;
+          }
+        }
+      }
+
+      setParts(updatedParts);
+      if (!silent) {
+        notify(`${updatedCount}件の部首パーツを高精度フォント（${fontStyle.label}）ベクターに刷新しました！`, 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      if (!silent) {
+        notify('部首パーツの更新に失敗しました', 'error');
+      }
+    }
   };
+
+  // Import all standard kanji radicals into parts library with pristine font vectors
+  const handleImportDefaultRadicals = async () => {
+    setIsImportingAll(true);
+    notify(`高品質な定番部首（${selectedFontStyle.label}）を順次取り込んでいます...`, 'info');
+    try {
+      const existingNames = new Set(parts.map((p) => p.name));
+      const toAdd: CustomPart[] = [];
+
+      for (const item of STUDIO_RADICAL_PRESETS) {
+        const partName = `${item.name} (${selectedFontStyle.label})`;
+        if (!existingNames.has(item.name) && !existingNames.has(partName)) {
+          let contours: PathContour[] = [];
+          try {
+            contours = await getOrExtractRadicalContours(
+              item.char,
+              'full',
+              selectedFontStyle.fontFamily,
+              selectedFontStyle.fontWeight
+            );
+          } catch {
+            // fallback
+          }
+          if (contours && contours.length > 0) {
+            toAdd.push({
+              id: generateId(),
+              name: partName,
+              category: item.category,
+              description: `${item.name} (${item.char}) - ${selectedFontStyle.subLabel}`,
+              contours,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            });
+          }
+        }
+      }
+
+      if (toAdd.length === 0) {
+        notify('すべての定番部首はすでにマイパーツに登録されています', 'info');
+        return;
+      }
+
+      setParts((prev) => [...toAdd, ...prev]);
+      notify(`${toAdd.length}件の高品質定番部首（${selectedFontStyle.label}）をマイパーツに取り込みました！`, 'success');
+    } catch (e) {
+      notify('部首の一括取り込み中にエラーが発生しました', 'error');
+    } finally {
+      setIsImportingAll(false);
+    }
+  };
+
+  // Auto-upgrade legacy low-quality default parts on open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const hasLowQualityDefaults = parts.some((p) => {
+      const isInitialPart = INITIAL_STUDIO_RADICAL_DEFS.some(
+        (d) => p.name === d.name || p.name.startsWith(d.name.split(' ')[0])
+      );
+      if (!isInitialPart || !p.contours || p.contours.length === 0) return false;
+      const totalNodes = p.contours.reduce((acc, c) => acc + (c.nodes?.length || 0), 0);
+      const hasSmooth = p.contours.some((c) =>
+        c.nodes?.some((n) => n.type === 'smooth' && (n.handleIn || n.handleOut))
+      );
+      // Legacy hand-coded contours had very few nodes and no smooth bezier handles
+      return totalNodes < 30 || !hasSmooth;
+    });
+
+    if (hasLowQualityDefaults) {
+      handleUpgradeDefaultParts(selectedFontStyle, true);
+    }
+  }, [isOpen]);
 
   // Export parts library as JSON
   const handleExportLibraryJson = () => {
@@ -757,16 +1069,21 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     e.target.value = '';
   };
 
-  // Screen to Canvas coordinate conversion
-  const getCanvasCoords = (e: React.PointerEvent<SVGSVGElement>): Point => {
+  // Screen to Canvas coordinate conversion helper
+  const getCanvasCoordsFromClient = (clientX: number, clientY: number): Point => {
     if (!svgCanvasRef.current) return { x: 0, y: 0 };
     const rect = svgCanvasRef.current.getBoundingClientRect();
-    const clientX = e.clientX - rect.left;
-    const clientY = e.clientY - rect.top;
+    const cx = clientX - rect.left;
+    const cy = clientY - rect.top;
     return {
-      x: Math.round((clientX - pan.x) / zoom),
-      y: Math.round((clientY - pan.y) / zoom),
+      x: Math.round((cx - pan.x) / zoom),
+      y: Math.round((cy - pan.y) / zoom),
     };
+  };
+
+  // Screen to Canvas coordinate conversion
+  const getCanvasCoords = (e: React.PointerEvent<SVGSVGElement>): Point => {
+    return getCanvasCoordsFromClient(e.clientX, e.clientY);
   };
 
   // Shape helper
@@ -832,7 +1149,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     if (!activePart) return;
     const pos = getCanvasCoords(e);
 
-    // Hand tool / Middle click pan
+    // Hand tool / Middle click pan / Space key pan
     if (toolMode === 'hand' || e.button === 1 || e.spaceKey) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -841,8 +1158,24 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
     // Brush Tool
     if (toolMode === 'brush') {
+      let initialPressure = 0.5;
+      if (e.pressure && e.pressure > 0) {
+        initialPressure = e.pressure;
+      } else if (pressureSensitivity === 'off') {
+        initialPressure = 1.0;
+      }
+      const firstPt: StrokePoint = {
+        x: pos.x,
+        y: pos.y,
+        pressure: initialPressure,
+        time: e.timeStamp || Date.now(),
+      };
+      brushStrokePointsRef.current = [firstPt];
       setIsDrawingStroke(true);
       setCurrentStrokePoints([pos]);
+      if (activeBrushPathRef.current) {
+        activeBrushPathRef.current.setAttribute('d', '');
+      }
       return;
     }
 
@@ -888,6 +1221,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           id: generateId(),
           x: pos.x,
           y: pos.y,
+          handleIn: null,
+          handleOut: null,
           type: 'corner',
         };
         setActivePenContour({
@@ -896,12 +1231,14 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           nodes: [newNode],
         });
         setSelectedNodeId(newNode.id);
+        isPenDraggingHandleRef.current = true;
+        setDragStartPoint(pos);
       } else {
-        // Check if clicking start node to close contour
+        // Check if clicking near first node to close contour
         const firstNode = activePenContour.nodes[0];
         const distToFirst = Math.hypot(pos.x - firstNode.x, pos.y - firstNode.y);
 
-        if (distToFirst < 18 / zoom && activePenContour.nodes.length >= 2) {
+        if (distToFirst < 22 / zoom && activePenContour.nodes.length >= 2) {
           const finishedContour: PathContour = {
             ...activePenContour,
             closed: true,
@@ -909,12 +1246,15 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           commitPartChange([...activePart.contours, finishedContour]);
           setActivePenContour(null);
           setSelectedContourId(finishedContour.id);
+          setSelectedNodeId(null);
           setToolMode('select');
         } else {
           const newNode: BezierNode = {
             id: generateId(),
             x: pos.x,
             y: pos.y,
+            handleIn: null,
+            handleOut: null,
             type: 'corner',
           };
           setActivePenContour({
@@ -922,6 +1262,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
             nodes: [...activePenContour.nodes, newNode],
           });
           setSelectedNodeId(newNode.id);
+          isPenDraggingHandleRef.current = true;
+          setDragStartPoint(pos);
         }
       }
       return;
@@ -929,9 +1271,34 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
     // Select Tool
     if (toolMode === 'select') {
-      let foundNode = false;
+      // 1. Check Handle Hits on currently selected node first
+      if (selectedNodeId && selectedContourId) {
+        const targetContour = activePart.contours.find((c) => c.id === selectedContourId);
+        const targetNode = targetContour?.nodes.find((n) => n.id === selectedNodeId);
+        if (targetNode) {
+          if (targetNode.handleIn) {
+            const dIn = Math.hypot(pos.x - targetNode.handleIn.x, pos.y - targetNode.handleIn.y);
+            if (dIn < 14 / zoom) {
+              setSelectedHandleType('handleIn');
+              setIsDraggingNode(true);
+              setDragStartPoint(pos);
+              return;
+            }
+          }
+          if (targetNode.handleOut) {
+            const dOut = Math.hypot(pos.x - targetNode.handleOut.x, pos.y - targetNode.handleOut.y);
+            if (dOut < 14 / zoom) {
+              setSelectedHandleType('handleOut');
+              setIsDraggingNode(true);
+              setDragStartPoint(pos);
+              return;
+            }
+          }
+        }
+      }
 
-      // Check node hits
+      // 2. Check node hits
+      let foundNode = false;
       for (const contour of activePart.contours) {
         for (const node of contour.nodes) {
           const distNode = Math.hypot(pos.x - node.x, pos.y - node.y);
@@ -948,14 +1315,15 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
         if (foundNode) break;
       }
 
+      // 3. Check contour hits
       if (!foundNode) {
         const clickedContour = activePart.contours.find((contour) => {
           const bbox = getContoursBoundingBox([contour]);
           return (
-            pos.x >= bbox.minX - 15 &&
-            pos.x <= bbox.maxX + 15 &&
-            pos.y >= bbox.minY - 15 &&
-            pos.y <= bbox.maxY + 15
+            pos.x >= bbox.minX - 16 &&
+            pos.x <= bbox.maxX + 16 &&
+            pos.y >= bbox.minY - 16 &&
+            pos.y <= bbox.maxY + 16
           );
         });
 
@@ -985,8 +1353,86 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     const pos = getCanvasCoords(e);
     setPenMousePos(pos);
 
+    // Live Brush Stroke Engine
     if (isDrawingStroke && toolMode === 'brush') {
-      setCurrentStrokePoints((prev) => [...prev, pos]);
+      const native = e.nativeEvent as PointerEvent & { getCoalescedEvents?: () => PointerEvent[] };
+      const events = native.getCoalescedEvents ? native.getCoalescedEvents() : [native];
+      
+      const lastPt = brushStrokePointsRef.current[brushStrokePointsRef.current.length - 1];
+      for (const evt of events) {
+        const rawPos = getCanvasCoordsFromClient(evt.clientX, evt.clientY);
+        let p = evt.pressure;
+        if (!p || p === 0) {
+          if (pressureSensitivity === 'off') {
+            p = 1.0;
+          } else if (lastPt) {
+            const dt = Math.max(1, (evt.timeStamp || Date.now()) - (lastPt.time || 0));
+            const dist = Math.hypot(rawPos.x - lastPt.x, rawPos.y - lastPt.y);
+            const speed = dist / dt;
+            const factor = pressureSensitivity === 'high' ? 0.7 : pressureSensitivity === 'low' ? 0.25 : 0.45;
+            p = Math.max(0.2, Math.min(1.0, 1.0 - speed * factor));
+          } else {
+            p = 0.5;
+          }
+        }
+        brushStrokePointsRef.current.push({
+          x: rawPos.x,
+          y: rawPos.y,
+          pressure: p,
+          time: evt.timeStamp || Date.now(),
+        });
+      }
+
+      // RAF Throttled DOM path update for maximum frame rate
+      if (!brushRafIdRef.current) {
+        brushRafIdRef.current = requestAnimationFrame(() => {
+          brushRafIdRef.current = null;
+          if (brushStrokePointsRef.current.length >= 2 && activeBrushPathRef.current) {
+            const pts = isStraightMode || e.shiftKey
+              ? [
+                  brushStrokePointsRef.current[0],
+                  brushStrokePointsRef.current[brushStrokePointsRef.current.length - 1],
+                ]
+              : brushStrokePointsRef.current;
+            const contour = strokePointsToOutline(pts, brushWidth, brushStyle);
+            if (contour && contour.nodes.length >= 3) {
+              activeBrushPathRef.current.setAttribute('d', contoursToSvgPath([contour]));
+            }
+          }
+        });
+      }
+      return;
+    }
+
+    // Pen Tool Hover and Dragging Handle
+    if (toolMode === 'pen') {
+      if (activePenContour && activePenContour.nodes.length >= 2) {
+        const firstNode = activePenContour.nodes[0];
+        const dist = Math.hypot(pos.x - firstNode.x, pos.y - firstNode.y);
+        setIsPenNearFirstNode(dist < 22 / zoom);
+      } else {
+        setIsPenNearFirstNode(false);
+      }
+
+      if (isPenDraggingHandleRef.current && activePenContour && selectedNodeId) {
+        const dx = pos.x - dragStartPoint.x;
+        const dy = pos.y - dragStartPoint.y;
+        if (Math.hypot(dx, dy) > 3) {
+          const updatedNodes = activePenContour.nodes.map((node) => {
+            if (node.id !== selectedNodeId) return node;
+            return {
+              ...node,
+              type: 'smooth' as const,
+              handleOut: { x: pos.x, y: pos.y },
+              handleIn: { x: 2 * node.x - pos.x, y: 2 * node.y - pos.y },
+            };
+          });
+          setActivePenContour({
+            ...activePenContour,
+            nodes: updatedNodes,
+          });
+        }
+      }
       return;
     }
 
@@ -995,7 +1441,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       return;
     }
 
-    // Dragging single node
+    // Dragging handle or node in Select mode
     if (isDraggingNode && selectedNodeId && selectedContourId && activePart) {
       const dx = pos.x - dragStartPoint.x;
       const dy = pos.y - dragStartPoint.y;
@@ -1006,6 +1452,38 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           ...contour,
           nodes: contour.nodes.map((node) => {
             if (node.id !== selectedNodeId) return node;
+
+            if (selectedHandleType === 'handleIn') {
+              const newHandleIn = { x: pos.x, y: pos.y };
+              let newHandleOut = node.handleOut;
+              if (node.type === 'smooth' && node.handleOut) {
+                const lenOut = Math.hypot(node.handleOut.x - node.x, node.handleOut.y - node.y);
+                const angleIn = Math.atan2(newHandleIn.y - node.y, newHandleIn.x - node.x);
+                const angleOut = angleIn + Math.PI;
+                newHandleOut = {
+                  x: Math.round(node.x + Math.cos(angleOut) * lenOut),
+                  y: Math.round(node.y + Math.sin(angleOut) * lenOut),
+                };
+              }
+              return { ...node, handleIn: newHandleIn, handleOut: newHandleOut };
+            }
+
+            if (selectedHandleType === 'handleOut') {
+              const newHandleOut = { x: pos.x, y: pos.y };
+              let newHandleIn = node.handleIn;
+              if (node.type === 'smooth' && node.handleIn) {
+                const lenIn = Math.hypot(node.handleIn.x - node.x, node.handleIn.y - node.y);
+                const angleOut = Math.atan2(newHandleOut.y - node.y, newHandleOut.x - node.x);
+                const angleIn = angleOut + Math.PI;
+                newHandleIn = {
+                  x: Math.round(node.x + Math.cos(angleIn) * lenIn),
+                  y: Math.round(node.y + Math.sin(angleIn) * lenIn),
+                };
+              }
+              return { ...node, handleIn: newHandleIn, handleOut: newHandleOut };
+            }
+
+            // Dragging node anchor point itself
             return {
               ...node,
               x: node.x + dx,
@@ -1059,25 +1537,53 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     setIsPanning(false);
     setIsDraggingNode(false);
     setIsDraggingContour(false);
+    setSelectedHandleType(null);
+
+    // Finalize Pen dragging
+    if (toolMode === 'pen') {
+      isPenDraggingHandleRef.current = false;
+      return;
+    }
 
     if (!activePart) return;
 
     // Finalize Brush
-    if (isDrawingStroke && currentStrokePoints.length > 2) {
-      const strokeContour = strokePointsToOutline(
-        currentStrokePoints,
-        brushWidth,
-        brushStyle
-      );
-      if (strokeContour && strokeContour.nodes.length >= 3) {
-        commitPartChange([...activePart.contours, strokeContour]);
+    if (isDrawingStroke && toolMode === 'brush') {
+      if (brushRafIdRef.current) {
+        cancelAnimationFrame(brushRafIdRef.current);
+        brushRafIdRef.current = null;
+      }
+      if (brushStrokePointsRef.current.length >= 2) {
+        const pts = isStraightMode || e.shiftKey
+          ? [
+              brushStrokePointsRef.current[0],
+              brushStrokePointsRef.current[brushStrokePointsRef.current.length - 1],
+            ]
+          : brushStrokePointsRef.current;
+        const strokeContour = strokePointsToOutline(
+          pts,
+          brushWidth,
+          brushStyle
+        );
+        if (strokeContour && strokeContour.nodes.length >= 3) {
+          try {
+            const unioned = unionContours([...activePart.contours, strokeContour]);
+            commitPartChange(unioned.length > 0 ? unioned : [...activePart.contours, strokeContour]);
+          } catch {
+            commitPartChange([...activePart.contours, strokeContour]);
+          }
+        }
       }
       setIsDrawingStroke(false);
       setCurrentStrokePoints([]);
+      brushStrokePointsRef.current = [];
+      if (activeBrushPathRef.current) {
+        activeBrushPathRef.current.setAttribute('d', '');
+      }
       return;
     }
 
@@ -1113,6 +1619,91 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       setShapeStartPoint(null);
       setShapeCurrentPoint(null);
     }
+  };
+
+  // Node Type Toggle (Smooth <-> Corner)
+  const handleToggleSelectedNodeType = () => {
+    if (!activePart || !selectedContourId || !selectedNodeId) return;
+    const updated = activePart.contours.map((contour) => {
+      if (contour.id !== selectedContourId) return contour;
+      return {
+        ...contour,
+        nodes: contour.nodes.map((node) => {
+          if (node.id !== selectedNodeId) return node;
+          const newType = node.type === 'smooth' ? 'corner' : 'smooth';
+          if (newType === 'corner') {
+            return { ...node, type: 'corner' as const, handleIn: null, handleOut: null };
+          } else {
+            // Generate standard smooth tangent handles
+            const hLen = 40;
+            return {
+              ...node,
+              type: 'smooth' as const,
+              handleIn: { x: node.x - hLen, y: node.y },
+              handleOut: { x: node.x + hLen, y: node.y },
+            };
+          }
+        }),
+      };
+    });
+    commitPartChange(updated);
+  };
+
+  // Delete Selected Node
+  const handleDeleteSelectedNode = () => {
+    if (!activePart || !selectedContourId || !selectedNodeId) return;
+    const targetContour = activePart.contours.find((c) => c.id === selectedContourId);
+    if (!targetContour) return;
+
+    if (targetContour.nodes.length <= 2) {
+      // If 2 or fewer nodes, remove the whole contour
+      commitPartChange(activePart.contours.filter((c) => c.id !== selectedContourId));
+      setSelectedContourId(null);
+      setSelectedNodeId(null);
+      return;
+    }
+
+    const updated = activePart.contours.map((contour) => {
+      if (contour.id !== selectedContourId) return contour;
+      return {
+        ...contour,
+        nodes: contour.nodes.filter((n) => n.id !== selectedNodeId),
+      };
+    });
+    commitPartChange(updated);
+    setSelectedNodeId(null);
+  };
+
+  // Duplicate Selected Contour
+  const handleDuplicateSelectedContour = () => {
+    if (!activePart || !selectedContourId) return;
+    const target = activePart.contours.find((c) => c.id === selectedContourId);
+    if (!target) return;
+    const newId = generateId();
+    const cloned: PathContour = {
+      ...target,
+      id: newId,
+      nodes: target.nodes.map((n) => ({
+        ...n,
+        id: generateId(),
+        x: n.x + 30,
+        y: n.y + 30,
+        handleIn: n.handleIn ? { x: n.handleIn.x + 30, y: n.handleIn.y + 30 } : null,
+        handleOut: n.handleOut ? { x: n.handleOut.x + 30, y: n.handleOut.y + 30 } : null,
+      })),
+    };
+    commitPartChange([...activePart.contours, cloned]);
+    setSelectedContourId(newId);
+    setSelectedNodeId(null);
+    notify('選択輪郭を複製しました', 'success');
+  };
+
+  // Delete Selected Contour
+  const handleDeleteSelectedContour = () => {
+    if (!activePart || !selectedContourId) return;
+    commitPartChange(activePart.contours.filter((c) => c.id !== selectedContourId));
+    setSelectedContourId(null);
+    setSelectedNodeId(null);
   };
 
   // Pen Tool actions in Radical Studio
@@ -1348,13 +1939,14 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     return matchesCat && matchesSearch;
   });
 
-  // Filter presets list
-  const filteredPresets = KANJI_RADICALS.filter((radical) => {
+  // Filter presets list using high-fidelity STUDIO_RADICAL_PRESETS
+  const filteredPresets = STUDIO_RADICAL_PRESETS.filter((radical) => {
     const matchesCat = activeCategory === 'all' || radical.category === activeCategory;
     const matchesSearch =
       searchQuery.trim() === '' ||
       radical.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (radical.char && radical.char.includes(searchQuery.trim()));
+      (radical.char && radical.char.includes(searchQuery.trim())) ||
+      (radical.description && radical.description.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesCat && matchesSearch;
   });
 
@@ -1378,6 +1970,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     isDrawingStroke && currentStrokePoints.length > 2
       ? contoursToSvgPath([strokePointsToOutline(currentStrokePoints, brushWidth, brushStyle)])
       : '';
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs select-none animate-fadeIn">
@@ -1674,28 +2268,51 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                         <span>全文字から抽出</span>
                       </button>
                       <button
-                        onClick={handleImportDefaultRadicals}
+                        onClick={() => handleUpgradeDefaultParts(selectedFontStyle)}
                         className={`py-1 px-2 rounded-md text-[11px] font-semibold flex items-center justify-center space-x-1 border transition-all ${
                           isLight
-                            ? 'bg-white border-[#d8e6df] text-stone-700 hover:bg-emerald-50'
-                            : 'bg-[#18261e] border-[#25362b] text-stone-300 hover:bg-[#203227]'
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100'
+                            : 'bg-[#1b2f21] border-emerald-700 text-emerald-300 hover:bg-[#233f2c]'
                         }`}
-                        title="標準部首をすべてマイパーツに一括登録"
+                        title="初期部首パーツを高精度ベクターに刷新・更新します"
                       >
-                        <Sparkles className="w-3 h-3 text-emerald-600" />
-                        <span>標準部首一括読込</span>
+                        <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        <span>初期部首を高品質化</span>
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-[11px] text-stone-500 dark:text-stone-400 flex items-center justify-between">
-                    <span>高品質な偏・旁・冠・脚の標準部首</span>
-                    <button
-                      onClick={handleImportDefaultRadicals}
-                      className="text-emerald-700 dark:text-emerald-400 font-bold hover:underline"
-                    >
-                      全部首を一括保存
-                    </button>
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] text-stone-500 dark:text-stone-400 flex items-center justify-between">
+                      <span className="font-semibold">フォントスタイル選択</span>
+                      <button
+                        onClick={handleImportDefaultRadicals}
+                        disabled={isImportingAll}
+                        className="text-emerald-700 dark:text-emerald-400 font-bold hover:underline text-[11px] disabled:opacity-50 flex items-center space-x-1"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>{isImportingAll ? '取込中…' : '全部首を一括取込'}</span>
+                      </button>
+                    </div>
+
+                    {/* Font Style Selector Pills */}
+                    <div className="grid grid-cols-3 gap-1 p-0.5 rounded-lg border text-center text-xs font-semibold bg-stone-100/70 dark:bg-[#101712] border-stone-200 dark:border-[#25362b]">
+                      {RADICAL_FONT_OPTIONS.map((style) => (
+                        <button
+                          key={style.id}
+                          onClick={() => setSelectedFontStyle(style)}
+                          className={`py-1 px-1.5 rounded-md transition-all text-[11px] flex items-center justify-center space-x-1 ${
+                            selectedFontStyle.id === style.id
+                              ? isLight
+                                ? 'bg-white shadow-xs text-emerald-900 font-bold'
+                                : 'bg-[#1e2d22] text-emerald-300 shadow-xs font-bold'
+                              : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
+                          }`}
+                        >
+                          <span style={{ fontFamily: style.fontFamily }}>{style.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -1704,7 +2321,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400" />
                   <input
                     type="text"
-                    placeholder={leftSidebarTab === 'presets' ? '部首名・漢字で検索（例: さんずい, 木, 艹）...' : 'パーツ名で検索...'}
+                    placeholder={leftSidebarTab === 'presets' ? '部首名・文字で検索（例: さんずい, 木, 艹）...' : 'パーツ名で検索...'}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className={`w-full pl-8 pr-3 py-1.5 rounded-md text-xs border outline-hidden transition-colors ${
@@ -1761,12 +2378,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     </div>
                   ) : (
                     filteredPresets.map((radical) => {
-                      const svgPath = contoursToSvgPath(radical.contours);
-                      const isLoadedInCanvas = activePart?.name === radical.name;
+                      const isLoadedInCanvas =
+                        activePart?.name === radical.name ||
+                        activePart?.name === `${radical.name} (${selectedFontStyle.label})`;
 
                       return (
                         <div
-                          key={radical.name}
+                          key={radical.id || radical.name}
                           className={`p-2 rounded-lg border flex items-center space-x-2.5 transition-all ${
                             isLoadedInCanvas
                               ? isLight
@@ -1777,26 +2395,41 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                               : 'bg-[#18231c] border-[#25362b] hover:border-emerald-600 hover:bg-[#202e25]'
                           }`}
                         >
-                          {/* SVG Thumbnail Preview */}
+                          {/* High-fidelity Typographic Thumbnail Preview */}
                           <div
                             onClick={() => handleLoadPreset(radical)}
-                            className={`w-12 h-12 rounded-md border shrink-0 flex items-center justify-center p-0.5 cursor-pointer transition-transform hover:scale-105 ${
-                              isLight ? 'bg-white border-stone-200' : 'bg-[#0f1711] border-[#2a3c30]'
+                            className={`w-12 h-12 rounded-md border shrink-0 flex items-center justify-center cursor-pointer transition-transform hover:scale-105 shadow-2xs ${
+                              isLoadedInCanvas
+                                ? isLight
+                                  ? 'bg-emerald-100 border-emerald-500'
+                                  : 'bg-[#1a3324] border-emerald-600'
+                                : isLight
+                                ? 'bg-white border-stone-200 hover:border-emerald-400'
+                                : 'bg-[#111c14] border-[#2a3c30] hover:border-emerald-600'
                             }`}
-                            title="クリックして編集キャンバスに読み込む"
+                            title={`クリックして「${radical.name}」を高精度ベクターとして読み込む`}
                           >
-                            <svg viewBox="0 0 1000 1000" className="w-full h-full">
-                              <path
-                                d={svgPath}
-                                fill={isLoadedInCanvas ? (isLight ? '#064e3b' : '#34d399') : isLight ? '#1f2937' : '#ecfdf5'}
-                              />
-                            </svg>
+                            <span
+                              className="text-2xl leading-none select-none flex items-center justify-center font-normal"
+                              style={{
+                                fontFamily: selectedFontStyle.fontFamily,
+                                fontWeight: selectedFontStyle.fontWeight,
+                                color: isLoadedInCanvas
+                                  ? (isLight ? '#064e3b' : '#34d399')
+                                  : (isLight ? '#1f2937' : '#f0fdf4'),
+                              }}
+                            >
+                              {radical.char}
+                            </span>
                           </div>
 
                           {/* Info */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold truncate">{radical.name}</span>
+                              <span className="text-xs font-bold truncate">
+                                {radical.name}
+                                <span className="font-normal text-[10px] text-stone-400 ml-1">({radical.char})</span>
+                              </span>
                               <span
                                 className={`text-[9px] px-1.5 py-0.2 rounded font-medium shrink-0 ml-1 ${
                                   isLight
@@ -1807,29 +2440,27 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                                 {CATEGORY_TABS.find((c) => c.id === radical.category)?.label.split(' ')[0] || radical.category}
                               </span>
                             </div>
-                            <div className="text-[10px] text-stone-400 mt-0.5 flex items-center justify-between">
-                              <span>輪郭: {radical.contours?.length || 0}本</span>
-                              <span className="font-bold text-stone-600 dark:text-stone-300 text-xs">
-                                {radical.char || ''}
-                              </span>
+                            <div className="text-[10px] text-stone-400 mt-0.5 truncate" title={radical.description}>
+                              {radical.description}
                             </div>
 
                             {/* Action Buttons: Edit / Insert Directly */}
                             <div className="mt-1.5 flex items-center space-x-1.5">
                               <button
                                 onClick={() => handleLoadPreset(radical)}
+                                disabled={isLoadingPreset}
                                 className={`flex-1 py-1 px-1.5 rounded text-[10.5px] font-bold flex items-center justify-center space-x-1 transition-all ${
                                   isLoadedInCanvas
                                     ? isLight
                                       ? 'bg-emerald-700 text-white'
                                       : 'bg-emerald-600 text-white'
                                     : isLight
-                                    ? 'bg-emerald-100/70 text-emerald-950 hover:bg-emerald-200'
+                                    ? 'bg-emerald-100/80 text-emerald-950 hover:bg-emerald-200'
                                     : 'bg-[#203427] text-emerald-200 hover:bg-[#2a4533]'
                                 }`}
                               >
                                 <PenTool className="w-3 h-3" />
-                                <span>{isLoadedInCanvas ? '編集中' : '編集'}</span>
+                                <span>{isLoadedInCanvas ? '編集中' : '工房で編集'}</span>
                               </button>
                               <button
                                 onClick={() => handleInsertPresetDirectly(radical, insertPlacement, false)}
@@ -1838,7 +2469,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                                     ? 'bg-stone-100 hover:bg-emerald-600 hover:text-white text-stone-800 border border-stone-200'
                                     : 'bg-[#18261e] hover:bg-emerald-500 hover:text-stone-950 text-emerald-200 border border-[#25362b]'
                                 }`}
-                                title={`文字「${selectedChar}」に直接挿入`}
+                                title={`現在の文字「${selectedChar}」に高精度ベクターを挿入`}
                               >
                                 <ArrowRight className="w-3 h-3" />
                                 <span>「{selectedChar}」へ挿入</span>
@@ -2472,6 +3103,212 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               </div>
             </div>
 
+            {/* Contextual Tool Settings Bar (Brush / Pen / Node Options) */}
+            <div
+              className={`px-3 py-1.5 border-b flex items-center justify-between gap-2 shrink-0 overflow-x-auto scrollbar-none min-w-0 text-xs ${
+                isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#121c15] border-[#223627]'
+              }`}
+            >
+              {toolMode === 'brush' ? (
+                /* ================= BRUSH TOOL OPTIONS ================= */
+                <div className="flex items-center space-x-2.5 sm:space-x-4 shrink-0 w-full justify-between">
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 shrink-0 flex items-center space-x-1">
+                      <Paintbrush className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>筆スタイル:</span>
+                    </span>
+
+                    {/* Brush Style Selector Pills */}
+                    <div className="flex items-center space-x-1 bg-stone-100 dark:bg-[#1a281f] p-0.5 rounded-lg border border-stone-200 dark:border-[#25382b]">
+                      {(
+                        [
+                          { id: 'brush' as BrushStyle, label: '毛筆 (Calligraphy)' },
+                          { id: 'mincho' as BrushStyle, label: '明朝体 (Mincho)' },
+                          { id: 'gothic' as BrushStyle, label: 'ゴシック (Gothic)' },
+                          { id: 'marker' as BrushStyle, label: 'マーカー (Chisel)' },
+                          { id: 'plain' as BrushStyle, label: '標準 (Round)' },
+                        ] as const
+                      ).map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => setBrushStyle(b.id)}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
+                            brushStyle === b.id
+                              ? 'bg-emerald-800 text-white font-bold shadow-xs'
+                              : 'text-stone-600 dark:text-stone-300 hover:text-emerald-800 dark:hover:text-white'
+                          }`}
+                        >
+                          {b.label.split(' ')[0]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Brush Width Slider & Presets */}
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 shrink-0">
+                      太さ:
+                    </span>
+                    <input
+                      type="range"
+                      min={6}
+                      max={120}
+                      step={2}
+                      value={brushWidth}
+                      onChange={(e) => setBrushWidth(Number(e.target.value))}
+                      className="w-20 sm:w-28 accent-emerald-600 h-1.5 cursor-pointer"
+                    />
+                    <span className="font-mono font-bold text-[11px] text-emerald-700 dark:text-emerald-300 w-8">
+                      {brushWidth}px
+                    </span>
+
+                    {/* Quick Width Buttons */}
+                    <div className="hidden md:flex items-center space-x-1 border-l pl-2 border-stone-200 dark:border-[#25382b]">
+                      {[12, 24, 36, 48, 72].map((w) => (
+                        <button
+                          key={w}
+                          onClick={() => setBrushWidth(w)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold transition-all ${
+                            brushWidth === w
+                              ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-950 dark:text-emerald-200 font-bold'
+                              : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-[#1e2e23]'
+                          }`}
+                        >
+                          {w}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Pressure Sensitivity */}
+                  <div className="flex items-center space-x-1.5 shrink-0">
+                    <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 shrink-0 hidden lg:inline">
+                      筆圧・速度感度:
+                    </span>
+                    <select
+                      value={pressureSensitivity}
+                      onChange={(e) => setPressureSensitivity(e.target.value as any)}
+                      className={`text-[11px] font-semibold px-2 py-0.5 rounded border outline-hidden ${
+                        isLight
+                          ? 'bg-white border-stone-300 text-stone-700'
+                          : 'bg-[#18261e] border-[#2a3e30] text-emerald-200'
+                      }`}
+                      title="ペンタブレットの筆圧または描画速度に応じた線の強弱シミュレーション"
+                    >
+                      <option value="high">感度: 高 (メリハリ強)</option>
+                      <option value="normal">感度: 標準 (自然な筆感)</option>
+                      <option value="low">感度: 低 (穏やか)</option>
+                      <option value="off">固定幅 (均一)</option>
+                    </select>
+
+                    {/* Straight Mode Toggle */}
+                    <button
+                      onClick={() => setIsStraightMode(!isStraightMode)}
+                      className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
+                        isStraightMode
+                          ? 'bg-emerald-100 dark:bg-emerald-950 border-emerald-400 text-emerald-900 dark:text-emerald-200'
+                          : 'bg-white dark:bg-[#18261e] border-stone-200 dark:border-[#25382b] text-stone-500 dark:text-stone-400'
+                      }`}
+                      title="直線ストロークモード (Shiftキー併用可能)"
+                    >
+                      直線: {isStraightMode ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+              ) : toolMode === 'pen' ? (
+                /* ================= PEN TOOL OPTIONS & TIPS ================= */
+                <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 w-full justify-between">
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1">
+                      <PenTool className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>ベジェペン操作:</span>
+                    </span>
+                    <span className="text-[11px] text-stone-600 dark:text-stone-300">
+                      クリックで角頂点、ドラッグで滑らかな曲率ハンドル
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-2 shrink-0">
+                    {activePenContour ? (
+                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 animate-pulse">
+                        {isPenNearFirstNode ? '◎ 始点クリックでパスを閉じます' : `作図中 (${activePenContour.nodes.length}点)`}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-stone-400">
+                        キャンバスをクリックしてパスを開始
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setShowPenShortcutsHelp(!showPenShortcutsHelp)}
+                      className="text-[11px] text-emerald-700 dark:text-emerald-400 underline font-medium"
+                    >
+                      ショートカット一覧
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* ================= SELECT / NODE TOOL OPTIONS ================= */
+                <div className="flex items-center space-x-2 sm:space-x-4 shrink-0 w-full justify-between">
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <span className="text-[11px] font-bold text-stone-600 dark:text-stone-400 flex items-center space-x-1">
+                      <MousePointer className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>選択中:</span>
+                    </span>
+
+                    {selectedNodeId ? (
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950 px-2 py-0.5 rounded">
+                          ノード選択中
+                        </span>
+                        <button
+                          onClick={handleToggleSelectedNodeType}
+                          className="px-2 py-0.5 rounded text-[11px] font-semibold bg-stone-100 hover:bg-emerald-100 dark:bg-[#18261e] dark:hover:bg-[#203428] text-stone-700 dark:text-emerald-200 border border-stone-200 dark:border-[#25382b] transition-all"
+                          title="角頂点(Corner)と滑らかな曲線頂点(Smooth)を切り替え"
+                        >
+                          曲率切替 (Smooth/Corner)
+                        </button>
+                        <button
+                          onClick={handleDeleteSelectedNode}
+                          className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/70 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 transition-all"
+                          title="選択中のノードを削除 (Delete)"
+                        >
+                          ノード削除
+                        </button>
+                      </div>
+                    ) : selectedContourId ? (
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950 px-2 py-0.5 rounded">
+                          輪郭全体を選択中
+                        </span>
+                        <button
+                          onClick={handleDuplicateSelectedContour}
+                          className="px-2 py-0.5 rounded text-[11px] font-semibold bg-stone-100 hover:bg-emerald-100 dark:bg-[#18261e] dark:hover:bg-[#203428] text-stone-700 dark:text-emerald-200 border border-stone-200 dark:border-[#25382b] transition-all"
+                          title="選択した輪郭を複製"
+                        >
+                          輪郭を複製
+                        </button>
+                        <button
+                          onClick={handleDeleteSelectedContour}
+                          className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/70 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 transition-all"
+                          title="選択した輪郭を削除 (Delete)"
+                        >
+                          輪郭を削除
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-stone-400">
+                        頂点や輪郭をクリックして選択・ドラッグ移動
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-2 text-[11px] text-stone-400">
+                    <span>キー: [V]選択 [P]ペン [B]ブラシ [E]消しゴム [Space]移動 [Ctrl+Z]元に戻す</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Main Interactive SVG Canvas */}
             <div ref={canvasContainerRef} className="flex-1 min-h-0 relative overflow-hidden bg-[#eaf2ec] dark:bg-[#0c130e]">
               {/* Active Pen Tool Drawing In-Progress Draggable Floating HUD Bar */}
@@ -2546,7 +3383,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                       onClick={() => handleFinishPartPenContour(true)}
                       disabled={activePenContour.nodes.length < 3}
                       className="px-2.5 py-0.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center space-x-1 shadow-sm transition-all disabled:opacity-30 active:scale-95"
-                      title="パスを閉じて輪郭として確定する"
+                      title="パスを閉じて輪郭として確定する (Enter)"
                     >
                       <Check className="w-3 h-3" />
                       <span>閉じて確定</span>
@@ -2576,7 +3413,9 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               )}
               <svg
                 ref={svgCanvasRef}
-                className="w-full h-full cursor-crosshair select-none"
+                className={`w-full h-full select-none ${
+                  toolMode === 'hand' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'
+                }`}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
@@ -2810,14 +3649,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     })()
                   )}
 
-                  {/* Active Brush Stroke in-progress */}
-                  {brushSvgPath && (
-                    <path
-                      d={brushSvgPath}
-                      fill="#10b981"
-                      fillOpacity={0.8}
-                    />
-                  )}
+                  {/* Real-time High-Performance Live Brush Path */}
+                  <path
+                    ref={activeBrushPathRef}
+                    d={brushSvgPath || ''}
+                    fill={isLight ? '#047857' : '#34d399'}
+                    fillOpacity={0.88}
+                  />
 
                   {/* Active Pen Path in-progress */}
                   {penSvgPath && (
@@ -2827,6 +3665,37 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                       stroke="#10b981"
                       strokeWidth={3}
                     />
+                  )}
+
+                  {/* In-progress Pen Ghost Segment to current cursor */}
+                  {toolMode === 'pen' && activePenContour && penMousePos && activePenContour.nodes.length > 0 && (
+                    (() => {
+                      const lastNode = activePenContour.nodes[activePenContour.nodes.length - 1];
+                      return (
+                        <g pointerEvents="none" opacity={0.65}>
+                          <line
+                            x1={lastNode.x}
+                            y1={lastNode.y}
+                            x2={penMousePos.x}
+                            y2={penMousePos.y}
+                            stroke="#10b981"
+                            strokeWidth={2}
+                            strokeDasharray="4 4"
+                          />
+                          {isPenNearFirstNode && activePenContour.nodes.length >= 2 && (
+                            <circle
+                              cx={activePenContour.nodes[0].x}
+                              cy={activePenContour.nodes[0].y}
+                              r={10}
+                              fill="none"
+                              stroke="#10b981"
+                              strokeWidth={3}
+                              className="animate-ping"
+                            />
+                          )}
+                        </g>
+                      );
+                    })()
                   )}
 
                   {/* Active Shape in-progress */}
@@ -2842,7 +3711,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     />
                   )}
 
-                  {/* Bezier Nodes & Handles */}
+                  {/* Bezier Nodes & Interactive Tangent Handles */}
                   {activePart &&
                     activePart.contours.map((contour) => (
                       <g key={contour.id}>
@@ -2850,17 +3719,123 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                           const isNodeSelected = selectedNodeId === node.id;
                           return (
                             <g key={node.id}>
-                              <circle
-                                cx={node.x}
-                                cy={node.y}
-                                r={isNodeSelected ? 6 : 4.5}
-                                fill={isNodeSelected ? '#ef4444' : '#10b981'}
-                                stroke="#ffffff"
-                                strokeWidth={2}
-                              />
+                              {/* Tangent Handles for selected node */}
+                              {isNodeSelected && (
+                                <g>
+                                  {node.handleIn && (
+                                    <g>
+                                      <line
+                                        x1={node.x}
+                                        y1={node.y}
+                                        x2={node.handleIn.x}
+                                        y2={node.handleIn.y}
+                                        stroke="#3b82f6"
+                                        strokeWidth={1.5}
+                                      />
+                                      <circle
+                                        cx={node.handleIn.x}
+                                        cy={node.handleIn.y}
+                                        r={4.5}
+                                        fill="#3b82f6"
+                                        stroke="#ffffff"
+                                        strokeWidth={1.5}
+                                        className="cursor-pointer hover:scale-125 transition-transform"
+                                      />
+                                    </g>
+                                  )}
+                                  {node.handleOut && (
+                                    <g>
+                                      <line
+                                        x1={node.x}
+                                        y1={node.y}
+                                        x2={node.handleOut.x}
+                                        y2={node.handleOut.y}
+                                        stroke="#3b82f6"
+                                        strokeWidth={1.5}
+                                      />
+                                      <circle
+                                        cx={node.handleOut.x}
+                                        cy={node.handleOut.y}
+                                        r={4.5}
+                                        fill="#3b82f6"
+                                        stroke="#ffffff"
+                                        strokeWidth={1.5}
+                                        className="cursor-pointer hover:scale-125 transition-transform"
+                                      />
+                                    </g>
+                                  )}
+                                </g>
+                              )}
+
+                              {/* Anchor Point Node */}
+                              {node.type === 'smooth' ? (
+                                <circle
+                                  cx={node.x}
+                                  cy={node.y}
+                                  r={isNodeSelected ? 6.5 : 4.5}
+                                  fill={isNodeSelected ? '#ef4444' : '#10b981'}
+                                  stroke="#ffffff"
+                                  strokeWidth={2}
+                                />
+                              ) : (
+                                <rect
+                                  x={node.x - (isNodeSelected ? 6 : 4)}
+                                  y={node.y - (isNodeSelected ? 6 : 4)}
+                                  width={isNodeSelected ? 12 : 8}
+                                  height={isNodeSelected ? 12 : 8}
+                                  fill={isNodeSelected ? '#ef4444' : '#10b981'}
+                                  stroke="#ffffff"
+                                  strokeWidth={2}
+                                />
+                              )}
                             </g>
                           );
                         })}
+                      </g>
+                    ))}
+
+                  {/* Active Pen Contour Nodes */}
+                  {activePenContour &&
+                    activePenContour.nodes.map((node, idx) => (
+                      <g key={node.id}>
+                        {idx === 0 && (
+                          <circle
+                            cx={node.x}
+                            cy={node.y}
+                            r={7}
+                            fill="#f59e0b"
+                            stroke="#ffffff"
+                            strokeWidth={2}
+                          />
+                        )}
+                        <circle
+                          cx={node.x}
+                          cy={node.y}
+                          r={idx === 0 ? 5 : 4.5}
+                          fill={idx === 0 ? '#ef4444' : '#10b981'}
+                          stroke="#ffffff"
+                          strokeWidth={1.5}
+                        />
+                        {node.handleOut && (
+                          <g>
+                            <line
+                              x1={node.x}
+                              y1={node.y}
+                              x2={node.handleOut.x}
+                              y2={node.handleOut.y}
+                              stroke="#3b82f6"
+                              strokeWidth={1.5}
+                            />
+                            <circle
+                              cx={node.handleOut.x}
+                              cy={node.handleOut.y}
+                              r={4}
+                              fill="#3b82f6"
+                              stroke="#ffffff"
+                              strokeWidth={1.5}
+                            />
+                          </g>
+                        )}
                       </g>
                     ))}
                 </g>
@@ -3601,6 +4576,83 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* ================= KEYBOARD SHORTCUTS & PEN HELP MODAL ================= */}
+      {showPenShortcutsHelp && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-fadeIn">
+          <div
+            className={`w-full max-w-md rounded-xl border shadow-2xl flex flex-col overflow-hidden ${
+              isLight ? 'bg-white border-[#c8ded3]' : 'bg-[#16221a] border-[#25362b]'
+            }`}
+          >
+            <div className="p-3.5 border-b flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                <h3 className="text-sm font-bold">部首工房 ショートカット・操作ガイド</h3>
+              </div>
+              <button
+                onClick={() => setShowPenShortcutsHelp(false)}
+                className="p-1 rounded text-stone-400 hover:text-stone-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3.5 text-xs text-stone-700 dark:text-stone-300">
+              <div>
+                <h4 className="font-bold text-emerald-800 dark:text-emerald-300 mb-1.5 flex items-center space-x-1">
+                  <PenTool className="w-3.5 h-3.5" />
+                  <span>ベジェペンツール (P)</span>
+                </h4>
+                <ul className="space-y-1 list-disc list-inside text-[11.5px] text-stone-600 dark:text-stone-300">
+                  <li><strong>クリック</strong>: 直線の角頂点（Corner Node）を追加</li>
+                  <li><strong>クリック＆ドラッグ</strong>: 滑らかな曲率ハンドル（Smooth Node）を伸ばす</li>
+                  <li><strong>始点クリック / Enter</strong>: パスを閉じて輪郭として確定</li>
+                  <li><strong>Backspace / 1点戻す</strong>: 直前に打った頂点を取り消す</li>
+                  <li><strong>Esc</strong>: 作図中のパスをリセット</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-emerald-800 dark:text-emerald-300 mb-1.5 flex items-center space-x-1">
+                  <Paintbrush className="w-3.5 h-3.5" />
+                  <span>手書き筆・ブラシツール (B)</span>
+                </h4>
+                <ul className="space-y-1 list-disc list-inside text-[11.5px] text-stone-600 dark:text-stone-300">
+                  <li><strong>低遅延RAF描画</strong>: 筆先ストロークが遅れずリアルタイムに追従</li>
+                  <li><strong>筆圧・描画速度連動</strong>: 毛筆・明朝・ゴシック・マーカー等で自然な止め・払い・抑揚を再現</li>
+                  <li><strong>Shiftキー / 直線モード</strong>: 押下しながら描くことで綺麗な直線ストロークを作成</li>
+                  <li><strong>自動重なり結合</strong>: 描いたストロークが自動で既存輪郭と結合し、白抜けを防止</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-emerald-800 dark:text-emerald-300 mb-1.5 flex items-center space-x-1">
+                  <MousePointer className="w-3.5 h-3.5" />
+                  <span>ツール切替 & 共通キー</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
+                  <div className="p-1.5 rounded bg-stone-100 dark:bg-[#1a281f]"><strong className="text-emerald-700 dark:text-emerald-300">V</strong>: 選択 / 頂点編集</div>
+                  <div className="p-1.5 rounded bg-stone-100 dark:bg-[#1a281f]"><strong className="text-emerald-700 dark:text-emerald-300">P</strong>: ベジェペン</div>
+                  <div className="p-1.5 rounded bg-stone-100 dark:bg-[#1a281f]"><strong className="text-emerald-700 dark:text-emerald-300">B</strong>: 手書きブラシ</div>
+                  <div className="p-1.5 rounded bg-stone-100 dark:bg-[#1a281f]"><strong className="text-emerald-700 dark:text-emerald-300">E</strong>: 消しゴム</div>
+                  <div className="p-1.5 rounded bg-stone-100 dark:bg-[#1a281f]"><strong className="text-emerald-700 dark:text-emerald-300">Space / H</strong>: 画面スクロール</div>
+                  <div className="p-1.5 rounded bg-stone-100 dark:bg-[#1a281f]"><strong className="text-emerald-700 dark:text-emerald-300">Ctrl+Z / Y</strong>: 取消 / やり直し</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 border-t bg-stone-50 dark:bg-[#131d16] flex justify-end">
+              <button
+                onClick={() => setShowPenShortcutsHelp(false)}
+                className="px-4 py-1.5 rounded-lg bg-emerald-800 text-white font-bold text-xs hover:bg-emerald-900"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= EXTRACT CONTOURS MODAL ================= */}
       {showExtractModal && (

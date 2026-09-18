@@ -57,6 +57,9 @@ import {
   ChevronUp,
   PanelBottomClose,
   PanelBottomOpen,
+  HelpCircle,
+  Type,
+  ArrowRightLeft,
 } from 'lucide-react';
 import {
   PathContour,
@@ -69,6 +72,8 @@ import {
   GridSettings,
   SnapGuideLine,
   CustomGuideline,
+  GlyphOverlaySettings,
+  FontProject,
 } from '../types';
 import {
   snapContourMovement,
@@ -132,9 +137,10 @@ import { ThemeMode } from '../utils/theme';
 import { JapaneseGuidesLayer } from './canvas/JapaneseGuidesLayer';
 import { CanvasBackgroundLayer } from './canvas/CanvasBackgroundLayer';
 import { AdjacentGlyphsLayer } from './canvas/AdjacentGlyphsLayer';
+import { GlyphComparisonLayer } from './canvas/GlyphComparisonLayer';
 import { MetricsGuidesLayer } from './canvas/MetricsGuidesLayer';
 import { CanvasRulersLayer } from './canvas/CanvasRulersLayer';
-import { TraceReferenceLayer } from './canvas/TraceReferenceLayer';
+import { TraceReferenceLayer, TraceResizeHandle } from './canvas/TraceReferenceLayer';
 import { CustomGuidelinesLayer } from './canvas/CustomGuidelinesLayer';
 import { RulerMeasurementLayer } from './canvas/RulerMeasurementLayer';
 import { MainGlyphContoursLayer } from './canvas/MainGlyphContoursLayer';
@@ -226,6 +232,9 @@ interface GlyphCanvasProps {
   canRedo?: boolean;
   onOpenPenPresetsModal?: () => void;
   isAnyModalOpen?: boolean;
+  overlaySettings?: GlyphOverlaySettings;
+  project?: FontProject;
+  onOpenGlyphCompareModal?: () => void;
 }
 
 // High-Contrast SVG Cursor Definitions (Dual-layer white-outer / black-inner for 100% visibility on any light/dark background or grid)
@@ -278,6 +287,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
   canRedo = false,
   onOpenPenPresetsModal,
   isAnyModalOpen = false,
+  overlaySettings,
+  project,
+  onOpenGlyphCompareModal,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const isLight = theme === 'light';
@@ -296,14 +308,69 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const panStartRef = useRef<Point>({ x: 0, y: 0 });
 
-  // Trace adjust dragging state
+  // Trace adjust dragging & resizing state
   const [isDraggingTrace, setIsDraggingTrace] = useState<boolean>(false);
+  const [isResizingTrace, setIsResizingTrace] = useState<boolean>(false);
   const traceDragStartRef = useRef<{ clientX: number; clientY: number; initOffsetX: number; initOffsetY: number }>({
     clientX: 0,
     clientY: 0,
     initOffsetX: 0,
     initOffsetY: 0,
   });
+  const traceResizeStartRef = useRef<{
+    clientX: number;
+    clientY: number;
+    initScale: number;
+    initDist: number;
+    centerScreenX: number;
+    centerScreenY: number;
+  }>({
+    clientX: 0,
+    clientY: 0,
+    initScale: 1,
+    initDist: 1,
+    centerScreenX: 0,
+    centerScreenY: 0,
+  });
+
+  // Typography Writing Guide Assist Card state (Default to false so it doesn't obstruct the canvas)
+  const [showGuideAssist, setShowGuideAssist] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mojisaku_guide_assist_open') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Sub-toolbar visibility (collapsible to maximize canvas height)
+  const [showSubToolbar, setShowSubToolbar] = useState<boolean>(() => {
+    try {
+      const val = localStorage.getItem('mojisaku_show_subtoolbar');
+      return val !== null ? val === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleSubToolbar = useCallback(() => {
+    setShowSubToolbar((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('mojisaku_show_subtoolbar', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const handleToggleGuideAssist = useCallback((open?: boolean) => {
+    setShowGuideAssist((prev) => {
+      const next = typeof open === 'boolean' ? open : !prev;
+      try {
+        localStorage.setItem('mojisaku_guide_assist_open', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
 
   // Touch gesture state for pinch-to-zoom & two-finger pan
   const touchPointersRef = useRef<Map<number, Point>>(new Map());
@@ -337,11 +404,27 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
         setSelectedHandleType(null);
       }
     };
+    const handleDeselectAll = () => {
+      setSelectedContourIds([]);
+      setSelectedNodeId(null);
+      setSelectedHandleType(null);
+    };
     window.addEventListener('font_editor_select_contours', handleExternalSelect);
+    window.addEventListener('font_editor_deselect_all', handleDeselectAll);
     return () => {
       window.removeEventListener('font_editor_select_contours', handleExternalSelect);
+      window.removeEventListener('font_editor_deselect_all', handleDeselectAll);
     };
   }, []);
+
+  // When switching tool modes away from selection / node editing, automatically clear contour selections
+  useEffect(() => {
+    if (toolMode !== 'select' && toolMode !== 'node') {
+      setSelectedContourIds([]);
+      setSelectedNodeId(null);
+      setSelectedHandleType(null);
+    }
+  }, [toolMode]);
   const [marqueeSelection, setMarqueeSelection] = useState<{ start: Point; current: Point } | null>(null);
   const [showShapePickerDropdown, setShowShapePickerDropdown] = useState<boolean>(false);
   const shapePickerRef = useRef<HTMLDivElement>(null);
@@ -382,33 +465,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
   const [penHudPos, setPenHudPos] = useState<{ x: number; y: number } | null>(null);
   const isDraggingPenHudRef = useRef(false);
   const penHudDragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  // Floating Brush HUD states (Position, minimize/collapse, visibility, dragging)
-  const [showBrushHud, setShowBrushHud] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('fontforge_show_brush_hud');
-      return saved !== null ? saved === 'true' : true;
-    } catch {
-      return true;
-    }
-  });
-  const [isBrushHudCollapsed, setIsBrushHudCollapsed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('fontforge_brush_hud_collapsed') === 'true';
-    } catch {
-      return false;
-    }
-  });
-  const [brushHudPos, setBrushHudPos] = useState<{ x: number; y: number } | null>(() => {
-    try {
-      const saved = localStorage.getItem('fontforge_brush_hud_pos');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return null;
-  });
-  const [isDrawingStroke, setIsDrawingStroke] = useState<boolean>(false);
-  const isDraggingBrushHudRef = useRef(false);
-  const brushHudDragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Brush Tool stroke in-progress (Hardware-accelerated direct SVG path refs for 120Hz smooth iPad drawing)
   const brushStrokePointsRef = useRef<StrokePoint[]>([]);
@@ -540,11 +596,17 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
   const maxTouchCountRef = useRef<number>(0);
   const hasMovedSignificantRef = useRef<boolean>(false);
 
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const showCanvasToast = useCallback((message: string, subText?: string) => {
     const id = Date.now();
     setCanvasToast({ message, subText, id });
-    setTimeout(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
       setCanvasToast((curr) => (curr?.id === id ? null : curr));
+      toastTimerRef.current = null;
     }, 3200);
   }, []);
 
@@ -582,6 +644,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
   // Clean up RAF & timers on unmount to prevent memory leaks
   useEffect(() => {
     return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
       if (hoverRafRef.current != null) {
         cancelAnimationFrame(hoverRafRef.current);
       }
@@ -773,6 +838,34 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
     return () => ro.disconnect();
   }, [resetView, clampPan]);
 
+  // Reset trace position offset back to (0, 0) (Center)
+  const handleResetTracePosition = useCallback(() => {
+    if (!onChangeTraceSettings) return;
+    onChangeTraceSettings((prev) => ({
+      ...prev,
+      offsetX: 0,
+      offsetY: 0,
+      rotation: 0,
+    }));
+    showCanvasToast('下絵の位置を中央(X:0, Y:0)にリセットしました');
+  }, [onChangeTraceSettings, showCanvasToast]);
+
+  // Reset trace position AND scale back to standard
+  const handleResetTraceAll = useCallback(() => {
+    if (!onChangeTraceSettings) return;
+    const isKana = /[ぁ-んァ-ヶー]/.test(traceSettings.text || activeChar || '');
+    const isKanji = /[\u4e00-\u9faf\u3400-\u4dbf]/.test(traceSettings.text || activeChar || '');
+    const defaultScale = isKana ? 0.78 : isKanji ? 0.85 : 1.0;
+    onChangeTraceSettings((prev) => ({
+      ...prev,
+      offsetX: 0,
+      offsetY: 0,
+      scale: defaultScale,
+      rotation: 0,
+    }));
+    showCanvasToast(`下絵の位置とサイズ(${Math.round(defaultScale * 100)}%)をリセットしました`);
+  }, [onChangeTraceSettings, showCanvasToast, traceSettings.text, activeChar]);
+
   // Global canvas shortcuts: '0' for Fit to Screen, '1' for 100%, 'W' for Fit Width, 'F'/'Shift+Z' for Zen Mode
   useEffect(() => {
     const handleCanvasShortcut = (e: KeyboardEvent) => {
@@ -812,11 +905,14 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
           e.preventDefault();
           onToggleZenMode();
         }
+      } else if (toolMode === 'trace_adjust' && (e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        handleResetTracePosition();
       }
     };
     window.addEventListener('keydown', handleCanvasShortcut);
     return () => window.removeEventListener('keydown', handleCanvasShortcut);
-  }, [resetView, onToggleZenMode, showCanvasToast, handleZoomStep, isAnyModalOpen]);
+  }, [resetView, onToggleZenMode, showCanvasToast, handleZoomStep, isAnyModalOpen, toolMode, handleResetTracePosition]);
 
   // Screen to Canvas Coordinates Converter (Pure geometric mapping)
   const screenToCanvas = useCallback(
@@ -931,58 +1027,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
   const handlePenHudPointerUp = useCallback((e: React.PointerEvent) => {
     if (isDraggingPenHudRef.current) {
       isDraggingPenHudRef.current = false;
-      try {
-        (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-      } catch {
-        // ignore
-      }
-    }
-  }, []);
-
-  const handleBrushHudPointerDown = useCallback((e: React.PointerEvent) => {
-    e.stopPropagation();
-    isDraggingBrushHudRef.current = true;
-    const target = e.currentTarget as HTMLElement;
-    try {
-      target.setPointerCapture?.(e.pointerId);
-    } catch {
-      // ignore
-    }
-
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    const currentLeft =
-      brushHudPos?.x ??
-      (containerRect ? Math.max(16, (containerRect.width - 340) / 2) : 60);
-    const currentTop = brushHudPos?.y ?? 10;
-
-    brushHudDragOffsetRef.current = {
-      x: e.clientX - currentLeft,
-      y: e.clientY - currentTop,
-    };
-  }, [brushHudPos]);
-
-  const handleBrushHudPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isDraggingBrushHudRef.current) return;
-    e.stopPropagation();
-    e.preventDefault();
-    if (!containerRef.current) return;
-
-    const containerRect = containerRef.current.getBoundingClientRect();
-    let newX = e.clientX - brushHudDragOffsetRef.current.x;
-    let newY = e.clientY - brushHudDragOffsetRef.current.y;
-
-    newX = Math.max(8, Math.min(containerRect.width - 160, newX));
-    newY = Math.max(8, Math.min(containerRect.height - 44, newY));
-
-    setBrushHudPos({ x: newX, y: newY });
-    try {
-      localStorage.setItem('fontforge_brush_hud_pos', JSON.stringify({ x: newX, y: newY }));
-    } catch {}
-  }, []);
-
-  const handleBrushHudPointerUp = useCallback((e: React.PointerEvent) => {
-    if (isDraggingBrushHudRef.current) {
-      isDraggingBrushHudRef.current = false;
       try {
         (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
       } catch {
@@ -1295,7 +1339,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
     // BRUSH TOOL (With Stylus / Apple Pencil pressure tracking & Straight Line Assist)
     if (toolMode === 'brush') {
-      setIsDrawingStroke(true);
       pendingBrushEventsRef.current = [];
       brushStrokeStartTimeRef.current = Date.now();
       brushStrokeStartPosRef.current = { x: pos.x, y: pos.y };
@@ -1410,49 +1453,17 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
       }
 
       if (!foundNode) {
-        // Check if click was on a contour bounding box
-        const clickedContour = contours.find((contour) => {
-          const bbox = getContoursBoundingBox([contour]);
-          return (
-            pos.x >= bbox.minX - 15 &&
-            pos.x <= bbox.maxX + 15 &&
-            pos.y >= bbox.minY - 15 &&
-            pos.y <= bbox.maxY + 15
-          );
-        });
-
-        if (clickedContour) {
-          if (e.shiftKey) {
-            setSelectedContourIds((prev) =>
-              prev.includes(clickedContour.id)
-                ? prev.filter((id) => id !== clickedContour.id)
-                : [...prev, clickedContour.id]
-            );
-            setSelectedNodeId(null);
-          } else {
-            let nextSelectedIds = [clickedContour.id];
-            if (selectedContourIds.includes(clickedContour.id) && selectedContourIds.length > 1) {
-              nextSelectedIds = selectedContourIds;
-            } else {
-              setSelectedContourIds(nextSelectedIds);
-            }
-            setSelectedNodeId(null);
-
-            // Instant Direct Drag Movement when clicking any contour in select mode
-            if (toolMode === 'select') {
-              handleTransformPointerDown(e, 'move', nextSelectedIds);
-            }
-          }
-        } else {
-          if (!e.shiftKey) {
-            setSelectedContourIds([]);
-          }
-          setSelectedNodeId(null);
-          if (toolMode === 'select') {
-            setMarqueeSelection({ start: pos, current: pos });
-          }
+        // Clicking on empty canvas area:
+        // Clear selection unless Shift is held, and start marquee rectangle selection
+        if (!e.shiftKey) {
+          setSelectedContourIds([]);
+          setSelectedContourId(null);
         }
+        setSelectedNodeId(null);
         setSelectedHandleType(null);
+        if (toolMode === 'select') {
+          setMarqueeSelection({ start: pos, current: pos });
+        }
       }
     }
   };
@@ -1527,6 +1538,20 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
         ...prev,
         offsetX: Math.round(traceDragStartRef.current.initOffsetX + deltaX),
         offsetY: Math.round(traceDragStartRef.current.initOffsetY + deltaY),
+      }));
+      return;
+    }
+
+    // Resizing trace image / char scale from corner handle
+    if (isResizingTrace && onChangeTraceSettings) {
+      const { centerScreenX, centerScreenY, initDist, initScale } = traceResizeStartRef.current;
+      const currentDist = Math.hypot(e.clientX - centerScreenX, e.clientY - centerScreenY);
+      const ratio = currentDist / initDist;
+      const rawScale = initScale * ratio;
+      const nextScale = Math.round(Math.max(0.2, Math.min(3.0, rawScale)) * 100) / 100;
+      onChangeTraceSettings((prev) => ({
+        ...prev,
+        scale: nextScale,
       }));
       return;
     }
@@ -2223,7 +2248,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
     const wasTouch = e.pointerType === 'touch';
     touchPointersRef.current.delete(e.pointerId);
     pointerTypesRef.current.delete(e.pointerId);
-    setIsDrawingStroke(false);
     if (e.pointerType === 'pen') {
       isPenDrawingRef.current = false;
     }
@@ -2297,6 +2321,11 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
     if (isDraggingTrace) {
       setIsDraggingTrace(false);
+      return;
+    }
+
+    if (isResizingTrace) {
+      setIsResizingTrace(false);
       return;
     }
 
@@ -2574,7 +2603,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
   };
 
   const handlePointerLeave = () => {
-    setIsDrawingStroke(false);
     if (hoverRafRef.current != null) {
       cancelAnimationFrame(hoverRafRef.current);
       hoverRafRef.current = null;
@@ -2609,6 +2637,80 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
           e.preventDefault();
           setSelectedContourIds(contours.map((c) => c.id));
           showCanvasToast(`すべてのパス (${contours.length}個) を選択しました`);
+          return;
+        }
+      }
+
+      // Ctrl+D / Cmd+D: Duplicate selected contours
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        if ((toolMode === 'select' || toolMode === 'node') && selectedContourIds.length > 0) {
+          e.preventDefault();
+          if (selectedContourIds.length === 1) {
+            const target = contours.find((c) => c.id === selectedContourIds[0]);
+            if (target) {
+              const dup = duplicateContour(target, 40, 40);
+              onChangeContours([...contours, dup]);
+              setSelectedContourIds([dup.id]);
+            }
+          } else {
+            const selected = contours.filter((c) => selectedContourIds.includes(c.id));
+            const dups = duplicateMultipleContours(selected, 40, 40);
+            onChangeContours([...contours, ...dups]);
+            setSelectedContourIds(dups.map((d) => d.id));
+          }
+          onCommitHistory();
+          showCanvasToast('選択パーツを複製しました');
+          return;
+        }
+      }
+
+      // Arrow keys nudge (1px, or 10px with Shift)
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        if ((toolMode === 'select' || toolMode === 'node') && selectedContourIds.length > 0) {
+          e.preventDefault();
+          const step = e.shiftKey ? 10 : 1;
+          const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+          const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+
+          if (selectedContourIds.length === 1 && selectedNodeId) {
+            const targetId = selectedContourIds[0];
+            const updated = contours.map((c) => {
+              if (c.id !== targetId) return c;
+              return {
+                ...c,
+                nodes: c.nodes.map((n) => {
+                  if (n.id !== selectedNodeId) return n;
+                  return {
+                    ...n,
+                    x: Math.round(n.x + dx),
+                    y: Math.round(n.y + dy),
+                    handleIn: n.handleIn ? { x: Math.round(n.handleIn.x + dx), y: Math.round(n.handleIn.y + dy) } : null,
+                    handleOut: n.handleOut ? { x: Math.round(n.handleOut.x + dx), y: Math.round(n.handleOut.y + dy) } : null,
+                  };
+                }),
+              };
+            });
+            onChangeContours(updated);
+            onCommitHistory();
+          } else {
+            const updatedMap = new Map<string, PathContour>();
+            for (const c of contours) {
+              if (selectedContourIds.includes(c.id)) {
+                updatedMap.set(c.id, {
+                  ...c,
+                  nodes: c.nodes.map((n) => ({
+                    ...n,
+                    x: Math.round(n.x + dx),
+                    y: Math.round(n.y + dy),
+                    handleIn: n.handleIn ? { x: Math.round(n.handleIn.x + dx), y: Math.round(n.handleIn.y + dy) } : null,
+                    handleOut: n.handleOut ? { x: Math.round(n.handleOut.x + dx), y: Math.round(n.handleOut.y + dy) } : null,
+                  })),
+                });
+              }
+            }
+            onChangeContours(contours.map((c) => updatedMap.get(c.id) || c));
+            onCommitHistory();
+          }
           return;
         }
       }
@@ -3080,11 +3182,36 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
       traceDragStartRef.current = {
         clientX: e.clientX,
         clientY: e.clientY,
-        initOffsetX: traceSettings.offsetX,
-        initOffsetY: traceSettings.offsetY,
+        initOffsetX: traceSettings.offsetX || 0,
+        initOffsetY: traceSettings.offsetY || 0,
       };
     },
     [traceSettings.offsetX, traceSettings.offsetY]
+  );
+
+  const handlePointerDownTraceResize = useCallback(
+    (e: React.PointerEvent, _handle: TraceResizeHandle) => {
+      e.stopPropagation();
+      setIsResizingTrace(true);
+      const rect = containerRef.current?.getBoundingClientRect();
+      const currentZoom = zoom;
+      const currentPan = pan;
+      const centerCanvasX = 500 + (traceSettings.offsetX || 0);
+      const centerCanvasY = 500 + (traceSettings.offsetY || 0);
+      const centerScreenX = (rect ? rect.left : 0) + currentPan.x + centerCanvasX * currentZoom;
+      const centerScreenY = (rect ? rect.top : 0) + currentPan.y + centerCanvasY * currentZoom;
+      const initDist = Math.hypot(e.clientX - centerScreenX, e.clientY - centerScreenY);
+
+      traceResizeStartRef.current = {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        initScale: traceSettings.scale ?? 1,
+        initDist: Math.max(10, initDist),
+        centerScreenX,
+        centerScreenY,
+      };
+    },
+    [zoom, pan, traceSettings.offsetX, traceSettings.offsetY, traceSettings.scale]
   );
 
   const handlePointerDownGuide = useCallback(
@@ -3123,8 +3250,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
   return (
     <div className="w-full h-full flex flex-col relative overflow-hidden select-none bg-stone-100 dark:bg-[#0c120e]">
-      {/* Universal Docked Sub-Toolbar (Outside SVG viewport, clean & non-overlapping) */}
-      {!isMobileFocusMode && (
+      {/* Universal Docked Sub-Toolbar (Outside SVG viewport, clean & non-overlapping, collapsible) */}
+      {!isMobileFocusMode && showSubToolbar ? (
         <div
           className={`h-11 border-b flex items-center justify-between px-2.5 sm:px-3 shrink-0 z-20 select-none overflow-x-auto no-scrollbar gap-2 transition-colors ${
             isLight
@@ -3469,30 +3596,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                       <span className="hidden md:inline">プリセット</span>
                     </button>
                   )}
-
-                  {/* Floating Quick Bar HUD Toggle */}
-                  <button
-                    onClick={() => {
-                      const next = !showBrushHud;
-                      setShowBrushHud(next);
-                      try { localStorage.setItem('fontforge_show_brush_hud', String(next)); } catch {}
-                      showCanvasToast(next ? '筆クイックバーを表示しました' : '筆クイックバーを非表示にしました');
-                    }}
-                    className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors flex items-center space-x-1 shrink-0 ${
-                      showBrushHud
-                        ? isLight
-                          ? 'bg-emerald-100 text-emerald-950 border-emerald-300'
-                          : 'bg-emerald-950 text-emerald-200 border-emerald-700'
-                        : isLight
-                        ? 'bg-stone-100 hover:bg-stone-200 text-stone-500 border-stone-300'
-                        : 'bg-stone-800 hover:bg-stone-700 text-stone-400 border-stone-700'
-                    }`}
-                    title={showBrushHud ? 'キャンバス上の筆クイックバーを非表示（邪魔な場合にOFF）' : 'キャンバス上の筆クイックバーを再表示'}
-                  >
-                    <Sliders className="w-3 h-3" />
-                    <span className="hidden lg:inline">浮動バー:</span>
-                    <span>{showBrushHud ? 'ON' : 'OFF'}</span>
-                  </button>
                 </div>
               </>
             )}
@@ -4117,8 +4220,55 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             )}
+
+            {/* Collapse Subtoolbar button */}
+            <button
+              onClick={handleToggleSubToolbar}
+              className="p-1.5 rounded hover:bg-stone-200 dark:hover:bg-[#202e24] text-stone-400 hover:text-stone-700 dark:hover:text-emerald-300 transition-colors ml-0.5"
+              title="サブツールバーを折りたたむ (作図キャンバスを広く使う)"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
+      ) : (
+        /* Collapsed Floating Minimal Trigger (Zero layout height consumed) */
+        !isMobileFocusMode && (
+          <div
+            className="absolute top-2 left-2 z-20 pointer-events-auto flex items-center space-x-1 bg-white/85 dark:bg-[#121c15]/85 backdrop-blur-md px-2 py-1 rounded-full border border-stone-200/80 dark:border-emerald-800/60 shadow-sm text-xs select-none"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {onSelectPrevGlyph && (
+              <button
+                onClick={onSelectPrevGlyph}
+                className="p-0.5 rounded-full hover:bg-stone-200 dark:hover:bg-emerald-950 text-stone-600 dark:text-emerald-300"
+                title="前の文字"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <span className="font-bold text-emerald-900 dark:text-emerald-200 px-1 font-sans">{activeChar}</span>
+            {onSelectNextGlyph && (
+              <button
+                onClick={onSelectNextGlyph}
+                className="p-0.5 rounded-full hover:bg-stone-200 dark:hover:bg-emerald-950 text-stone-600 dark:text-emerald-300"
+                title="次の文字"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <div className="w-[1px] h-3 bg-stone-300 dark:bg-emerald-800 mx-0.5" />
+            <button
+              onClick={handleToggleSubToolbar}
+              className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full hover:bg-emerald-100 dark:hover:bg-emerald-950 text-[10.5px] font-bold text-emerald-800 dark:text-emerald-300 transition-colors"
+              title="サブツールバーを展開"
+            >
+              <Sliders className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden xs:inline">詳細バー</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
+        )
       )}
 
       {/* Mobile Focus Mode Top Exit Bar */}
@@ -4161,6 +4311,18 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
           isLight ? 'bg-[#f0f4f1]' : 'bg-[#0c120e]'
         }`}
         onWheel={(e) => {
+          // In trace adjust mode, scroll wheel intuitively adjusts trace size
+          if (toolMode === 'trace_adjust' && onChangeTraceSettings && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            const delta = -Math.sign(e.deltaY) * 0.05;
+            onChangeTraceSettings((prev) => {
+              const currentScale = prev.scale ?? 1;
+              const nextScale = Math.round(Math.max(0.2, Math.min(3.0, currentScale + delta)) * 100) / 100;
+              return { ...prev, scale: nextScale };
+            });
+            return;
+          }
+
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
             const rect = containerRef.current?.getBoundingClientRect();
@@ -4185,34 +4347,355 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
           }
         }}
       >
-        {/* Trace Adjust Mode Active Banner */}
+      {/* Enhanced Trace Adjust Mode Active Floating HUD Bar */}
       {toolMode === 'trace_adjust' && (
         <div
-          className={`absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-full border shadow-lg flex items-center space-x-2 text-xs font-bold ${
+          className={`absolute top-2 sm:top-2.5 left-1/2 -translate-x-1/2 z-30 px-2.5 sm:px-3.5 py-1.5 rounded-xl border shadow-lg flex items-center gap-2 text-xs font-medium backdrop-blur-md transition-all duration-150 pointer-events-auto max-w-[96vw] overflow-x-auto no-scrollbar ${
             isLight
-              ? 'bg-emerald-900 border-emerald-950 text-white'
-              : 'bg-emerald-800 border-emerald-700 text-white'
+              ? 'bg-white/95 border-stone-200/90 text-stone-800 shadow-stone-300/30'
+              : 'bg-[#141e17]/95 border-emerald-800/60 text-emerald-100 shadow-black/50'
           }`}
+          onPointerDown={(e) => e.stopPropagation()}
         >
-          <Move className="w-3.5 h-3.5" />
-          <span>下絵調整モード: キャンバス上をドラッグして下絵を移動</span>
-          <button
-            onClick={() => {
-              onChangeTraceSettings({
-                ...traceSettings,
-                offsetX: 0,
-                offsetY: 0,
-                scale: 1,
-                rotation: 0,
-              });
-            }}
-            className="ml-2 px-2 py-0.5 rounded bg-emerald-950 hover:bg-black text-[10px] text-emerald-200 flex items-center space-x-1 transition-colors"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span>位置リセット</span>
-          </button>
+          {/* Status & Icon */}
+          <div className={`flex items-center space-x-1.5 font-bold shrink-0 ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>
+            <Move className="w-3.5 h-3.5 animate-pulse text-emerald-600 dark:text-emerald-400" />
+            <span className="text-xs">下絵位置・サイズ調整</span>
+          </div>
+
+          <div className={`h-3.5 w-[1px] shrink-0 ${isLight ? 'bg-stone-200' : 'bg-[#25362b]'}`} />
+
+          {/* Scale Step Buttons & Slider */}
+          <div className="flex items-center space-x-1 shrink-0">
+            <span className={`text-[10.5px] ${isLight ? 'text-stone-500' : 'text-stone-400'}`}>サイズ:</span>
+            <button
+              onClick={() => {
+                const cur = traceSettings.scale ?? 1;
+                const next = Math.round(Math.max(0.2, cur - 0.05) * 100) / 100;
+                onChangeTraceSettings({ ...traceSettings, scale: next });
+              }}
+              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                isLight ? 'bg-stone-100 hover:bg-stone-200 text-stone-700' : 'bg-[#1c2a20] hover:bg-[#25382b] text-emerald-200'
+              }`}
+              title="縮小 (-5%)"
+            >
+              <Minus className="w-2.5 h-2.5" />
+            </button>
+            <input
+              type="range"
+              min="0.3"
+              max="2.0"
+              step="0.01"
+              value={traceSettings.scale ?? 1}
+              onChange={(e) => {
+                onChangeTraceSettings({
+                  ...traceSettings,
+                  scale: parseFloat(e.target.value),
+                });
+              }}
+              className={`w-16 sm:w-20 cursor-pointer h-1 rounded-lg ${
+                isLight ? 'bg-stone-200 accent-emerald-600' : 'bg-[#25362b] accent-emerald-500'
+              }`}
+              title="下絵サイズ（青枠ハンドルやホイールでも調整可能）"
+            />
+            <button
+              onClick={() => {
+                const cur = traceSettings.scale ?? 1;
+                const next = Math.round(Math.min(3.0, cur + 0.05) * 100) / 100;
+                onChangeTraceSettings({ ...traceSettings, scale: next });
+              }}
+              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                isLight ? 'bg-stone-100 hover:bg-stone-200 text-stone-700' : 'bg-[#1c2a20] hover:bg-[#25382b] text-emerald-200'
+              }`}
+              title="拡大 (+5%)"
+            >
+              <Plus className="w-2.5 h-2.5" />
+            </button>
+            <span className={`font-mono text-[11px] w-9 text-right font-bold ${isLight ? 'text-emerald-800' : 'text-emerald-300'}`}>
+              {Math.round((traceSettings.scale ?? 1) * 100)}%
+            </span>
+          </div>
+
+          <div className={`h-3.5 w-[1px] shrink-0 ${isLight ? 'bg-stone-200' : 'bg-[#25362b]'}`} />
+
+          {/* Quick Fit Size Presets */}
+          <div className="flex items-center space-x-1 shrink-0">
+            <button
+              onClick={() => onChangeTraceSettings?.((prev) => ({ ...prev, scale: 0.78 }))}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                Math.abs((traceSettings.scale ?? 1) - 0.78) < 0.02
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : isLight
+                  ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                  : 'bg-[#1c2a20] hover:bg-[#25382b] text-amber-300'
+              }`}
+              title="仮名字面枠 (78%) にフィット"
+            >
+              仮名 78%
+            </button>
+            <button
+              onClick={() => onChangeTraceSettings?.((prev) => ({ ...prev, scale: 0.85 }))}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                Math.abs((traceSettings.scale ?? 1) - 0.85) < 0.02
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : isLight
+                  ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                  : 'bg-[#1c2a20] hover:bg-[#25382b] text-emerald-300'
+              }`}
+              title="漢字字面枠 (85%) にフィット"
+            >
+              漢字 85%
+            </button>
+            <button
+              onClick={() => onChangeTraceSettings?.((prev) => ({ ...prev, scale: 1.0 }))}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                Math.abs((traceSettings.scale ?? 1) - 1.0) < 0.02
+                  ? 'bg-sky-600 text-white shadow-xs'
+                  : isLight
+                  ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                  : 'bg-[#1c2a20] hover:bg-[#25382b] text-sky-300'
+              }`}
+              title="標準 100% (仮想ボディ枠基準)"
+            >
+              100%
+            </button>
+          </div>
+
+          {/* Font choice if text trace */}
+          {traceSettings.type === 'char' && (
+            <>
+              <div className={`h-3.5 w-[1px] shrink-0 ${isLight ? 'bg-stone-200' : 'bg-[#25362b]'}`} />
+              <div className="flex items-center space-x-1 shrink-0">
+                <Type className="w-3 h-3 text-stone-400" />
+                <select
+                  value={traceSettings.fontFamily || "'Noto Sans JP', sans-serif"}
+                  onChange={(e) =>
+                    onChangeTraceSettings?.((prev) => ({
+                      ...prev,
+                      fontFamily: e.target.value,
+                    }))
+                  }
+                  className={`text-[10px] rounded px-1.5 py-0.5 border focus:outline-none ${
+                    isLight
+                      ? 'bg-stone-100 text-stone-800 border-stone-300 focus:border-emerald-600'
+                      : 'bg-[#1c2a20] text-emerald-200 border-[#2b3e30] focus:border-emerald-500'
+                  }`}
+                >
+                  <option value="'Noto Sans JP', sans-serif">ゴシック体</option>
+                  <option value="'Noto Serif JP', serif">明朝体</option>
+                  <option value="'Zen Maru Gothic', sans-serif">丸ゴシック</option>
+                  <option value="'Kaisei Tokumin', serif">特民明朝</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          <div className={`h-3.5 w-[1px] shrink-0 ${isLight ? 'bg-stone-200' : 'bg-[#25362b]'}`} />
+
+          {/* Position Offset Status & Reset position & Exit Done Button */}
+          <div className="flex items-center space-x-1.5 shrink-0">
+            {/* Position Reset Button */}
+            <button
+              onClick={handleResetTracePosition}
+              className={`px-2 py-1 rounded text-[10.5px] font-bold flex items-center space-x-1 transition-all border shadow-xs ${
+                (traceSettings.offsetX !== 0 || traceSettings.offsetY !== 0)
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white border-amber-600 animate-pulse'
+                  : isLight
+                  ? 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-300'
+                  : 'bg-[#1c2a20] hover:bg-[#25382b] text-emerald-200 border-[#2b3e30]'
+              }`}
+              title="下絵の位置を中央 (X:0, Y:0) にリセット (Rキーまたは下絵ダブルクリックでも可)"
+            >
+              <RotateCcw className="w-2.5 h-2.5" />
+              <span>位置リセット</span>
+            </button>
+
+            {/* Reset All */}
+            <button
+              onClick={handleResetTraceAll}
+              className={`px-1.5 py-1 rounded text-[10px] flex items-center space-x-0.5 transition-colors ${
+                isLight ? 'text-stone-500 hover:bg-stone-200' : 'text-stone-400 hover:bg-[#25382b]'
+              }`}
+              title="位置とサイズを推奨初期値にリセット"
+            >
+              <span>全リセット</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onSetToolMode?.('brush');
+                showCanvasToast('下絵調整を完了しました');
+              }}
+              className={`px-2.5 py-1 rounded font-bold text-[10.5px] flex items-center space-x-1 transition-colors shadow-xs ${
+                isLight
+                  ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+              }`}
+              title="調整を完了して描画ツールに戻る"
+            >
+              <Check className="w-3 h-3" />
+              <span>完了</span>
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Typography Guide Assist Card (Helps user understand which grid lines to follow, unobtrusive & collapsible) */}
+      <div
+        className="absolute top-12 sm:top-14 right-2 sm:right-4 z-20 pointer-events-auto select-none transition-all duration-200"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        {!showGuideAssist ? (
+          <button
+            onClick={() => handleToggleGuideAssist(true)}
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full border shadow-sm text-[11px] sm:text-xs font-semibold backdrop-blur-md transition-all hover:scale-105 active:scale-95 ${
+              isLight
+                ? 'bg-white/85 hover:bg-white border-emerald-200/90 text-emerald-800 shadow-stone-200/60'
+                : 'bg-[#121c15]/85 hover:bg-[#121c15] border-emerald-800/60 text-emerald-300 shadow-black/40'
+            }`}
+            title="フォント作図の基準線ガイド（凡例）を表示"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="hidden xs:inline">ガイド凡例</span>
+          </button>
+        ) : (
+          <div
+            className={`w-[calc(100vw-24px)] xs:w-72 max-h-[calc(100vh-120px)] overflow-y-auto rounded-xl border p-3 shadow-xl backdrop-blur-md transition-all text-xs ${
+              isLight
+                ? 'bg-white/95 border-emerald-200/90 text-stone-800 shadow-stone-300/40'
+                : 'bg-[#101712]/95 border-emerald-800/70 text-emerald-100 shadow-black/60'
+            }`}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200 dark:border-emerald-900/60 mb-2">
+              <div className="flex items-center space-x-1.5 font-bold text-emerald-700 dark:text-emerald-300">
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>作図基準ガイド</span>
+                <span className="text-[10px] font-normal px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                  {/[ぁ-んァ-ヶー]/.test(activeChar)
+                    ? '仮名'
+                    : /[\u4e00-\u9faf\u3400-\u4dbf]/.test(activeChar)
+                    ? '漢字'
+                    : '欧文'}
+                </span>
+              </div>
+              <button
+                onClick={() => handleToggleGuideAssist(false)}
+                className="p-1 rounded-md hover:bg-stone-100 dark:hover:bg-emerald-950 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                title="ガイドカードを閉じる"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Contextual Recommendation based on active character */}
+            <div
+              className={`p-2 rounded-lg mb-2 text-[11px] leading-relaxed ${
+                /[ぁ-んァ-ヶー]/.test(activeChar)
+                  ? isLight
+                    ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                    : 'bg-amber-950/40 text-amber-200 border border-amber-800/60'
+                  : /[\u4e00-\u9faf\u3400-\u4dbf]/.test(activeChar)
+                  ? isLight
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                    : 'bg-emerald-950/40 text-emerald-200 border border-emerald-800/60'
+                  : isLight
+                  ? 'bg-sky-50 text-sky-900 border border-sky-200'
+                  : 'bg-sky-950/40 text-sky-200 border border-sky-800/60'
+              }`}
+            >
+              {/[ぁ-んァ-ヶー]/.test(activeChar) ? (
+                <>
+                  <div className="font-bold text-amber-700 dark:text-amber-400 mb-0.5">
+                    💡 「{activeChar}」は和文仮名です
+                  </div>
+                  <div>
+                    オレンジの<strong>仮名字面枠 (78%)</strong>の内側に収まるよう描きます。欧文底線（赤線）ではなく、<strong>マスの中央</strong>を基準にします。
+                  </div>
+                </>
+              ) : /[\u4e00-\u9faf\u3400-\u4dbf]/.test(activeChar) ? (
+                <>
+                  <div className="font-bold text-emerald-700 dark:text-emerald-400 mb-0.5">
+                    💡 「{activeChar}」は漢字です
+                  </div>
+                  <div>
+                    グリーンの<strong>漢字字面枠 (85%)</strong>内に収めます。外枠（1000UPM）ギリギリまで書かず周囲15%の余白を残すと文字同士が詰まりません。
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="font-bold text-sky-700 dark:text-sky-400 mb-0.5">
+                    💡 「{activeChar}」はアルファベット/記号です
+                  </div>
+                  <div>
+                    赤い<strong>Baseline (底線)</strong>の上に文字の底を揃えて描きます。大文字はCap Height、小文字はx-Heightを目安にします。
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Line Legend */}
+            <div className="space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                  <span>仮名字面枠 (78%)</span>
+                </span>
+                <span className="text-stone-500 dark:text-stone-400 text-[10px]">かな用</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span>漢字字面枠 (85%)</span>
+                </span>
+                <span className="text-stone-500 dark:text-stone-400 text-[10px]">漢字推奨</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
+                  <span>Baseline (赤底線)</span>
+                </span>
+                <span className="text-stone-500 dark:text-stone-400 text-[10px]">欧文(A-Z)整列</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-teal-500 shrink-0" />
+                  <span>中心十字格 (田字格)</span>
+                </span>
+                <span className="text-stone-500 dark:text-stone-400 text-[10px]">重心バランス</span>
+              </div>
+            </div>
+
+            {/* Direct Tool Switch Button */}
+            <div className="mt-2.5 pt-2 border-t border-stone-200 dark:border-emerald-900/60 flex items-center justify-between">
+              <span className="text-[10px] text-stone-500 dark:text-stone-400">下絵位置:</span>
+              <div className="flex items-center gap-1">
+                {(traceSettings.offsetX !== 0 || traceSettings.offsetY !== 0) && (
+                  <button
+                    onClick={handleResetTracePosition}
+                    className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] flex items-center space-x-1 transition-colors shadow-xs"
+                    title="下絵の位置を中央(0, 0)にリセット"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    <span>位置リセット</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    onSetToolMode?.('trace_adjust');
+                    onChangeTraceSettings?.((prev) => ({ ...prev, enabled: true }));
+                    showCanvasToast('下絵調整モードに切り替えました');
+                  }}
+                  className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center space-x-1 transition-colors shadow-xs"
+                >
+                  <Move className="w-3 h-3" />
+                  <span>下絵の位置調整</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Active Pen Tool Drawing In-Progress Draggable Floating HUD Bar */}
       {activePenContour && (
@@ -4318,253 +4801,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
         </div>
       )}
 
-      {/* Floating Brush / Handwriting Studio Quick Bar (When in Brush mode) */}
-      {toolMode === 'brush' && !activePenContour && showBrushHud && (
-        <div
-          style={
-            brushHudPos
-              ? { left: `${brushHudPos.x}px`, top: `${brushHudPos.y}px` }
-              : { left: '50%', transform: 'translateX(-50%)', top: '8px' }
-          }
-          className={`absolute z-20 pointer-events-auto select-none transition-all duration-150 ${
-            isDrawingStroke
-              ? 'opacity-0 pointer-events-none scale-95'
-              : 'opacity-85 hover:opacity-100'
-          }`}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          {isBrushHudCollapsed ? (
-            /* Collapsed mode: ultra-compact, non-obtrusive mini pill */
-            <div
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full border shadow-sm backdrop-blur-md transition-all cursor-pointer ${
-                isLight
-                  ? 'bg-white/90 hover:bg-white border-stone-300/80 text-stone-700 shadow-stone-900/5'
-                  : 'bg-[#121c15]/90 hover:bg-[#121c15] border-[#25382c] text-emerald-200 shadow-black/40'
-              }`}
-              onClick={() => {
-                setIsBrushHudCollapsed(false);
-                try { localStorage.setItem('fontforge_brush_hud_collapsed', 'false'); } catch {}
-              }}
-              title="クリックして筆クイックバーを展開"
-            >
-              {/* Drag Handle */}
-              <div
-                onPointerDown={handleBrushHudPointerDown}
-                onPointerMove={handleBrushHudPointerMove}
-                onPointerUp={handleBrushHudPointerUp}
-                onPointerCancel={handleBrushHudPointerUp}
-                className="cursor-grab active:cursor-grabbing text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-400 p-0.5"
-                title="ドラッグして移動"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <GripVertical className="w-3 h-3" />
-              </div>
-              <Paintbrush className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-              <span className="text-[11px] font-bold">
-                {PEN_PRESETS.find((p) => p.id === brushStyle)?.name || 'ペン'}
-              </span>
-              <span className="font-mono text-[10px] opacity-70">
-                {brushWidth}px
-              </span>
-              <ChevronDown className="w-3 h-3 text-stone-400 ml-0.5" />
-            </div>
-          ) : (
-            /* Expanded mode: sleek, translucent, compact bar */
-            <div
-              className={`px-2.5 py-1 rounded-xl border shadow-sm backdrop-blur-md flex items-center space-x-1.5 text-xs overflow-x-auto no-scrollbar transition-all ${
-                isLight
-                  ? 'bg-white/85 hover:bg-white/95 border-stone-200/90 text-stone-800 shadow-emerald-950/5'
-                  : 'bg-[#121c15]/85 hover:bg-[#121c15]/95 border-[#25362b] text-emerald-100 shadow-black/40'
-              }`}
-            >
-              {/* Drag Handle */}
-              <div
-                onPointerDown={handleBrushHudPointerDown}
-                onPointerMove={handleBrushHudPointerMove}
-                onPointerUp={handleBrushHudPointerUp}
-                onPointerCancel={handleBrushHudPointerUp}
-                className="flex items-center px-0.5 py-0.5 cursor-grab active:cursor-grabbing text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shrink-0"
-                title="ドラッグして好きな場所に移動"
-              >
-                <GripVertical className="w-3.5 h-3.5" />
-              </div>
-
-              {/* Active Pen Type Badge */}
-              <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-md bg-emerald-100/80 dark:bg-emerald-950/90 text-emerald-950 dark:text-emerald-200 font-bold text-[11px] shrink-0">
-                <Paintbrush className="w-3 h-3 text-emerald-700 dark:text-emerald-400" />
-                <span>{PEN_PRESETS.find((p) => p.id === brushStyle)?.name || '毛筆'}</span>
-                <span className="font-mono text-[10px] opacity-70">({brushWidth}px)</span>
-              </div>
-
-              <div className="h-3 w-[1px] bg-stone-200 dark:bg-[#25382c] shrink-0" />
-
-              {/* Quick Size Select */}
-              {onChangeBrushWidth && (
-                <div className="flex items-center space-x-0.5 shrink-0">
-                  {[15, 30, 50, 80].map((w) => (
-                    <button
-                      key={w}
-                      onClick={() => {
-                        onChangeBrushWidth(w);
-                        showCanvasToast(`太さ: ${w}px`);
-                      }}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
-                        brushWidth === w
-                          ? isLight
-                            ? 'bg-emerald-700 text-white shadow-2xs'
-                            : 'bg-emerald-600 text-white shadow-2xs'
-                          : isLight
-                          ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-                          : 'bg-[#1b2820] hover:bg-[#25382c] text-emerald-300'
-                      }`}
-                    >
-                      {w}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="h-3 w-[1px] bg-stone-200 dark:bg-[#25382c] shrink-0" />
-
-              {/* Guide Grid Quick Cycle */}
-              <button
-                onClick={() => {
-                  const guideCycle: ('cross' | 'tian' | 'jiugong' | 'mi' | 'none')[] = ['cross', 'tian', 'jiugong', 'mi', 'none'];
-                  const currentIdx = guideCycle.indexOf(gridSettings.japaneseGuide || 'cross');
-                  const nextGuide = guideCycle[(currentIdx + 1) % guideCycle.length];
-                  if (onChangeGridSettings) {
-                    onChangeGridSettings((s) => ({ ...s, japaneseGuide: nextGuide }));
-                  }
-                  const guideNames: Record<string, string> = {
-                    cross: '十字リーダー',
-                    tian: '田字格',
-                    jiugong: '九宮格',
-                    mi: '米字格',
-                    none: 'ガイドOFF',
-                  };
-                  showCanvasToast(`作字ガイド: ${guideNames[nextGuide]}`);
-                }}
-                className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold flex items-center space-x-1 transition-all shrink-0 ${
-                  gridSettings.japaneseGuide && gridSettings.japaneseGuide !== 'none'
-                    ? isLight
-                      ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-300'
-                      : 'bg-emerald-950 text-emerald-200 border border-emerald-700'
-                    : isLight
-                    ? 'bg-stone-100 hover:bg-stone-200 text-stone-600'
-                    : 'bg-[#1b2820] hover:bg-[#25382c] text-stone-400'
-                }`}
-                title="作字ガイド切替"
-              >
-                <Grid className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                <span>
-                  {gridSettings.japaneseGuide === 'cross'
-                    ? '十字'
-                    : gridSettings.japaneseGuide === 'tian'
-                    ? '田字'
-                    : gridSettings.japaneseGuide === 'jiugong'
-                    ? '九宮'
-                    : gridSettings.japaneseGuide === 'mi'
-                    ? '米字'
-                    : '枠のみ'}
-                </span>
-              </button>
-
-              {/* Undo last stroke */}
-              <button
-                onClick={() => {
-                  if (contours.length > 0) {
-                    const updated = contours.slice(0, -1);
-                    onChangeContours(updated);
-                    onCommitHistory();
-                    showCanvasToast('直前のストロークを取り消しました (1画戻す)');
-                  }
-                }}
-                disabled={contours.length === 0}
-                className={`px-1.5 py-0.5 rounded text-[10.5px] font-semibold flex items-center space-x-0.5 transition-all disabled:opacity-30 shrink-0 active:scale-95 ${
-                  isLight
-                    ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-                    : 'bg-[#1b2820] hover:bg-[#25382c] text-emerald-200'
-                }`}
-                title="1画戻す (Ctrl+Z)"
-              >
-                <RotateCcw className="w-2.5 h-2.5 text-stone-500 dark:text-stone-300" />
-                <span>1画戻す</span>
-              </button>
-
-              {/* Auto Union (Auto Merge Overlaps) */}
-              <button
-                onClick={() => {
-                  const next = !autoUnionBrush;
-                  setAutoUnionBrush(next);
-                  try { localStorage.setItem('fontforge_auto_union_brush', String(next)); } catch {}
-                  showCanvasToast(
-                    next
-                      ? '自動合体: ON（交差線を一体化）'
-                      : '自動合体: OFF（画ごとに個別保持）'
-                  );
-                }}
-                className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold flex items-center space-x-1 transition-all shrink-0 ${
-                  autoUnionBrush
-                    ? isLight
-                      ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-300'
-                      : 'bg-emerald-950 text-emerald-200 border border-emerald-700'
-                    : isLight
-                    ? 'bg-stone-100 hover:bg-stone-200 text-stone-500'
-                    : 'bg-[#1b2820] hover:bg-[#25382c] text-stone-400'
-                }`}
-                title="ストローク同士が重なった時に自動で合体・一体化します（文字の穴あき・重なりバグ感を防止）"
-              >
-                <Layers className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                <span>合体:{autoUnionBrush ? 'ON' : 'OFF'}</span>
-              </button>
-
-              <div className="h-3 w-[1px] bg-stone-200 dark:bg-[#25382c] shrink-0" />
-
-              {/* Reset position (if moved) */}
-              {brushHudPos && (
-                <button
-                  onClick={() => {
-                    setBrushHudPos(null);
-                    try { localStorage.removeItem('fontforge_brush_hud_pos'); } catch {}
-                    showCanvasToast('バーの位置をリセットしました');
-                  }}
-                  className="p-1 rounded hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors shrink-0"
-                  title="位置を上部中央にリセット"
-                >
-                  <RotateCcw className="w-2.5 h-2.5" />
-                </button>
-              )}
-
-              {/* Collapse/Fold button */}
-              <button
-                onClick={() => {
-                  setIsBrushHudCollapsed(true);
-                  try { localStorage.setItem('fontforge_brush_hud_collapsed', 'true'); } catch {}
-                  showCanvasToast('筆クイックバーを折りたたみ最小化しました');
-                }}
-                className="p-1 rounded hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors shrink-0"
-                title="バーを最小化 (邪魔な時に折りたたむ)"
-              >
-                <ChevronUp className="w-3 h-3" />
-              </button>
-
-              {/* Close/Dismiss button */}
-              <button
-                onClick={() => {
-                  setShowBrushHud(false);
-                  try { localStorage.setItem('fontforge_show_brush_hud', 'false'); } catch {}
-                  showCanvasToast('筆クイックバーを閉じました（サブツールバーから再表示可能）');
-                }}
-                className="p-1 rounded hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors shrink-0"
-                title="バーを閉じる (非表示)"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* SVG Canvas Stage */}
       <svg
         className="w-full h-full touch-none select-none"
@@ -4589,12 +4825,22 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
             showBodyFrame={gridSettings.showBodyFrame}
             showKanaFrame={gridSettings.showKanaFrame}
             isLight={isLight}
+            activeChar={activeChar}
           />
 
           {/* 3. Adjacent Character Context Boxes */}
           <AdjacentGlyphsLayer
             isLight={isLight}
             advanceWidth={advanceWidth}
+          />
+
+          {/* 3.5 Glyph Overlay Comparison Layer */}
+          <GlyphComparisonLayer
+            overlaySettings={overlaySettings}
+            project={project}
+            isLight={isLight}
+            activeChar={activeChar}
+            activeUnicode={selectedUnicode}
           />
 
           {/* 4. Trace Reference Image / Char Template Layer */}
@@ -4605,6 +4851,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
             selectedUnicode={selectedUnicode != null ? String(selectedUnicode) : undefined}
             toolMode={toolMode}
             onPointerDownImage={handlePointerDownTraceImage}
+            onPointerDownResize={handlePointerDownTraceResize}
+            onDoubleClickReset={handleResetTracePosition}
+            isResizing={isResizingTrace}
           />
 
           {/* 5. Top & Left Ruler Scales */}
@@ -4619,6 +4868,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
             showMetrics={!!gridSettings.showMetrics}
             lsb={lsb}
             advanceWidth={advanceWidth}
+            activeChar={activeChar}
+            isLight={isLight}
           />
 
           {/* 7. User Custom Guidelines */}
@@ -4696,9 +4947,13 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                           : [...prev, contour.id]
                       );
                     } else {
-                      setSelectedContourIds((prev) =>
-                        prev.includes(contour.id) && prev.length > 1 ? prev : [contour.id]
-                      );
+                      const nextIds =
+                        selectedContourIds.includes(contour.id) && selectedContourIds.length > 1
+                          ? selectedContourIds
+                          : [contour.id];
+                      setSelectedContourIds(nextIds);
+                      setSelectedContourId(contour.id);
+                      handleTransformPointerDown(e, 'move', nextIds);
                     }
                     setSelectedNodeId(null);
                     setSelectedHandleType(null);
@@ -4772,8 +5027,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
             />
           )}
 
-          {/* Selected Contour Highlight & Interactive Bounding Box Transform UI */}
-          {selectedContourIds.length > 0 && selContoursBBox && (
+          {/* Selected Contour Highlight & Interactive Bounding Box Transform UI (Only in Select or Node tool modes) */}
+          {(toolMode === 'select' || toolMode === 'node') && selectedContourIds.length > 0 && selContoursBBox && (
             (() => {
               const bbox = selContoursBBox;
               const pad = 4;
@@ -4801,7 +5056,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                     />
                   )}
 
-                  {/* Bounding Box Border & Full Area Drag-to-Move Plane */}
+                  {/* Bounding Box Border & Drag-to-Move Stroke */}
                   <rect
                     x={bx}
                     y={by}
@@ -4812,21 +5067,21 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                     strokeWidth={1 / zoom}
                     strokeDasharray="4 2"
                     className="cursor-move"
-                    pointerEvents="all"
+                    pointerEvents="stroke"
                     onPointerDown={(e) => handleTransformPointerDown(e, 'move')}
                   />
 
                   {/* Floating Selection Quick Actions Toolbar */}
                   <foreignObject
-                    x={cx - 110 / zoom}
+                    x={cx - 125 / zoom}
                     y={by - rotStemDist - 38 / zoom < 10 ? by + bh + 12 / zoom : by - rotStemDist - 38 / zoom}
-                    width={220 / zoom}
+                    width={250 / zoom}
                     height={38 / zoom}
                     className="overflow-visible pointer-events-auto select-none z-50 opacity-90 hover:opacity-100 transition-opacity"
                   >
                     <div
                       style={{ transform: `scale(${Math.max(0.6, Math.min(1.0, 1 / zoom))})`, transformOrigin: 'top center' }}
-                      className="flex items-center justify-center space-x-1 px-2 py-1 bg-stone-900/90 dark:bg-[#101b13]/90 text-white backdrop-blur-md rounded-full shadow-lg border border-emerald-500/40 text-xs font-sans pointer-events-auto"
+                      className="flex items-center justify-center space-x-1 px-2.5 py-1 bg-stone-900/90 dark:bg-[#101b13]/90 text-white backdrop-blur-md rounded-full shadow-lg border border-emerald-500/40 text-xs font-sans pointer-events-auto"
                     >
                       <button
                         onClick={(e) => { e.stopPropagation(); handleRotateSelected(45); }}
@@ -4872,6 +5127,19 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                         title="削除 (Delete)"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <div className="w-px h-3.5 bg-emerald-500/30 my-auto" />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedContourIds([]);
+                          setSelectedNodeId(null);
+                          setSelectedHandleType(null);
+                        }}
+                        className="p-1.5 rounded-full hover:bg-stone-700/90 text-stone-300 hover:text-white transition-colors"
+                        title="選択解除 (Deselect / Esc)"
+                      >
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </foreignObject>
@@ -5080,7 +5348,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
           )}
 
           {/* ---------------- BEZIER NODES & CONTROL HANDLES ---------------- */}
-          {showNodes && (gridSettings.showPoints || toolMode === 'select' || toolMode === 'node' || toolMode === 'pen') && (
+          {showNodes && (toolMode === 'select' || toolMode === 'node' || toolMode === 'pen' || (gridSettings.showPoints && toolMode !== 'eraser')) && (
             <g className="bezier-controls select-none">
               {contours.map((contour) => {
                 const isContourActive = contour.id === selectedContourId;
@@ -5094,6 +5362,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                 if (!isContourActive && toolMode !== 'node' && !gridSettings.showPoints) {
                   return null;
                 }
+
+                const isNodeInteractive = toolMode === 'select' || toolMode === 'node';
+                const isHandleInteractive = toolMode === 'select' || toolMode === 'node' || toolMode === 'pen';
 
                 return (
                   <g key={contour.id}>
@@ -5111,8 +5382,10 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                               cy={node.y}
                               r={10 / zoom}
                               fill="transparent"
-                              className="cursor-pointer"
+                              className={isNodeInteractive ? 'cursor-pointer' : 'pointer-events-none'}
+                              pointerEvents={isNodeInteractive ? 'all' : 'none'}
                               onPointerDown={(e) => {
+                                if (!isNodeInteractive) return;
                                 e.stopPropagation();
                                 setSelectedContourId(contour.id);
                                 setSelectedNodeId(node.id);
@@ -5167,8 +5440,10 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                                     cy={node.handleIn.y}
                                     r={12 / zoom}
                                     fill="transparent"
-                                    className="cursor-move"
+                                    className={isHandleInteractive ? 'cursor-move' : 'pointer-events-none'}
+                                    pointerEvents={isHandleInteractive ? 'all' : 'none'}
                                     onPointerDown={(e) => {
+                                      if (!isHandleInteractive) return;
                                       e.stopPropagation();
                                       setSelectedContourId(contour.id);
                                       setSelectedNodeId(node.id);
@@ -5205,8 +5480,10 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                                     cy={node.handleOut.y}
                                     r={12 / zoom}
                                     fill="transparent"
-                                    className="cursor-move"
+                                    className={isHandleInteractive ? 'cursor-move' : 'pointer-events-none'}
+                                    pointerEvents={isHandleInteractive ? 'all' : 'none'}
                                     onPointerDown={(e) => {
+                                      if (!isHandleInteractive) return;
                                       e.stopPropagation();
                                       setSelectedContourId(contour.id);
                                       setSelectedNodeId(node.id);
@@ -5234,14 +5511,17 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                             cy={node.y}
                             r={14 / zoom}
                             fill="transparent"
-                            className="cursor-pointer"
+                            className={isNodeInteractive ? 'cursor-pointer' : 'pointer-events-none'}
+                            pointerEvents={isNodeInteractive ? 'all' : 'none'}
                             onPointerDown={(e) => {
+                              if (!isNodeInteractive) return;
                               e.stopPropagation();
                               setSelectedContourId(contour.id);
                               setSelectedNodeId(node.id);
                               setSelectedHandleType('node');
                             }}
                             onDoubleClick={(e) => {
+                              if (!isNodeInteractive) return;
                               e.stopPropagation();
                               handleToggleNodeType(contour.id, node.id);
                             }}
@@ -6084,6 +6364,18 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                   </button>
                 )}
 
+                {/* Quick Trace Position Reset in Canvas Footer when offset is nonzero */}
+                {traceSettings.enabled && (traceSettings.offsetX !== 0 || traceSettings.offsetY !== 0) && onChangeTraceSettings && (
+                  <button
+                    onClick={handleResetTracePosition}
+                    title={`下絵位置がずれています (X:${traceSettings.offsetX || 0}, Y:${traceSettings.offsetY || 0})。クリックで中央(0, 0)にリセット`}
+                    className="px-2 py-0.5 rounded text-[10.5px] font-bold flex items-center space-x-1 bg-amber-500 hover:bg-amber-400 text-stone-950 transition-colors shadow-xs"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>下絵位置リセット</span>
+                  </button>
+                )}
+
                 {/* High Contrast Cursor Quick Toggle */}
                 {onChangeGridSettings && (
                   <button
@@ -6190,6 +6482,30 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                 >
                   幅基準
                 </button>
+
+                {/* Glyph Overlay Comparison Button */}
+                {onOpenGlyphCompareModal && (
+                  <button
+                    onClick={onOpenGlyphCompareModal}
+                    title={`グリフ重ね合わせ比較: ${overlaySettings?.enabled ? `ON (「${overlaySettings?.referenceChar || ''}」)` : 'OFF'}`}
+                    className={`p-1.5 rounded transition-all flex items-center gap-1 text-xs ${
+                      overlaySettings?.enabled
+                        ? isLight
+                          ? 'bg-sky-500 text-white shadow-xs font-bold'
+                          : 'bg-sky-600 text-white shadow-xs font-bold'
+                        : isLight
+                        ? 'text-stone-700 hover:bg-emerald-100/50'
+                        : 'text-emerald-300 hover:bg-emerald-900/40'
+                    }`}
+                  >
+                    <ArrowRightLeft className="w-4 h-4" />
+                    {overlaySettings?.enabled && (
+                      <span className="text-[10px] hidden lg:inline max-w-[32px] truncate">
+                        {overlaySettings?.referenceChar || '比較'}
+                      </span>
+                    )}
+                  </button>
+                )}
 
                 {/* Zen / Wide Canvas Mode Toggle */}
                 {onToggleZenMode && (

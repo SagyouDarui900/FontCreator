@@ -8,8 +8,10 @@ import {
   TraceSettings,
   GridSettings,
   UserPenPreset,
+  GlyphOverlaySettings,
 } from './types';
 import { createDefaultProject } from './utils/fontCompiler';
+import { DEFAULT_SAMPLE_GLYPHS, isLegacyMockGlyph } from './data/defaultSampleGlyphs';
 import { loadUserPenPresets, loadStickyBrushConfigs, saveStickyBrushConfig } from './utils/presetData';
 import { Header } from './components/Header';
 import { GlyphGrid } from './components/GlyphGrid';
@@ -25,6 +27,8 @@ import { BatchNormalizeModal } from './components/BatchNormalizeModal';
 import { FontQualityModal } from './components/FontQualityModal';
 import { GlyphSynthesisModal } from './components/GlyphSynthesisModal';
 import { KerningModal } from './components/KerningModal';
+import { WeightInterpolationModal } from './components/WeightInterpolationModal';
+import { GlyphCompareModal } from './components/GlyphCompareModal';
 import { RadicalStudioModal } from './components/RadicalStudioModal';
 import { PenPresetsModal } from './components/PenPresetsModal';
 import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
@@ -57,7 +61,14 @@ export default function App() {
 
   const showToast = useCallback((text: string, type: 'success' | 'info' | 'warning' | 'error' = 'info') => {
     const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev.slice(-3), { id, text, type }]);
+    setToasts((prev) => {
+      // If exact same text is already displayed, refresh it instead of stacking duplicates
+      const exists = prev.some((t) => t.text === text);
+      if (exists) {
+        return prev.map((t) => (t.text === text ? { id, text, type } : t));
+      }
+      return [...prev.slice(-2), { id, text, type }];
+    });
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3200);
@@ -90,13 +101,42 @@ export default function App() {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.metadata && parsed.glyphs) return parsed;
+        if (parsed.metadata && parsed.glyphs) {
+          // Detect legacy/deformed mock sample glyphs and seamlessly upgrade them to authentic outlines
+          let upgraded = false;
+          const updatedGlyphs = { ...parsed.glyphs };
+          for (const u of [65, 12354, 26085]) {
+            if (updatedGlyphs[u] && isLegacyMockGlyph(updatedGlyphs[u])) {
+              updatedGlyphs[u] = JSON.parse(JSON.stringify(DEFAULT_SAMPLE_GLYPHS[u]));
+              upgraded = true;
+            }
+          }
+          if (upgraded) {
+            parsed.glyphs = updatedGlyphs;
+          }
+          return parsed;
+        }
       }
     } catch (e) {
       console.warn('Failed to load project from localStorage:', e);
     }
     return createDefaultProject();
   });
+
+  // Seamlessly upgrade any cached legacy/oversized sample glyphs on mount
+  useEffect(() => {
+    let upgraded = false;
+    const updated = { ...project.glyphs };
+    for (const u of [65, 12354, 26085]) {
+      if (updated[u] && isLegacyMockGlyph(updated[u])) {
+        updated[u] = JSON.parse(JSON.stringify(DEFAULT_SAMPLE_GLYPHS[u]));
+        upgraded = true;
+      }
+    }
+    if (upgraded) {
+      setProject((prev) => ({ ...prev, glyphs: updated }));
+    }
+  }, []);
 
   // Selected Glyph
   const [selectedUnicode, setSelectedUnicode] = useState<number>(12354); // 'あ' (U+3042)
@@ -264,8 +304,36 @@ export default function App() {
   const [isQualityModalOpen, setIsQualityModalOpen] = useState<boolean>(false);
   const [isSynthesisModalOpen, setIsSynthesisModalOpen] = useState<boolean>(false);
   const [isKerningModalOpen, setIsKerningModalOpen] = useState<boolean>(false);
+  const [isWeightInterpModalOpen, setIsWeightInterpModalOpen] = useState<boolean>(false);
+  const [isGlyphCompareModalOpen, setIsGlyphCompareModalOpen] = useState<boolean>(false);
   const [isRadicalStudioOpen, setIsRadicalStudioOpen] = useState<boolean>(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
+
+  // Glyph Overlay Comparison Settings (Persisted in localStorage)
+  const [overlaySettings, setOverlaySettings] = useState<GlyphOverlaySettings>(() => {
+    try {
+      const saved = localStorage.getItem('font_editor_glyph_overlay_v1');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      enabled: false,
+      referenceChar: '日',
+      referenceUnicode: 0x65e5,
+      opacity: 0.45,
+      color: '#0284c7',
+      renderMode: 'outline',
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1.0,
+      showMetrics: true,
+    };
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('font_editor_glyph_overlay_v1', JSON.stringify(overlaySettings));
+    } catch (e) {}
+  }, [overlaySettings]);
 
   const isAnyModalOpen =
     isTestModalOpen ||
@@ -276,6 +344,8 @@ export default function App() {
     isQualityModalOpen ||
     isSynthesisModalOpen ||
     isKerningModalOpen ||
+    isWeightInterpModalOpen ||
+    isGlyphCompareModalOpen ||
     isRadicalStudioOpen ||
     isPenPresetsModalOpen ||
     isShortcutsModalOpen;
@@ -444,9 +514,46 @@ export default function App() {
     });
   }, []);
 
+  // Toggle Lock Glyph (編集保護ロック)
+  const handleToggleLockGlyph = useCallback(() => {
+    const isLocked = Boolean(project.glyphs[selectedUnicode]?.locked);
+    const nextLocked = !isLocked;
+    setProject((prev) => {
+      const existing = prev.glyphs[selectedUnicode] || {
+        unicode: selectedUnicode,
+        char: selectedChar,
+        name: `uni${selectedUnicode.toString(16).toUpperCase().padStart(4, '0')}`,
+        advanceWidth: 1000,
+        lsb: 50,
+        contours: [],
+      };
+      return {
+        ...prev,
+        glyphs: {
+          ...prev.glyphs,
+          [selectedUnicode]: {
+            ...existing,
+            locked: nextLocked,
+          },
+        },
+        updatedAt: Date.now(),
+      };
+    });
+    showToast(
+      nextLocked
+        ? `文字「${selectedChar}」を編集ロックしました（誤操作・意図しない変更を防止）`
+        : `文字「${selectedChar}」の編集ロックを解除しました`,
+      nextLocked ? 'warning' : 'info'
+    );
+  }, [project.glyphs, selectedUnicode, selectedChar, showToast]);
+
   // Update current glyph contours
   const handleUpdateContours = useCallback(
     (newContours: PathContour[]) => {
+      if (project.glyphs[selectedUnicode]?.locked) {
+        showToast(`文字「${selectedChar}」は編集ロックされています。ヘッダーの鍵アイコンで解除してください。`, 'warning');
+        return;
+      }
       setProject((prev) => {
         const existing = prev.glyphs[selectedUnicode] || {
           unicode: selectedUnicode,
@@ -531,14 +638,12 @@ export default function App() {
   const handleSelectPrevGlyph = useCallback(() => {
     const prev = getPrevGlyphNav(selectedUnicode);
     handleSelectGlyph(prev.unicode, prev.char);
-    showToast(`文字「${prev.char}」へ移動 (U+${prev.unicode.toString(16).toUpperCase().padStart(4, '0')})`, 'info');
-  }, [selectedUnicode, handleSelectGlyph, showToast]);
+  }, [selectedUnicode, handleSelectGlyph]);
 
   const handleSelectNextGlyph = useCallback(() => {
     const next = getNextGlyphNav(selectedUnicode);
     handleSelectGlyph(next.unicode, next.char);
-    showToast(`文字「${next.char}」へ移動 (U+${next.unicode.toString(16).toUpperCase().padStart(4, '0')})`, 'info');
-  }, [selectedUnicode, handleSelectGlyph, showToast]);
+  }, [selectedUnicode, handleSelectGlyph]);
 
   const handleSelectPrevUncompletedGlyph = useCallback(() => {
     const prev = getPrevUncompletedGlyphNav(selectedUnicode, project.glyphs || {});
@@ -889,7 +994,7 @@ export default function App() {
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Escape key to dismiss any open modal
+      // Escape key to dismiss any open modal, or deselect all on canvas
       if (e.key === 'Escape') {
         if (isAnyModalOpen) {
           e.preventDefault();
@@ -906,6 +1011,7 @@ export default function App() {
           setIsShortcutsModalOpen(false);
           return;
         }
+        window.dispatchEvent(new CustomEvent('font_editor_deselect_all'));
       }
 
       const targetEl = e.target as HTMLElement;
@@ -967,10 +1073,6 @@ export default function App() {
           if (current >= 100) step = 10;
           else if (current < 20) step = 2;
           const nextSize = Math.min(250, current + step);
-          showToast(
-            `グリッドサイズ: ${nextSize}px${prev.snapToGrid ? ' (スナップON)' : ''} (Alt +/- で微調整)`,
-            'info'
-          );
           return {
             ...prev,
             showGrid: true,
@@ -990,10 +1092,6 @@ export default function App() {
           if (current > 100) step = 10;
           else if (current <= 20) step = 2;
           const nextSize = Math.max(5, current - step);
-          showToast(
-            `グリッドサイズ: ${nextSize}px${prev.snapToGrid ? ' (スナップON)' : ''} (Alt +/- で微調整)`,
-            'info'
-          );
           return {
             ...prev,
             showGrid: true,
@@ -1100,6 +1198,8 @@ export default function App() {
         onOpenQualityModal={() => setIsQualityModalOpen(true)}
         onOpenGlyphSynthesisModal={() => setIsSynthesisModalOpen(true)}
         onOpenKerningModal={() => setIsKerningModalOpen(true)}
+        onOpenWeightInterpolationModal={() => setIsWeightInterpModalOpen(true)}
+        onOpenGlyphCompareModal={() => setIsGlyphCompareModalOpen(true)}
         onOpenRadicalStudio={() => setIsRadicalStudioOpen(true)}
         onToggleRadicals={() => setShowRadicals(!showRadicals)}
         showRadicals={showRadicals}
@@ -1113,6 +1213,8 @@ export default function App() {
         onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
         selectedChar={selectedChar}
         selectedUnicode={selectedUnicode}
+        isGlyphLocked={Boolean(currentGlyph.locked)}
+        onToggleLockGlyph={handleToggleLockGlyph}
         theme={theme}
         onToggleTheme={toggleTheme}
         onShowToast={showToast}
@@ -1156,22 +1258,24 @@ export default function App() {
           isOverlay={isGridOverlay}
         />
 
-        {/* Vertical Tool Palette */}
-        <ToolBar
-          toolMode={toolMode}
-          setToolMode={setToolMode}
-          brushWidth={brushWidth}
-          setBrushWidth={handleChangeBrushWidth}
-          brushStyle={brushStyle}
-          setBrushStyle={handleChangeBrushStyle}
-          pressureSensitivity={pressureSensitivity}
-          onChangePressureSensitivity={handleChangePressureSensitivity}
-          gridSettings={gridSettings}
-          setGridSettings={setGridSettings}
-          onOpenTraceModal={() => setIsTraceModalOpen(true)}
-          onOpenPenPresetsModal={() => setIsPenPresetsModalOpen(true)}
-          theme={theme}
-        />
+        {/* Vertical Tool Palette (Bottom bar on mobile, left sidebar on desktop) */}
+        <div className="order-last sm:order-none shrink-0 w-full sm:w-auto z-20">
+          <ToolBar
+            toolMode={toolMode}
+            setToolMode={setToolMode}
+            brushWidth={brushWidth}
+            setBrushWidth={handleChangeBrushWidth}
+            brushStyle={brushStyle}
+            setBrushStyle={handleChangeBrushStyle}
+            pressureSensitivity={pressureSensitivity}
+            onChangePressureSensitivity={handleChangePressureSensitivity}
+            gridSettings={gridSettings}
+            setGridSettings={setGridSettings}
+            onOpenTraceModal={() => setIsTraceModalOpen(true)}
+            onOpenPenPresetsModal={() => setIsPenPresetsModalOpen(true)}
+            theme={theme}
+          />
+        </div>
 
         {/* Central Vector Canvas (Bézier, Stylus, Touch, Guides) */}
         <div className="flex-1 flex flex-col min-h-0 min-w-0 relative z-0 flex-grow flex-shrink grow shrink overflow-hidden">
@@ -1216,6 +1320,9 @@ export default function App() {
             canRedo={redoStack.length > 0}
             onOpenPenPresetsModal={openPenPresetsModal}
             isAnyModalOpen={isAnyModalOpen}
+            overlaySettings={overlaySettings}
+            project={project}
+            onOpenGlyphCompareModal={() => setIsGlyphCompareModalOpen(true)}
           />
         </div>
 
@@ -1430,6 +1537,28 @@ export default function App() {
         theme={theme}
         onShowToast={showToast}
         showToast={showToast}
+      />
+
+      <WeightInterpolationModal
+        isOpen={isWeightInterpModalOpen}
+        onClose={() => setIsWeightInterpModalOpen(false)}
+        project={project}
+        setProject={setProject}
+        selectedUnicode={selectedUnicode}
+        theme={theme}
+        onShowToast={showToast}
+      />
+
+      <GlyphCompareModal
+        isOpen={isGlyphCompareModalOpen}
+        onClose={() => setIsGlyphCompareModalOpen(false)}
+        project={project}
+        activeChar={selectedChar}
+        activeUnicode={selectedUnicode}
+        overlaySettings={overlaySettings}
+        onChangeOverlaySettings={setOverlaySettings}
+        theme={theme}
+        onShowToast={showToast}
       />
 
       <RadicalStudioModal

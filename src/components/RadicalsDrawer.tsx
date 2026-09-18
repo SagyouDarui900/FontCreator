@@ -31,44 +31,13 @@ import {
   POPULAR_RADICALS_QUICK_PRESETS,
   KANGXI_RADICALS_CATALOG,
   KangxiRadicalItem,
+  RADICAL_FONT_OPTIONS,
+  FontStyleOption,
+  RadicalFontPreset,
 } from '../utils/radicalExtractor';
 import { ThemeMode } from '../utils/theme';
 
 const CUSTOM_PARTS_STORAGE_KEY = 'font_editor_custom_parts_v1';
-
-export type RadicalFontPreset = 'serif' | 'sans' | 'maru';
-
-export interface FontStyleOption {
-  id: RadicalFontPreset;
-  label: string;
-  subLabel: string;
-  fontFamily: string;
-  fontWeight: number;
-}
-
-export const RADICAL_FONT_OPTIONS: FontStyleOption[] = [
-  {
-    id: 'serif',
-    label: '明朝体',
-    subLabel: '明朝体 (Noto Serif JP)',
-    fontFamily: "'Noto Serif JP', serif",
-    fontWeight: 600,
-  },
-  {
-    id: 'sans',
-    label: 'ゴシック体',
-    subLabel: 'ゴシック体 (Noto Sans JP)',
-    fontFamily: "'Noto Sans JP', sans-serif",
-    fontWeight: 600,
-  },
-  {
-    id: 'maru',
-    label: '丸ゴシック',
-    subLabel: '丸ゴシック (Zen Maru)',
-    fontFamily: "'Zen Maru Gothic', sans-serif",
-    fontWeight: 700,
-  },
-];
 
 interface RadicalsDrawerProps {
   isOpen: boolean;

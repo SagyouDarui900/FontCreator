@@ -167,7 +167,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
   return (
     <div
-      className={`flex sm:flex-col items-center justify-between sm:justify-start gap-1 p-1 sm:p-1.5 border-t sm:border-t-0 sm:border-r shrink-0 z-20 select-none overflow-x-auto sm:overflow-y-auto sm:overflow-x-hidden no-scrollbar transition-colors w-full sm:w-13 md:w-14 sm:max-h-full sm:h-full ${
+      className={`flex sm:flex-col items-center justify-start gap-1.5 sm:gap-1 px-2.5 py-1.5 sm:p-1.5 border-t sm:border-t-0 sm:border-r shrink-0 z-20 select-none overflow-x-auto sm:overflow-y-auto sm:overflow-x-hidden no-scrollbar transition-colors w-full sm:w-13 md:w-14 sm:max-h-full sm:h-full pr-6 sm:pr-1.5 ${
         isLight
           ? 'bg-stone-50 border-stone-200 text-stone-800 shadow-xs'
           : 'bg-[#121914] border-[#222e25] text-emerald-100 shadow-xs'
