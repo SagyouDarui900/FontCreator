@@ -8,8 +8,98 @@ import {
   RadicalPlacement,
   ShapeType,
   ShapePreset,
+  PressureCurveConfig,
 } from '../types';
 import { rdpSimplify, pointsToBezierContourNodes } from './imageVectorizer';
+
+/**
+ * Solve cubic Bezier for x coordinate to find t in [0, 1], then evaluate y(t).
+ * Bx(t) = 3(1-t)^2 t * p1.x + 3(1-t) t^2 * p2.x + t^3
+ * By(t) = 3(1-t)^2 t * p1.y + 3(1-t) t^2 * p2.y + t^3
+ */
+export function solveCubicBezierYForX(
+  x: number,
+  p1: { x: number; y: number } = { x: 0.33, y: 0.33 },
+  p2: { x: number; y: number } = { x: 0.67, y: 0.67 }
+): number {
+  const targetX = Math.max(0, Math.min(1, x));
+  if (targetX <= 0) return 0;
+  if (targetX >= 1) return 1;
+
+  // Binary search for t in [0, 1]
+  let low = 0;
+  let high = 1;
+  let t = targetX;
+
+  for (let i = 0; i < 14; i++) {
+    const mt = 1 - t;
+    const currentX = 3 * mt * mt * t * p1.x + 3 * mt * t * t * p2.x + t * t * t;
+    if (Math.abs(currentX - targetX) < 0.001) break;
+    if (currentX < targetX) {
+      low = t;
+    } else {
+      high = t;
+    }
+    t = (low + high) / 2;
+  }
+
+  const mt = 1 - t;
+  const y = 3 * mt * mt * t * p1.y + 3 * mt * t * t * p2.y + t * t * t;
+  return Math.max(0, Math.min(1, y));
+}
+
+/**
+ * Evaluate dynamic pressure curve from raw pointer pressure (0.0 to 1.0)
+ */
+export function evaluatePressureCurve(
+  rawPressure: number,
+  config?: PressureCurveConfig | null,
+  sensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal'
+): number {
+  if (sensitivity === 'off') {
+    return 0.5;
+  }
+
+  const rawP = Math.max(0, Math.min(1, typeof rawPressure === 'number' && !isNaN(rawPressure) ? rawPressure : 0.5));
+
+  if (config && config.enabled !== false) {
+    const minT = config.minThreshold ?? 0.0;
+    const maxT = config.maxThreshold ?? 1.0;
+
+    // Apply deadzone / threshold clamping
+    let normalizedInput = 0;
+    if (rawP <= minT) {
+      normalizedInput = 0;
+    } else if (rawP >= maxT) {
+      normalizedInput = 1;
+    } else {
+      normalizedInput = (rawP - minT) / Math.max(0.01, maxT - minT);
+    }
+
+    const p1 = config.p1 || { x: 0.33, y: 0.33 };
+    const p2 = config.p2 || { x: 0.67, y: 0.67 };
+
+    let mappedY = solveCubicBezierYForX(normalizedInput, p1, p2);
+
+    // Apply sensitivity scaling if needed
+    if (sensitivity === 'high') {
+      mappedY = Math.min(1.0, Math.pow(Math.max(0.01, mappedY), 0.85));
+    } else if (sensitivity === 'low') {
+      mappedY = Math.min(1.0, Math.pow(Math.max(0.01, mappedY), 1.18));
+    }
+
+    return Math.max(0.02, Math.min(1.0, mappedY));
+  }
+
+  // Fallback if no curve config
+  if (sensitivity === 'high') {
+    return Math.min(1.0, Math.pow(Math.max(0.01, rawP), 0.72));
+  } else if (sensitivity === 'low') {
+    return Math.min(1.0, Math.pow(Math.max(0.01, rawP), 1.35));
+  } else {
+    return Math.min(1.0, Math.pow(Math.max(0.01, rawP), 0.92));
+  }
+}
 
 export const PEN_PRESETS: PenPresetInfo[] = [
   {
@@ -51,6 +141,30 @@ export const PEN_PRESETS: PenPresetInfo[] = [
     category: 'pen',
     description: '縦引きが太く横払いが細いインクペン。筆圧とペン先角度によるメリハリ表現',
     defaultWidth: 38,
+  },
+  {
+    id: 'mincho_nib',
+    name: '明朝体風・縦太横細筆',
+    shortName: '明朝筆',
+    category: 'natural',
+    description: '縦引きが太く横引きが繊細に細い、和文明朝体・教科書体風の習字ペン',
+    defaultWidth: 42,
+  },
+  {
+    id: 'reisho_chisel',
+    name: '隷書風・扁平平筆',
+    shortName: '隷書筆',
+    category: 'chisel',
+    description: '水平約15°の扁平ペン先。隷書体の波打つウロコや古代銘文レタリングに最適',
+    defaultWidth: 48,
+  },
+  {
+    id: 'g_pen',
+    name: '漫画・鋭利Gペン',
+    shortName: 'Gペン',
+    category: 'pen',
+    description: '払い・抜きが驚くほど鋭利に尖る、メリハリとキレのあるコミック用Gペン',
+    defaultWidth: 32,
   },
   {
     id: 'marker',
@@ -735,34 +849,60 @@ export function sampleContourPoints(contour: PathContour, samplesPerSegment: num
 }
 
 /**
- * Test whether a canvas point is within a given distance of a contour (nodes or outline/segment)
+ * Helper to compute distance from a point to a line segment
+ */
+function distToSegment(pt: Point, p1: Point, p2: Point): number {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(pt.x - p1.x, pt.y - p1.y);
+  const t = Math.max(0, Math.min(1, ((pt.x - p1.x) * dx + (pt.y - p1.y) * dy) / lenSq));
+  const projX = p1.x + t * dx;
+  const projY = p1.y + t * dy;
+  return Math.hypot(pt.x - projX, pt.y - projY);
+}
+
+/**
+ * Test whether a canvas point is within a given distance of a contour (nodes or outline/segment).
+ * Supports swept trajectory when prevPoint is provided.
  */
 export function isPointNearContour(
   point: Point,
   contour: PathContour,
-  threshold: number = 25
+  threshold: number = 25,
+  prevPoint?: Point | null
 ): boolean {
   if (!contour || !contour.nodes || contour.nodes.length === 0) return false;
 
-  // Quick bounding box check with threshold margin
+  const p1 = prevPoint || point;
+  const p2 = point;
+
+  // Quick bounding box check with threshold margin for the swept capsule
+  const capMinX = Math.min(p1.x, p2.x) - threshold;
+  const capMaxX = Math.max(p1.x, p2.x) + threshold;
+  const capMinY = Math.min(p1.y, p2.y) - threshold;
+  const capMaxY = Math.max(p1.y, p2.y) + threshold;
+
   const bbox = getContoursBoundingBox([contour]);
   if (
-    point.x < bbox.minX - threshold ||
-    point.x > bbox.maxX + threshold ||
-    point.y < bbox.minY - threshold ||
-    point.y > bbox.maxY + threshold
+    bbox.maxX < capMinX ||
+    bbox.minX > capMaxX ||
+    bbox.maxY < capMinY ||
+    bbox.minY > capMaxY
   ) {
     return false;
   }
 
-  // If point is inside a closed contour, treat as hit
-  if (contour.closed && isPointInContour(point, contour)) {
-    return true;
+  // If point (or prevPoint) is inside a closed contour, treat as hit
+  if (contour.closed) {
+    if (isPointInContour(p2, contour) || (prevPoint && isPointInContour(p1, contour))) {
+      return true;
+    }
   }
 
   // 1. Check anchor nodes
   for (const node of contour.nodes) {
-    if (Math.hypot(node.x - point.x, node.y - point.y) <= threshold) {
+    if (distToSegment(node, p1, p2) <= threshold) {
       return true;
     }
   }
@@ -771,21 +911,14 @@ export function isPointNearContour(
   const samples = sampleContourPoints(contour, 8);
   for (let i = 0; i < samples.length; i++) {
     const p = samples[i];
-    if (Math.hypot(p.x - point.x, p.y - point.y) <= threshold) {
+    if (distToSegment(p, p1, p2) <= threshold) {
       return true;
     }
     if (i > 0) {
       const pPrev = samples[i - 1];
-      const dx = p.x - pPrev.x;
-      const dy = p.y - pPrev.y;
-      const lenSq = dx * dx + dy * dy;
-      if (lenSq > 0) {
-        const t = Math.max(0, Math.min(1, ((point.x - pPrev.x) * dx + (point.y - pPrev.y) * dy) / lenSq));
-        const projX = pPrev.x + t * dx;
-        const projY = pPrev.y + t * dy;
-        if (Math.hypot(point.x - projX, point.y - projY) <= threshold) {
-          return true;
-        }
+      const mid = { x: (p.x + pPrev.x) / 2, y: (p.y + pPrev.y) / 2 };
+      if (distToSegment(mid, p1, p2) <= threshold) {
+        return true;
       }
     }
   }
@@ -794,87 +927,428 @@ export function isPointNearContour(
 }
 
 /**
+ * Subtracts the eraser circle / capsule from one or more closed contours.
+ * Uses evenodd fill rule so compound glyphs with counter-contours/holes (like O, A, 日, 国)
+ * are carved cleanly without inverting inner holes into solid shapes.
+ * Returns an array of remaining closed contours.
+ */
+export function subtractEraserFromClosedContours(
+  contours: PathContour[],
+  point: Point,
+  radius: number,
+  prevPoint?: Point | null
+): PathContour[] {
+  if (!contours || contours.length === 0) return [];
+  const validContours = contours.filter((c) => c.nodes && c.nodes.length >= 3);
+  if (validContours.length === 0) return [];
+
+  const bbox = getContoursBoundingBox(validContours);
+  if (bbox.width <= 0 || bbox.height <= 0) return [];
+
+  const p1 = prevPoint || point;
+  const p2 = point;
+  const margin = Math.ceil(Math.max(radius * 2, 32));
+  const minX = Math.floor(Math.min(bbox.minX, p1.x - radius, p2.x - radius) - margin);
+  const minY = Math.floor(Math.min(bbox.minY, p1.y - radius, p2.y - radius) - margin);
+  const maxX = Math.ceil(Math.max(bbox.maxX, p1.x + radius, p2.x + radius) + margin);
+  const maxY = Math.ceil(Math.max(bbox.maxY, p1.y + radius, p2.y + radius) + margin);
+
+  const w = Math.max(32, maxX - minX);
+  const h = Math.max(32, maxY - minY);
+
+  const scale = Math.min(3.5, Math.max(1.5, 1200 / Math.max(w, h)));
+  const canvasW = Math.round(w * scale);
+  const canvasH = Math.round(h * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasW;
+  canvas.height = canvasH;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return contours;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  ctx.scale(scale, scale);
+  ctx.translate(-minX, -minY);
+
+  // Draw contours in solid black with evenodd fill rule
+  ctx.fillStyle = '#000000';
+  const contourSvg = contoursToSvgPath(validContours);
+  try {
+    const p2d = new Path2D(contourSvg);
+    ctx.fill(p2d, 'evenodd');
+  } catch {
+    return contours;
+  }
+
+  // Subtract eraser in solid white
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = radius * 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (prevPoint && Math.hypot(prevPoint.x - point.x, prevPoint.y - point.y) > 0.5) {
+    ctx.beginPath();
+    ctx.moveTo(prevPoint.x, prevPoint.y);
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (prevPoint) {
+    ctx.beginPath();
+    ctx.arc(prevPoint.x, prevPoint.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const imgData = ctx.getImageData(0, 0, canvasW, canvasH);
+  const data = imgData.data;
+  const binary = new Uint8Array(canvasW * canvasH);
+  let blackPixelCount = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const brightness = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    if (brightness < 128) {
+      binary[i / 4] = 1;
+      blackPixelCount++;
+    } else {
+      binary[i / 4] = 0;
+    }
+  }
+
+  // If no black pixels remain, contour is completely erased
+  if (blackPixelCount < 16) {
+    return [];
+  }
+
+  const edgeMap = new Map<string, Point[]>();
+  const visitedEdges = new Set<string>();
+
+  const addEdge = (pA: Point, pB: Point) => {
+    const key = `${pA.x},${pA.y}`;
+    if (!edgeMap.has(key)) edgeMap.set(key, []);
+    edgeMap.get(key)!.push(pB);
+  };
+
+  const getPixel = (px: number, py: number): number => {
+    if (px < 0 || px >= canvasW || py < 0 || py >= canvasH) return 0;
+    return binary[py * canvasW + px];
+  };
+
+  for (let y = 0; y <= canvasH; y++) {
+    for (let x = 0; x <= canvasW; x++) {
+      const top = getPixel(x, y - 1);
+      const bottom = getPixel(x, y);
+      if (top !== bottom) {
+        if (top === 0 && bottom === 1) addEdge({ x, y }, { x: x + 1, y });
+        else addEdge({ x: x + 1, y }, { x, y });
+      }
+      const left = getPixel(x - 1, y);
+      const right = getPixel(x, y);
+      if (left !== right) {
+        if (left === 1 && right === 0) addEdge({ x, y }, { x, y: y + 1 });
+        else addEdge({ x, y: y + 1 }, { x, y });
+      }
+    }
+  }
+
+  const loops: Point[][] = [];
+  for (const [startKey, targets] of edgeMap.entries()) {
+    while (targets.length > 0) {
+      const nextP = targets.pop()!;
+      const [sx, sy] = startKey.split(',').map(Number);
+      const startPt: Point = { x: sx, y: sy };
+      const edgeKey = `${startPt.x},${startPt.y}->${nextP.x},${nextP.y}`;
+      if (visitedEdges.has(edgeKey)) continue;
+      visitedEdges.add(edgeKey);
+
+      const loop: Point[] = [startPt, nextP];
+      let curr = nextP;
+      let steps = 0;
+      const maxSteps = canvasW * canvasH * 4;
+
+      while (steps++ < maxSteps) {
+        const currKey = `${curr.x},${curr.y}`;
+        const outList = edgeMap.get(currKey);
+        if (!outList || outList.length === 0) break;
+
+        let nextIdx = 0;
+        let chosen: Point | null = null;
+        for (let i = 0; i < outList.length; i++) {
+          const cand = outList[i];
+          const k = `${curr.x},${curr.y}->${cand.x},${cand.y}`;
+          if (!visitedEdges.has(k)) {
+            chosen = cand;
+            nextIdx = i;
+            break;
+          }
+        }
+        if (!chosen) break;
+        outList.splice(nextIdx, 1);
+        visitedEdges.add(`${curr.x},${curr.y}->${chosen.x},${chosen.y}`);
+        loop.push(chosen);
+        curr = chosen;
+        if (curr.x === startPt.x && curr.y === startPt.y) break;
+      }
+
+      if (loop.length >= 6) {
+        let cleanLoop = loop;
+        if (cleanLoop.length >= 2) {
+          const first = cleanLoop[0];
+          const last = cleanLoop[cleanLoop.length - 1];
+          if (first.x === last.x && first.y === last.y) {
+            cleanLoop = cleanLoop.slice(0, -1);
+          }
+        }
+        if (cleanLoop.length >= 3) {
+          loops.push(cleanLoop);
+        }
+      }
+    }
+  }
+
+  const transformedLoops = loops.map((loop) =>
+    loop.map((p) => ({
+      x: Math.round(minX + p.x / scale),
+      y: Math.round(minY + p.y / scale),
+    }))
+  );
+
+  // Filter out tiny micro-loops (< 25 font units area)
+  const validLoops = transformedLoops.filter((loop) => {
+    let a = 0;
+    for (let i = 0; i < loop.length; i++) {
+      const j = (i + 1) % loop.length;
+      a += loop[i].x * loop[j].y - loop[j].x * loop[i].y;
+    }
+    return Math.abs(a / 2) >= 25;
+  });
+
+  if (validLoops.length === 0) {
+    return [];
+  }
+
+  const simplified = validLoops
+    .map((loop) => rdpSimplify(loop, 0.9))
+    .filter((l) => l.length >= 3);
+
+  if (simplified.length === 0) {
+    return [];
+  }
+
+  const resultingContours: PathContour[] = simplified.map((pts) => {
+    const nodes = pointsToBezierContourNodes(pts);
+    return {
+      id: generateId(),
+      closed: true,
+      nodes,
+    };
+  });
+
+  return normalizeGlyphContoursWinding(resultingContours);
+}
+
+export function subtractEraserFromClosedContour(
+  contour: PathContour,
+  point: Point,
+  radius: number,
+  prevPoint?: Point | null
+): PathContour[] {
+  return subtractEraserFromClosedContours([contour], point, radius, prevPoint);
+}
+
+/**
+ * Slices an open contour (contour.closed === false) by removing points within the eraser radius.
+ */
+export function sliceOpenContourWithEraser(
+  contour: PathContour,
+  point: Point,
+  radius: number,
+  prevPoint?: Point | null
+): PathContour[] {
+  if (!contour.nodes || contour.nodes.length < 2) return [];
+
+  const p1 = prevPoint || point;
+  const p2 = point;
+
+  // Sample points along open path segments
+  const sampledPoints: Point[] = [];
+  for (let i = 0; i < contour.nodes.length - 1; i++) {
+    const curr = contour.nodes[i];
+    const next = contour.nodes[i + 1];
+
+    if (curr.handleOut && next.handleIn) {
+      // Cubic Bezier curve
+      const steps = 18;
+      for (let s = 0; s < steps; s++) {
+        const t = s / steps;
+        const mt = 1 - t;
+        const x =
+          mt * mt * mt * curr.x +
+          3 * mt * mt * t * curr.handleOut.x +
+          3 * mt * t * t * next.handleIn.x +
+          t * t * t * next.x;
+        const y =
+          mt * mt * mt * curr.y +
+          3 * mt * mt * t * curr.handleOut.y +
+          3 * mt * t * t * next.handleIn.y +
+          t * t * t * next.y;
+        sampledPoints.push({ x, y });
+      }
+    } else {
+      // Straight line
+      const steps = 10;
+      for (let s = 0; s < steps; s++) {
+        const t = s / steps;
+        sampledPoints.push({
+          x: curr.x + t * (next.x - curr.x),
+          y: curr.y + t * (next.y - curr.y),
+        });
+      }
+    }
+  }
+  sampledPoints.push({
+    x: contour.nodes[contour.nodes.length - 1].x,
+    y: contour.nodes[contour.nodes.length - 1].y,
+  });
+
+  // Group continuous runs of points outside eraser
+  const runs: Point[][] = [];
+  let currentRun: Point[] = [];
+
+  for (const pt of sampledPoints) {
+    if (distToSegment(pt, p1, p2) > radius) {
+      currentRun.push(pt);
+    } else {
+      if (currentRun.length > 0) {
+        runs.push(currentRun);
+        currentRun = [];
+      }
+    }
+  }
+  if (currentRun.length > 0) {
+    runs.push(currentRun);
+  }
+
+  const result: PathContour[] = [];
+  for (const run of runs) {
+    if (run.length < 2) continue;
+    const simplified = rdpSimplify(run, 0.9);
+    if (simplified.length < 2) continue;
+
+    const nodes: BezierNode[] = simplified.map((p, idx) => ({
+      id: generateId(),
+      x: Math.round(p.x),
+      y: Math.round(p.y),
+      type: idx === 0 || idx === simplified.length - 1 ? 'corner' : 'smooth',
+      handleIn: null,
+      handleOut: null,
+    }));
+
+    result.push({
+      id: generateId(),
+      closed: false,
+      nodes,
+    });
+  }
+
+  return result;
+}
+
+/**
  * Erase contours at a given canvas point with specified radius and eraser mode.
  * - 'stroke': Deletes any contour that intersects with the eraser radius.
- * - 'cut': Cuts/splits contours by removing nodes within the eraser radius, preserving remaining parts.
+ * - 'cut': Cuts/splits contours by carving out eraser areas from closed shapes (Boolean difference)
+ *   or slicing open paths at eraser boundaries into separate segments.
  * - 'node': Removes individual anchor nodes falling within the eraser circle.
  */
 export function eraseContoursAtPoint(
   contours: PathContour[],
   point: Point,
   radius: number,
-  mode: 'stroke' | 'cut' | 'node' = 'stroke'
+  mode: 'stroke' | 'cut' | 'node' = 'stroke',
+  prevPoint?: Point | null
 ): PathContour[] {
   if (!contours || contours.length === 0) return [];
 
-  if (mode === 'stroke') {
-    return contours.filter((c) => !isPointNearContour(point, c, radius));
-  }
+  if (mode === 'cut') {
+    const hitClosedContours: PathContour[] = [];
+    const nonHitContours: PathContour[] = [];
+    const hitOpenContours: PathContour[] = [];
 
-  if (mode === 'node') {
-    const result: PathContour[] = [];
     for (const contour of contours) {
-      if (!isPointNearContour(point, contour, radius + 4)) {
-        result.push(contour);
+      if (!isPointNearContour(point, contour, radius, prevPoint)) {
+        nonHitContours.push(contour);
         continue;
       }
-      const remainingNodes = contour.nodes.filter(
-        (n) => Math.hypot(n.x - point.x, n.y - point.y) > radius
-      );
-      if (remainingNodes.length >= 2) {
-        result.push({
-          ...contour,
-          nodes: remainingNodes,
-        });
+      if (contour.closed) {
+        hitClosedContours.push(contour);
+      } else {
+        hitOpenContours.push(contour);
       }
     }
-    return result;
+
+    if (hitClosedContours.length === 0 && hitOpenContours.length === 0) {
+      return contours;
+    }
+
+    const newClosed =
+      hitClosedContours.length > 0
+        ? subtractEraserFromClosedContours(hitClosedContours, point, radius, prevPoint)
+        : [];
+
+    const newOpen: PathContour[] = [];
+    for (const openC of hitOpenContours) {
+      newOpen.push(...sliceOpenContourWithEraser(openC, point, radius, prevPoint));
+    }
+
+    return [...nonHitContours, ...newClosed, ...newOpen];
   }
 
-  if (mode === 'cut') {
-    const result: PathContour[] = [];
-    for (const contour of contours) {
-      if (!isPointNearContour(point, contour, radius)) {
-        result.push(contour);
-        continue;
-      }
+  let hasChanged = false;
+  const result: PathContour[] = [];
 
-      // Filter nodes that fall outside eraser radius
-      const subSegments: BezierNode[][] = [];
-      let currentSeg: BezierNode[] = [];
+  for (const contour of contours) {
+    if (!isPointNearContour(point, contour, radius, prevPoint)) {
+      result.push(contour);
+      continue;
+    }
 
-      for (const node of contour.nodes) {
-        const dist = Math.hypot(node.x - point.x, node.y - point.y);
-        if (dist > radius) {
-          currentSeg.push(node);
-        } else {
-          if (currentSeg.length > 0) {
-            subSegments.push(currentSeg);
-            currentSeg = [];
-          }
-        }
-      }
-      if (currentSeg.length > 0) {
-        subSegments.push(currentSeg);
-      }
+    if (mode === 'stroke') {
+      hasChanged = true;
+      // Completely erase this contour
+      continue;
+    }
 
-      for (const seg of subSegments) {
-        if (seg.length >= 2) {
+    if (mode === 'node') {
+      const remainingNodes = contour.nodes.filter(
+        (n) => distToSegment(n, prevPoint || point, point) > radius
+      );
+      if (remainingNodes.length !== contour.nodes.length) {
+        hasChanged = true;
+        const minNodes = contour.closed ? 3 : 2;
+        if (remainingNodes.length >= minNodes) {
           result.push({
-            id: generateId(),
-            closed: contour.closed && subSegments.length === 1,
-            nodes: seg.map((n) => ({
-              ...n,
-              id: generateId(),
-            })),
+            ...contour,
+            nodes: remainingNodes,
           });
         }
+      } else {
+        result.push(contour);
       }
+      continue;
     }
-    return result;
   }
 
-  return contours;
+  if (!hasChanged) {
+    return contours;
+  }
+  return result;
 }
 
 /**
@@ -921,7 +1395,8 @@ export function smoothStrokeContour(
   const isCorner: boolean[] = new Array(numPts).fill(false);
 
   if (preserveCorners && numPts >= 8) {
-    const stride = Math.max(2, Math.min(6, Math.floor(numPts / 24)));
+    // Adaptive stride: ensure sampling arm length is at least ~6px in canvas space so micro-noise is not mistaken for a corner
+    const stride = Math.max(3, Math.min(8, Math.floor(numPts / 20)));
     for (let i = 0; i < numPts; i++) {
       if (!contour.closed && (i < stride || i >= numPts - stride)) {
         if (i === 0 || i === numPts - 1) isCorner[i] = true;
@@ -943,7 +1418,8 @@ export function smoothStrokeContour(
       const len1 = Math.hypot(v1x, v1y);
       const len2 = Math.hypot(v2x, v2y);
 
-      if (len1 > 2 && len2 > 2) {
+      // Require minimum physical arm length of 4px to avoid false corner triggers on sub-pixel noise
+      if (len1 >= 4.0 && len2 >= 4.0) {
         const dot = (v1x * v2x + v1y * v2y) / (len1 * len2);
         const clampedDot = Math.max(-1, Math.min(1, dot));
         const angleTurn = Math.acos(clampedDot);
@@ -1023,9 +1499,12 @@ export function smoothStrokeContour(
           // Closed loop wrap around, skip duplicate first point
           continue;
         }
+        // Only mark as corner if it was genuinely identified as a sharp corner from angular detection
+        const origCornerIdx = s < cornerIndices.length ? cornerIndices[s] : -1;
+        const isActualCorner = (isFirstOfSec && origCornerIdx >= 0 && isCorner[origCornerIdx]);
         simplifiedChain.push({
           point: simpSec[pIdx],
-          isCorner: isFirstOfSec || isLastOfSec,
+          isCorner: isActualCorner,
         });
       }
     }
@@ -1065,7 +1544,7 @@ export function smoothStrokeContour(
 
     if (dPrev < 0.1 || dNext < 0.1) continue;
 
-    // Chord-weighted tangent direction
+    // Chord-weighted unit tangent directions
     const vPrevX = (curr.x - prev.x) / dPrev;
     const vPrevY = (curr.y - prev.y) / dPrev;
     const vNextX = (next.x - curr.x) / dNext;
@@ -1073,25 +1552,34 @@ export function smoothStrokeContour(
 
     let tanX = vPrevX + vNextX;
     let tanY = vPrevY + vNextY;
-    const tanLen = Math.hypot(tanX, tanY);
+    let tanLen = Math.hypot(tanX, tanY);
 
-    if (tanLen > 0.01) {
-      tanX /= tanLen;
-      tanY /= tanLen;
-
-      // Handle lengths scaled to 34% of segment length with smooth cap
-      const hInLen = Math.min(dPrev * 0.34, 120);
-      const hOutLen = Math.min(dNext * 0.34, 120);
-
-      curr.handleIn = {
-        x: Math.round(curr.x - tanX * hInLen),
-        y: Math.round(curr.y - tanY * hInLen),
-      };
-      curr.handleOut = {
-        x: Math.round(curr.x + tanX * hOutLen),
-        y: Math.round(curr.y + tanY * hOutLen),
-      };
+    if (tanLen < 0.001) {
+      tanX = -vPrevY;
+      tanY = vPrevX;
+      tanLen = Math.hypot(tanX, tanY) || 1;
     }
+
+    tanX /= tanLen;
+    tanY /= tanLen;
+
+    const dot = vPrevX * vNextX + vPrevY * vNextY;
+    const cosAngle = Math.max(-1, Math.min(1, dot));
+    const cornerDamping = Math.max(0.04, Math.pow((1 + cosAngle) * 0.5, 0.65));
+    const handleRatio = 0.35 * cornerDamping;
+
+    // Handle lengths scaled to segment length with curvature damping
+    const hInLen = Math.min(dPrev * handleRatio, 110);
+    const hOutLen = Math.min(dNext * handleRatio, 110);
+
+    curr.handleIn = {
+      x: Math.round(curr.x - tanX * hInLen),
+      y: Math.round(curr.y - tanY * hInLen),
+    };
+    curr.handleOut = {
+      x: Math.round(curr.x + tanX * hOutLen),
+      y: Math.round(curr.y + tanY * hOutLen),
+    };
   }
 
   const reducedPoints = newNodes.length;
@@ -1207,7 +1695,8 @@ export function convertContourToSmooth(contour: PathContour): PathContour {
 export function createSharpAngularContour(
   rawPoints: (Point | StrokePoint)[],
   strokeWidth: number = 35,
-  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal'
+  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal',
+  pressureCurve?: PressureCurveConfig | null
 ): PathContour {
   if (!rawPoints || rawPoints.length === 0) {
     return { id: generateId(), closed: true, nodes: [] };
@@ -1402,38 +1891,56 @@ export function createSharpAngularContour(
     const uNy = sumNy / sumLen;
     const miter = 2 / sumLen; // 1 / cos(theta/2)
 
-    // マイターリミット: 鋭すぎる角（miter > 2.2）の外側はベベル（斜めカット2点）
-    if (miter > 2.2) {
-      if (cross > 0) {
-        // 左に折れ曲がる（内角: 左、外角: 右）
-        leftPoints.push({
-          x: Math.round(pt.x + uNx * halfWidth * miter),
-          y: Math.round(pt.y + uNy * halfWidth * miter),
-        });
+    // 内角側はストローク突き抜けを防ぐ安全なクランプ（innerMiter <= 1.4）
+    const innerMiter = Math.min(1.4, miter);
+
+    if (cross > 0.05) {
+      // 左に折れ曲がる（左側が内角、右側が外角）
+      leftPoints.push({
+        x: Math.round(pt.x + uNx * halfWidth * innerMiter),
+        y: Math.round(pt.y + uNy * halfWidth * innerMiter),
+      });
+
+      // マイターリミット: 鋭すぎる外角（miter > 2.0）はベベル（斜めカット2点）
+      if (miter > 2.0) {
         rightPoints.push(
           { x: Math.round(pt.x - nPrev.x * halfWidth), y: Math.round(pt.y - nPrev.y * halfWidth) },
           { x: Math.round(pt.x - nCurr.x * halfWidth), y: Math.round(pt.y - nCurr.y * halfWidth) }
         );
       } else {
-        // 右に折れ曲がる（内角: 右、外角: 左）
-        leftPoints.push(
-          { x: Math.round(pt.x + nPrev.x * halfWidth), y: Math.round(pt.y + nPrev.y * halfWidth) },
-          { x: Math.round(pt.x + nCurr.x * halfWidth), y: Math.round(pt.y + nCurr.y * halfWidth) }
-        );
         rightPoints.push({
           x: Math.round(pt.x - uNx * halfWidth * miter),
           y: Math.round(pt.y - uNy * halfWidth * miter),
         });
       }
+    } else if (cross < -0.05) {
+      // 右に折れ曲がる（右側が内角、左側が外角）
+      rightPoints.push({
+        x: Math.round(pt.x - uNx * halfWidth * innerMiter),
+        y: Math.round(pt.y - uNy * halfWidth * innerMiter),
+      });
+
+      // マイターリミット: 鋭すぎる外角（miter > 2.0）はベベル（斜めカット2点）
+      if (miter > 2.0) {
+        leftPoints.push(
+          { x: Math.round(pt.x + nPrev.x * halfWidth), y: Math.round(pt.y + nPrev.y * halfWidth) },
+          { x: Math.round(pt.x + nCurr.x * halfWidth), y: Math.round(pt.y + nCurr.y * halfWidth) }
+        );
+      } else {
+        leftPoints.push({
+          x: Math.round(pt.x + uNx * halfWidth * miter),
+          y: Math.round(pt.y + uNy * halfWidth * miter),
+        });
+      }
     } else {
-      // 通常のマイター角（シャープな角頂点）
+      // ほぼ直線
       leftPoints.push({
-        x: Math.round(pt.x + uNx * halfWidth * miter),
-        y: Math.round(pt.y + uNy * halfWidth * miter),
+        x: Math.round(pt.x + uNx * halfWidth),
+        y: Math.round(pt.y + uNy * halfWidth),
       });
       rightPoints.push({
-        x: Math.round(pt.x - uNx * halfWidth * miter),
-        y: Math.round(pt.y - uNy * halfWidth * miter),
+        x: Math.round(pt.x - uNx * halfWidth),
+        y: Math.round(pt.y - uNy * halfWidth),
       });
     }
   }
@@ -1489,7 +1996,8 @@ export function createSharpAngularContour(
 export function createSharpRoundedContour(
   rawPoints: (Point | StrokePoint)[],
   strokeWidth: number = 35,
-  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal'
+  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal',
+  pressureCurve?: PressureCurveConfig | null
 ): PathContour {
   if (!rawPoints || rawPoints.length === 0) {
     return { id: generateId(), closed: true, nodes: [] };
@@ -2059,6 +2567,20 @@ export function createSharpRoundedContour(
 }
 
 /**
+ * Options for Subdivided Fine-Segment Stroke generation
+ */
+export interface SubdividedStrokeOptions {
+  /** Target distance between fine sub-segments in font units (default: 1.25) */
+  subdivisionStep?: number;
+  /** Density level for sub-segmentation: 'ultra' (0.8px), 'high' (1.25px), 'normal' (1.8px) */
+  density?: 'ultra' | 'high' | 'normal';
+  /** Whether to use adaptive sub-segmentation that increases density where pressure changes fast */
+  adaptiveDensity?: boolean;
+  /** Width smoothing passes for pressure transitions */
+  widthSmoothingPasses?: number;
+}
+
+/**
  * Fast SVG path generator for active freehand drawing preview
  */
 export function generateFastStrokeSvgPath(
@@ -2066,11 +2588,65 @@ export function generateFastStrokeSvgPath(
   strokeWidth: number = 40,
   style: BrushStyle = 'brush',
   roundCap: boolean = true,
-  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal'
+  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal',
+  pressureCurve?: PressureCurveConfig | null,
+  smoothingIntensity: number = 50,
+  options?: SubdividedStrokeOptions
 ): string {
   if (points.length === 0) return '';
-  const contour = strokePointsToOutline(points, strokeWidth, style, roundCap, pressureSensitivity);
+  const contour = strokePointsToOutline(points, strokeWidth, style, roundCap, pressureSensitivity, pressureCurve, smoothingIntensity, options);
   return contoursToSvgPath([contour]);
+}
+
+/**
+ * Render stroke points into a finely subdivided SVG path string directly
+ */
+export function renderSubdividedStrokePath(
+  points: (Point | StrokePoint)[],
+  strokeWidth: number = 40,
+  style: BrushStyle = 'brush',
+  roundCap: boolean = true,
+  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal',
+  pressureCurve?: PressureCurveConfig | null,
+  smoothingIntensity: number = 50,
+  options?: SubdividedStrokeOptions
+): string {
+  return generateFastStrokeSvgPath(
+    points,
+    strokeWidth,
+    style,
+    roundCap,
+    pressureSensitivity,
+    pressureCurve,
+    smoothingIntensity,
+    options
+  );
+}
+
+/**
+ * Convert freehand stroke points into a closed smoothed vector outline using
+ * fine-segment subdivision and monotone cubic Hermite pressure interpolation.
+ */
+export function strokePointsToSubdividedOutline(
+  points: (Point | StrokePoint)[],
+  strokeWidth: number = 40,
+  style: BrushStyle = 'brush',
+  roundCap: boolean = true,
+  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal',
+  pressureCurve?: PressureCurveConfig | null,
+  smoothingIntensity: number = 50,
+  options?: SubdividedStrokeOptions
+): PathContour {
+  return strokePointsToOutline(
+    points,
+    strokeWidth,
+    style,
+    roundCap,
+    pressureSensitivity,
+    pressureCurve,
+    smoothingIntensity,
+    options
+  );
 }
 
 /**
@@ -2081,16 +2657,19 @@ export function strokePointsToOutline(
   strokeWidth: number = 40,
   style: BrushStyle = 'brush',
   roundCap: boolean = true,
-  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal'
+  pressureSensitivity: 'high' | 'normal' | 'low' | 'off' = 'normal',
+  pressureCurve?: PressureCurveConfig | null,
+  smoothingIntensity: number = 50,
+  options?: SubdividedStrokeOptions
 ): PathContour {
   // カクカク角筆・ポリゴン筆は専用の幾何学的マイター角・直線セグメント生成ルーチンを使用
   if (style === 'sharp' || style === 'polygon') {
-    return createSharpAngularContour(points, strokeWidth, pressureSensitivity);
+    return createSharpAngularContour(points, strokeWidth, pressureSensitivity, pressureCurve);
   }
 
   // カクカク角丸筆は幾何学直線骨格＋角丸フィレット・ラウンドキャップルーチンを使用
   if (style === 'sharp_round') {
-    return createSharpRoundedContour(points, strokeWidth, pressureSensitivity);
+    return createSharpRoundedContour(points, strokeWidth, pressureSensitivity, pressureCurve);
   }
 
   if (points.length < 2) {
@@ -2111,84 +2690,264 @@ export function strokePointsToOutline(
     };
   }
 
-  // 1. Resample and smooth raw points to eliminate micro-jitter and normalize point density
-  const rawCount = points.length;
+  // 1. Initial point extraction with jitter filtration
+  const intensityNorm = Math.max(0, Math.min(100, smoothingIntensity)) / 100;
+  const rawPts: { x: number; y: number; pressure: number; time?: number; pointerType?: string }[] = [];
+  const minJitterDistSq = intensityNorm <= 0.05 ? 0.25 : 0.8;
 
-  // Use two flat Float64Arrays to ping-pong the 3-pass smoothing without allocating intermediate objects
-  const xBufA = new Float64Array(rawCount);
-  const yBufA = new Float64Array(rawCount);
-  const pBufA = new Float64Array(rawCount);
-  const tBuf = new Float64Array(rawCount);
-
-  for (let i = 0; i < rawCount; i++) {
+  for (let i = 0; i < points.length; i++) {
     const pt = points[i];
     let pres = 0.5;
     if (pressureSensitivity !== 'off' && 'pressure' in pt && typeof pt.pressure === 'number' && pt.pressure > 0) {
       pres = pt.pressure;
     }
-    xBufA[i] = pt.x;
-    yBufA[i] = pt.y;
-    pBufA[i] = pres;
-    tBuf[i] = 'time' in pt && typeof pt.time === 'number' ? pt.time : 0;
-  }
-
-  let curX = xBufA;
-  let curY = yBufA;
-  let curP = pBufA;
-
-  if (rawCount >= 3) {
-    const xBufB = new Float64Array(rawCount);
-    const yBufB = new Float64Array(rawCount);
-    const pBufB = new Float64Array(rawCount);
-
-    let srcX = xBufA, srcY = yBufA, srcP = pBufA;
-    let dstX = xBufB, dstY = yBufB, dstP = pBufB;
-
-    for (let pass = 0; pass < 3; pass++) {
-      dstX[0] = srcX[0];
-      dstY[0] = srcY[0];
-      dstP[0] = srcP[0];
-      const m = rawCount - 1;
-      for (let i = 1; i < m; i++) {
-        dstX[i] = (srcX[i - 1] + srcX[i] * 2 + srcX[i + 1]) * 0.25;
-        dstY[i] = (srcY[i - 1] + srcY[i] * 2 + srcY[i + 1]) * 0.25;
-        dstP[i] = (srcP[i - 1] + srcP[i] * 2 + srcP[i + 1]) * 0.25;
+    const t = 'time' in pt && typeof pt.time === 'number' ? pt.time : undefined;
+    const ptrType = 'pointerType' in pt && typeof pt.pointerType === 'string' ? pt.pointerType : undefined;
+    if (rawPts.length === 0) {
+      rawPts.push({ x: pt.x, y: pt.y, pressure: pres, time: t, pointerType: ptrType });
+    } else {
+      const prev = rawPts[rawPts.length - 1];
+      const dx = pt.x - prev.x;
+      const dy = pt.y - prev.y;
+      if (dx * dx + dy * dy >= minJitterDistSq) {
+        rawPts.push({ x: pt.x, y: pt.y, pressure: pres, time: t, pointerType: ptrType });
       }
-      dstX[m] = srcX[m];
-      dstY[m] = srcY[m];
-      dstP[m] = srcP[m];
-
-      // Swap buffers
-      const tmpX = srcX; srcX = dstX; dstX = tmpX;
-      const tmpY = srcY; srcY = dstY; dstY = tmpY;
-      const tmpP = srcP; srcP = dstP; dstP = tmpP;
     }
-    curX = srcX;
-    curY = srcY;
-    curP = srcP;
   }
 
-  // Resample with optimal spacing (adaptive 6-8px for fine, organic curve precision without discretization artifacts)
-  const minInterval = style === 'brush' || style === 'sumi' || style === 'fountain' ? 6 : 7;
-  const minIntervalSq = minInterval * minInterval;
-  const resampled: { x: number; y: number; pressure: number; time?: number }[] = [
-    { x: curX[0], y: curY[0], pressure: curP[0], time: tBuf[0] || undefined }
-  ];
-  for (let i = 1; i < rawCount; i++) {
-    const prev = resampled[resampled.length - 1];
-    const dx = curX[i] - prev.x;
-    const dy = curY[i] - prev.y;
-    if (dx * dx + dy * dy >= minIntervalSq || i === rawCount - 1) {
-      resampled.push({ x: curX[i], y: curY[i], pressure: curP[i], time: tBuf[i] || undefined });
+  if (rawPts.length < 2) {
+    const p = rawPts[0] || { x: 500, y: 500, pressure: 0.5 };
+    return strokePointsToOutline([p], strokeWidth, style, roundCap, pressureSensitivity, pressureCurve, smoothingIntensity);
+  }
+
+  const numRaw = rawPts.length;
+
+  // Compute cumulative physical arc-length along raw points
+  const rawArcLengths = new Float64Array(numRaw);
+  for (let i = 1; i < numRaw; i++) {
+    const dx = rawPts[i].x - rawPts[i - 1].x;
+    const dy = rawPts[i].y - rawPts[i - 1].y;
+    rawArcLengths[i] = rawArcLengths[i - 1] + Math.hypot(dx, dy);
+  }
+  const totalRawArcLen = rawArcLengths[numRaw - 1];
+
+  // Check if stroke was created using a mouse to adaptively absorb optical sensor discretization jitter
+  const isMouseInput = rawPts.some((p) => p.pointerType === 'mouse');
+
+  // Calculate instantaneous velocities (px/ms) along raw points to drive calligraphic ink dynamics
+  const rawSpeeds = new Float64Array(numRaw);
+  let validTimeCount = 0;
+  for (let i = 1; i < numRaw; i++) {
+    const t0 = rawPts[i - 1].time;
+    const t1 = rawPts[i].time;
+    if (typeof t0 === 'number' && typeof t1 === 'number' && t1 > t0) {
+      const dt = Math.max(8, t1 - t0);
+      const ds = rawArcLengths[i] - rawArcLengths[i - 1];
+      rawSpeeds[i] = Math.max(0.08, Math.min(2.5, ds / dt));
+      validTimeCount++;
+    } else {
+      rawSpeeds[i] = rawSpeeds[i - 1] || 0.5;
+    }
+  }
+  if (validTimeCount > 0) {
+    rawSpeeds[0] = rawSpeeds[1] || 0.5;
+    for (let i = 1; i < numRaw - 1; i++) {
+      rawSpeeds[i] = (rawSpeeds[i - 1] + rawSpeeds[i] * 2 + rawSpeeds[i + 1]) * 0.25;
+    }
+  } else {
+    rawSpeeds.fill(0.5);
+  }
+
+  // 2. Continuous Spatial Gaussian smoothing over physical arc-length
+  // Eliminates low-speed wobble and sensor tremors uniformly regardless of drawing speed
+  // For mouse input, provides a gentle stabilizer bonus to suppress hand tremors and pixel stepping
+  const smoothX = new Float64Array(numRaw);
+  const smoothY = new Float64Array(numRaw);
+  const smoothP = new Float64Array(numRaw);
+  const smoothV = new Float64Array(numRaw);
+
+  if (numRaw >= 3 && intensityNorm > 0.05 && totalRawArcLen > 2) {
+    // Physical filter radius in font coordinate units
+    const baseSigma = isMouseInput ? 2.8 : 1.8;
+    const maxSigmaBonus = isMouseInput ? 16.0 : 13.0;
+    const sigma = baseSigma + maxSigmaBonus * intensityNorm; // ~1.8px up to 18.8px physical smoothing radius
+    const filterRadius = sigma * 2.5;
+    const twoSigmaSq = 2 * sigma * sigma;
+
+    for (let i = 0; i < numRaw; i++) {
+      // Keep exact start and end endpoints anchored
+      if (i === 0 || i === numRaw - 1) {
+        smoothX[i] = rawPts[i].x;
+        smoothY[i] = rawPts[i].y;
+        smoothP[i] = rawPts[i].pressure;
+        smoothV[i] = rawSpeeds[i];
+        continue;
+      }
+
+      const sCenter = rawArcLengths[i];
+      let sumW = 0;
+      let sumX = 0;
+      let sumY = 0;
+      let sumP = 0;
+      let sumV = 0;
+
+      // Scan backwards within filterRadius
+      for (let j = i; j >= 0; j--) {
+        const ds = sCenter - rawArcLengths[j];
+        if (ds > filterRadius) break;
+        const w = Math.exp(-(ds * ds) / twoSigmaSq);
+        sumW += w;
+        sumX += rawPts[j].x * w;
+        sumY += rawPts[j].y * w;
+        sumP += rawPts[j].pressure * w;
+        sumV += rawSpeeds[j] * w;
+      }
+      // Scan forwards within filterRadius
+      for (let j = i + 1; j < numRaw; j++) {
+        const ds = rawArcLengths[j] - sCenter;
+        if (ds > filterRadius) break;
+        const w = Math.exp(-(ds * ds) / twoSigmaSq);
+        sumW += w;
+        sumX += rawPts[j].x * w;
+        sumY += rawPts[j].y * w;
+        sumP += rawPts[j].pressure * w;
+        sumV += rawSpeeds[j] * w;
+      }
+
+      if (sumW > 0.0001) {
+        // Taper smoothing near stroke endpoints so entry/exit tips remain sharp and responsive
+        const distFromEnd = Math.min(sCenter, totalRawArcLen - sCenter);
+        const endBlend = Math.min(1.0, distFromEnd / Math.max(3.0, sigma * 0.75));
+        smoothX[i] = rawPts[i].x * (1 - endBlend) + (sumX / sumW) * endBlend;
+        smoothY[i] = rawPts[i].y * (1 - endBlend) + (sumY / sumW) * endBlend;
+        smoothP[i] = rawPts[i].pressure * (1 - endBlend) + (sumP / sumW) * endBlend;
+        smoothV[i] = rawSpeeds[i] * (1 - endBlend) + (sumV / sumW) * endBlend;
+      } else {
+        smoothX[i] = rawPts[i].x;
+        smoothY[i] = rawPts[i].y;
+        smoothP[i] = rawPts[i].pressure;
+        smoothV[i] = rawSpeeds[i];
+      }
+    }
+  } else {
+    for (let i = 0; i < numRaw; i++) {
+      smoothX[i] = rawPts[i].x;
+      smoothY[i] = rawPts[i].y;
+      smoothP[i] = rawPts[i].pressure;
+      smoothV[i] = rawSpeeds[i];
+    }
+  }
+
+  // Monotone Cubic Hermite Tangents for continuous C1 pressure interpolation without step artifacts
+  const pTangents = new Float64Array(numRaw);
+  if (numRaw >= 2) {
+    const secants = new Float64Array(numRaw - 1);
+    for (let k = 0; k < numRaw - 1; k++) {
+      const ds = Math.max(0.001, rawArcLengths[k + 1] - rawArcLengths[k]);
+      secants[k] = (smoothP[k + 1] - smoothP[k]) / ds;
+    }
+    pTangents[0] = secants[0];
+    pTangents[numRaw - 1] = secants[numRaw - 2];
+    for (let k = 1; k < numRaw - 1; k++) {
+      if (secants[k - 1] * secants[k] <= 0) {
+        pTangents[k] = 0;
+      } else {
+        pTangents[k] = (secants[k - 1] + secants[k]) * 0.5;
+      }
+    }
+  }
+
+  const evalHermitePressure = (k: number, u: number, h: number): number => {
+    const p0 = smoothP[k];
+    const p1 = smoothP[k + 1];
+    const m0 = pTangents[k] * h;
+    const m1 = pTangents[k + 1] * h;
+    const u2 = u * u;
+    const u3 = u2 * u;
+    const h00 = 2 * u3 - 3 * u2 + 1;
+    const h10 = u3 - 2 * u2 + u;
+    const h01 = -2 * u3 + 3 * u2;
+    const h11 = u3 - u2;
+    const val = h00 * p0 + h10 * m0 + h01 * p1 + h11 * m1;
+    return Math.max(0.0, Math.min(1.0, val));
+  };
+
+  // Centripetal Catmull-Rom spline evaluator: alpha = 0.5 mathematically prevents self-intersections and cusps
+  const evalCentripetalCatmullRom = (
+    p0x: number, p0y: number,
+    p1x: number, p1y: number,
+    p2x: number, p2y: number,
+    p3x: number, p3y: number,
+    u: number
+  ): { x: number; y: number } => {
+    const d01 = Math.pow(Math.hypot(p1x - p0x, p1y - p0y), 0.5) || 0.0001;
+    const d12 = Math.pow(Math.hypot(p2x - p1x, p2y - p1y), 0.5) || 0.0001;
+    const d23 = Math.pow(Math.hypot(p3x - p2x, p3y - p2y), 0.5) || 0.0001;
+
+    const t0 = 0;
+    const t1 = t0 + d01;
+    const t2 = t1 + d12;
+    const t3 = t2 + d23;
+
+    const t = t1 + u * (t2 - t1);
+
+    const a1x = ((t1 - t) * p0x + (t - t0) * p1x) / (t1 - t0);
+    const a1y = ((t1 - t) * p0y + (t - t0) * p1y) / (t1 - t0);
+    const a2x = ((t2 - t) * p1x + (t - t1) * p2x) / (t2 - t1);
+    const a2y = ((t2 - t) * p1y + (t - t1) * p2y) / (t2 - t1);
+    const a3x = ((t3 - t) * p2x + (t - t2) * p3x) / (t3 - t2);
+    const a3y = ((t3 - t) * p2y + (t - t2) * p3y) / (t3 - t2);
+
+    const b1x = ((t2 - t) * a1x + (t - t0) * a2x) / (t2 - t0);
+    const b1y = ((t2 - t) * a1y + (t - t0) * a2y) / (t2 - t0);
+    const b2x = ((t3 - t) * a2x + (t - t1) * a3x) / (t3 - t1);
+    const b2y = ((t3 - t) * a2y + (t - t1) * a3y) / (t3 - t1);
+
+    const cx = ((t2 - t) * b1x + (t - t1) * b2x) / (t2 - t1);
+    const cy = ((t2 - t) * b1y + (t - t1) * b2y) / (t2 - t1);
+
+    return { x: cx, y: cy };
+  };
+
+  // 3. Resample & Spline-Interpolate centerline at fine sub-segment physical intervals
+  // Guarantees silky smooth curves without polygonal chords or pressure discretization jitter
+  const densityMultiplier = options?.density === 'ultra' ? 0.75 : options?.density === 'normal' ? 1.4 : 1.0;
+  const customStep = options?.subdivisionStep;
+  const stepTarget = (customStep || (intensityNorm <= 0.05 ? 1.25 : 1.25 + 0.75 * intensityNorm)) * densityMultiplier;
+
+  const resampled: { x: number; y: number; pressure: number; speed?: number; time?: number }[] = [];
+  resampled.push({ x: smoothX[0], y: smoothY[0], pressure: smoothP[0], speed: smoothV[0], time: rawPts[0].time });
+
+  for (let i = 0; i < numRaw - 1; i++) {
+    const p0x = i > 0 ? smoothX[i - 1] : smoothX[i];
+    const p0y = i > 0 ? smoothY[i - 1] : smoothY[i];
+    const p1x = smoothX[i];
+    const p1y = smoothY[i];
+    const p1v = smoothV[i];
+    const p2x = smoothX[i + 1];
+    const p2y = smoothY[i + 1];
+    const p2v = smoothV[i + 1];
+    const p3x = i + 2 < numRaw ? smoothX[i + 2] : p2x;
+    const p3y = i + 2 < numRaw ? smoothY[i + 2] : p2y;
+
+    const segDist = Math.hypot(p2x - p1x, p2y - p1y);
+    const subSteps = Math.max(1, Math.ceil(segDist / stepTarget));
+
+    for (let s = 1; s <= subSteps; s++) {
+      const u = s / subSteps;
+      const pt = evalCentripetalCatmullRom(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, u);
+      const pres = evalHermitePressure(i, u, segDist);
+      const vel = p1v + (p2v - p1v) * u;
+      resampled.push({ x: pt.x, y: pt.y, pressure: pres, speed: vel });
     }
   }
 
   const n = resampled.length;
   if (n < 2) {
-    return strokePointsToOutline([resampled[0]], strokeWidth, style, roundCap, pressureSensitivity);
+    return strokePointsToOutline([resampled[0]], strokeWidth, style, roundCap, pressureSensitivity, pressureCurve);
   }
 
-  // Calculate cumulative distance for stroke progress
+  // 4. Cumulative distance
   const dists = new Float64Array(n);
   for (let i = 1; i < n; i++) {
     const dx = resampled[i].x - resampled[i - 1].x;
@@ -2197,16 +2956,17 @@ export function strokePointsToOutline(
   }
   const totalLength = dists[n - 1] || 1;
 
-  // Compute smooth tangent directions and normal vectors using flat Float64Arrays
+  // 5. Continuous Tangents and Normals (with smooth moving window to prevent curve jitter)
   const txArr = new Float64Array(n);
   const tyArr = new Float64Array(n);
   const nxArr = new Float64Array(n);
   const nyArr = new Float64Array(n);
   const turnArr = new Float64Array(n);
 
+  const windowRadius = Math.max(2, Math.min(6, Math.round(16 / stepTarget)));
   for (let i = 0; i < n; i++) {
-    const prevIdx = Math.max(0, i - 2);
-    const nextIdx = Math.min(n - 1, i + 2);
+    const prevIdx = Math.max(0, i - windowRadius);
+    const nextIdx = Math.min(n - 1, i + windowRadius);
     let dx = resampled[nextIdx].x - resampled[prevIdx].x;
     let dy = resampled[nextIdx].y - resampled[prevIdx].y;
     if (dx * dx + dy * dy < 0.000001) {
@@ -2216,220 +2976,310 @@ export function strokePointsToOutline(
     const len = Math.hypot(dx, dy) || 1;
     txArr[i] = dx / len;
     tyArr[i] = dy / len;
-    nxArr[i] = -tyArr[i];
-    nyArr[i] = txArr[i];
+  }
 
-    // Turning angle (curvature)
-    if (i > 0 && i < n - 1) {
-      const v1x = resampled[i].x - resampled[i - 1].x;
-      const v1y = resampled[i].y - resampled[i - 1].y;
-      const v2x = resampled[i + 1].x - resampled[i].x;
-      const v2y = resampled[i + 1].y - resampled[i].y;
-      const dot = v1x * v2x + v1y * v2y;
-      const mag = Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y) || 1;
-      const cosVal = Math.max(-1, Math.min(1, dot / mag));
-      turnArr[i] = Math.acos(cosVal);
+  // Smooth tangent vectors along curves to eliminate microscopic direction jitter
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 1; i < n - 1; i++) {
+      const avgTx = txArr[i - 1] * 0.25 + txArr[i] * 0.5 + txArr[i + 1] * 0.25;
+      const avgTy = tyArr[i - 1] * 0.25 + tyArr[i] * 0.5 + tyArr[i + 1] * 0.25;
+      const len = Math.hypot(avgTx, avgTy) || 1;
+      txArr[i] = avgTx / len;
+      tyArr[i] = avgTy / len;
     }
   }
 
-  // Precompute raw left and right half-widths along the stroke
+  for (let i = 0; i < n; i++) {
+    nxArr[i] = -tyArr[i];
+    nyArr[i] = txArr[i];
+
+    if (i > 0 && i < n - 1) {
+      // Signed turn angle (cross product of previous and next tangents)
+      const cross = txArr[i - 1] * tyArr[i + 1] - tyArr[i - 1] * txArr[i + 1];
+      const dot = txArr[i - 1] * txArr[i + 1] + tyArr[i - 1] * tyArr[i + 1];
+      turnArr[i] = Math.atan2(cross, Math.max(-1, Math.min(1, dot)));
+    }
+  }
+
+  // Detect if the stroke finishes with a dynamic calligraphic flick (払い・跳ね)
+  // Evaluates terminal pressure, terminal velocity, and curvature snap
+  let isTailFlick = false;
+  if (n >= 4 && totalLength > 15) {
+    const pEnd = resampled[n - 1].pressure ?? 0.5;
+    const pBefore = resampled[Math.max(0, Math.floor(n * 0.7))].pressure ?? 0.5;
+    const vEnd = resampled[n - 1].speed ?? 0.5;
+    const vBefore = resampled[Math.max(0, Math.floor(n * 0.7))].speed ?? 0.5;
+
+    // A: Pressure dropped significantly towards the end (pen lift)
+    const isPressureDropping = pressureSensitivity !== 'off' && (pEnd < 0.38 || (pEnd - pBefore) < -0.12);
+    // B: High velocity flick or acceleration towards end (fast swipe with mouse or pen)
+    const isSpeedFlick = vEnd > 1.05 || (vEnd > 0.72 && vEnd > vBefore * 1.25);
+    // C: Terminal hook / jump (跳ね) with quick release
+    const endTurnAngle = Math.abs(turnArr[Math.max(0, n - 2)] || 0);
+    const isHookFlick = endTurnAngle > 0.32 && (vEnd > 0.60 || pEnd < 0.45);
+
+    isTailFlick = isPressureDropping || isSpeedFlick || isHookFlick;
+  }
+
+  // 6. Width Modulation calculation
   const rawLeftWidths = new Float64Array(n);
   const rawRightWidths = new Float64Array(n);
 
   for (let i = 0; i < n; i++) {
-    const nx = nxArr[i];
-    const ny = nyArr[i];
-    const angleTurn = turnArr[i];
-    const normDist = dists[i] / totalLength; // 0.0 to 1.0
+    const normDist = dists[i] / totalLength;
 
-    // Velocity factor (only active if pressure sensitivity is ON and timestamps exist)
-    let velocityFactor = 1.0;
-    if (pressureSensitivity !== 'off' && resampled[i].time && i > 0 && resampled[i - 1].time) {
-      const dt = Math.max(1, resampled[i].time! - resampled[i - 1].time!);
-      const ds = Math.hypot(resampled[i].x - resampled[i - 1].x, resampled[i].y - resampled[i - 1].y);
-      const speed = ds / dt;
-      // Gentle, smoothed velocity modulation (max ±12%)
-      velocityFactor = Math.max(0.88, Math.min(1.12, 1.15 / (1.0 + speed * 0.25)));
-    }
-
-    // Determine point pressure
     let pointPressure = 0.5;
     if (pressureSensitivity === 'off') {
       pointPressure = 0.5;
     } else {
       const rawP = resampled[i].pressure ?? 0.5;
-      if (pressureSensitivity === 'high') {
-        pointPressure = Math.min(1.0, Math.pow(Math.max(0.01, rawP), 0.72));
-      } else if (pressureSensitivity === 'low') {
-        pointPressure = Math.min(1.0, Math.pow(Math.max(0.01, rawP), 1.35));
-      } else {
-        pointPressure = Math.min(1.0, Math.pow(Math.max(0.01, rawP), 0.92));
-      }
+      pointPressure = evaluatePressureCurve(rawP, pressureCurve, pressureSensitivity);
     }
 
     let leftHalfWidth = strokeWidth / 2;
     let rightHalfWidth = strokeWidth / 2;
 
     if (style === 'signpen') {
-      // 1. 水性サインペン (フェルトペン): Smooth, uniform fiber tip with gentle organic pressure response
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.70 + 0.60 * pointPressure);
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.35 + 1.15 * Math.pow(pointPressure, 1.0));
       leftHalfWidth = rightHalfWidth = Math.max(3, (strokeWidth / 2) * presFactor);
     } else if (style === 'sumi') {
-      // 2. 墨だまり筆: Rich sumi ink with authentic calligraphic pooling at start, sharp turns, and stops
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.40 + 1.20 * Math.pow(pointPressure, 0.9));
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.22 + 1.40 * Math.pow(pointPressure, 1.05));
       let sumiPool = 1.0;
-
-      // 始筆の墨溜まり
       if (normDist < 0.12) {
         const t = (0.12 - normDist) / 0.12;
-        sumiPool += 0.38 * Math.sin(t * Math.PI * 0.5);
-      } else if (normDist > 0.85) {
-        // 終筆の溜まり・抜け
-        const t = (normDist - 0.85) / 0.15;
-        if (pressureSensitivity !== 'off' && pointPressure < 0.45) {
-          sumiPool = Math.max(0.12, 1.0 - t * 0.88);
+        sumiPool += 0.35 * Math.sin(t * Math.PI * 0.5);
+      } else if (normDist > 0.82) {
+        const t = (normDist - 0.82) / 0.18;
+        if (isTailFlick) {
+          sumiPool = Math.max(0.08, Math.pow(1.0 - t, 1.35));
         } else {
-          sumiPool += 0.30 * Math.sin(t * Math.PI);
+          sumiPool += 0.25 * Math.sin(t * Math.PI);
         }
       }
-
-      // 転節・角の墨溜まり (角でインクがにじみ溜まる)
-      if (angleTurn > 0.40) {
-        sumiPool += Math.min(0.35, (angleTurn / Math.PI) * 0.35);
+      const absTurn = Math.abs(turnArr[i]);
+      if (absTurn > 0.40) {
+        sumiPool += Math.min(0.25, (absTurn / Math.PI) * 0.25);
       }
-
       leftHalfWidth = rightHalfWidth = Math.max(3, (strokeWidth / 2) * presFactor * sumiPool);
     } else if (style === 'marumoji') {
-      // 3. 丸文字・ぽっぷ: Plump cute handwriting with rounded ends and bubble terminal nodes
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.85 + 0.30 * pointPressure);
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.45 + 0.95 * pointPressure);
       let bubbleEnd = 1.0;
       if (normDist < 0.12) {
         const t = Math.sin((normDist / 0.12) * Math.PI * 0.5);
-        bubbleEnd = 1.28 - 0.28 * t;
+        bubbleEnd = 1.25 - 0.25 * t;
       } else if (normDist > 0.88) {
         const t = Math.sin(((normDist - 0.88) / 0.12) * Math.PI * 0.5);
-        bubbleEnd = 1.0 + 0.28 * t;
+        bubbleEnd = 1.0 + 0.25 * t;
       }
       leftHalfWidth = rightHalfWidth = Math.max(4, (strokeWidth / 2) * presFactor * bubbleEnd);
     } else if (style === 'brush') {
-      // 4. 毛筆・筆ペン (Authentic Japanese Calligraphy & Brush Pen Dynamics):
-      // 45° brush nib angle (縦太横細・右払いの張り・始筆・転節・終筆)
       const ux = txArr[i];
       const uy = tyArr[i];
-      // Continuous directional modulation (vertical strokes bold, horizontal strokes lean, right-down rich)
-      const angleModulation = 0.82 + 0.28 * Math.abs(uy) + 0.36 * Math.max(0, ux * 0.65 + uy * 0.75);
+      const nx = nxArr[i];
+      const ny = nyArr[i];
 
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.32 + 1.36 * Math.pow(pointPressure, 0.95));
-      const baseWidth = (strokeWidth / 2) * angleModulation * presFactor * velocityFactor;
+      // 1. 書道の筆運び角と方向性モジュレーション（永字八法の筆勢）
+      // 対角成分（右下方向・捺と、右上方向・提/跳ね）
+      const diagRightDown = (ux + uy) * 0.7071; // 1.0 at 45° down-right, -1.0 at up-left
+      let dirWeight = 1.0;
+      if (uy > 0.15) {
+        // 下向き運筆（縦画・下向き払い）
+        if (diagRightDown > 0.35) {
+          // 右払い（捺）: 筆の腹が最も沈み込み、最大級の量感と張り
+          dirWeight = 1.15 + 0.38 * diagRightDown;
+        } else if (ux < -0.15) {
+          // 左払い（撇）: 引き締まった骨格から先端へ
+          dirWeight = 0.95 + 0.20 * uy;
+        } else {
+          // 垂直の縦画（努）: 重厚で安定した太さ
+          dirWeight = 1.14 + 0.18 * uy;
+        }
+      } else if (uy < -0.15) {
+        // 上向き運筆（跳ね・提・上向き抜き）: 穂先のみで抜けるシャープな線
+        dirWeight = Math.max(0.48, 0.72 + 0.28 * uy);
+      } else {
+        // 水平運筆（横画・勒）: 規律ある細身の引き締まり
+        dirWeight = 0.74 + 0.14 * Math.abs(uy);
+      }
 
-      let leftMul = 1.0;
-      let rightMul = 1.0;
+      // 2. 速度（Velocity）および筆圧による動的インク量
+      const localSpeed = resampled[i].speed ?? 0.5;
+      const speedMul = Math.max(0.68, Math.min(1.30, 1.12 - localSpeed * 0.28));
 
-      // 1. 始筆・打ち込み (Entry head: smooth 45° bristle flare)
+      let presFactor = 1.0;
+      if (pressureSensitivity === 'off') {
+        presFactor = speedMul;
+      } else {
+        const p = pointPressure;
+        const pSens = Math.pow(p, 1.05);
+        presFactor = (0.20 + 1.45 * pSens) * (0.82 + 0.25 * speedMul);
+      }
+
+      const baseWidth = (strokeWidth / 2) * dirWeight * presFactor;
+
+      // 3. 毛筆の左右非対称性（穂先側と筆の腹）
+      // 和風毛筆では、穂先（鋒）が紙の左上、筆の腹（毛束）が右下に位置する
+      // canvas座標系（+y下向き）における腹軸（1/√2, 1/√2）への法線投影
+      const bellyX = 0.7071;
+      const bellyY = 0.7071;
+      const leftBellyProj = nx * bellyX + ny * bellyY; // -1 to +1
+      const asymBias = 0.14 * leftBellyProj;
+      let leftMul = 1.0 + asymBias;
+      let rightMul = 1.0 - asymBias;
+
+      // 4. 転折（Tensetsu - 漢字の折れ・角での肩の張り出し）
+      const localTurn = turnArr[i];
+      if (localTurn > 0.20) {
+        // 時計回りの角（横画から縦画への折れなど）: 外側の右肩が力強く張る
+        const shoulder = Math.min(0.42, Math.abs(localTurn) * 0.35);
+        rightMul += shoulder;
+      } else if (localTurn < -0.20) {
+        // 反時計回りの角: 外側の左肩が張る
+        const shoulder = Math.min(0.42, Math.abs(localTurn) * 0.35);
+        leftMul += shoulder;
+      }
+
+      // 5. 起筆（Entry / 入筆 - トン）
       if (normDist < 0.12) {
         const t = normDist / 0.12;
-        const entryFlare = 0.72 + 0.28 * Math.sin(t * Math.PI * 0.5);
-        leftMul *= entryFlare * 1.12;
-        rightMul *= entryFlare * 0.92;
+        const entryFlare = 0.40 + 0.60 * Math.pow(t, 0.65);
+        leftMul *= (0.75 + 0.25 * t);
+        rightMul *= entryFlare;
       }
 
-      // 2. 転節・折れ (Corner shoulder flare)
-      if (angleTurn > 0.35) {
-        const shoulder = (angleTurn / Math.PI) * 0.22;
-        leftMul += shoulder;
-        rightMul += shoulder * 0.75;
-      }
-
-      // 3. 終筆 (止め・ハネ・払い)
-      if (normDist > 0.80) {
-        const t = (normDist - 0.80) / 0.20; // 0 to 1
-        if (pressureSensitivity !== 'off' && pointPressure < 0.45) {
-          // 払い (Harai / Flick): Smooth taper to clean tip
-          const taper = Math.max(0.08, 1.0 - Math.pow(t, 1.25) * 0.92);
+      // 6. 終筆（Exit / 収筆 - トメ・ハネ・ハライ）
+      if (normDist > 0.70) {
+        const t = (normDist - 0.70) / 0.30;
+        if (isTailFlick) {
+          // 払い・跳ね：穂先に向かって滑らかにスッと抜ける
+          const taper = Math.max(0.06, Math.pow(1.0 - t, 1.4));
           leftMul *= taper;
           rightMul *= taper;
         } else {
-          // 止め (Tome): Smooth settled landing
-          const stopProfile = 1.0 + 0.14 * Math.sin(t * Math.PI) - 0.08 * t;
-          leftMul *= stopProfile;
-          rightMul *= stopProfile;
+          // 止め（トメ）：終端手前で墨を溜めて筆を静かに納める
+          const tomeProfile = 1.0 + 0.16 * Math.sin(t * Math.PI) - 0.10 * Math.pow(t, 2);
+          leftMul *= tomeProfile;
+          rightMul *= tomeProfile;
         }
       }
 
-      leftHalfWidth = Math.max(2.5, baseWidth * leftMul);
-      rightHalfWidth = Math.max(2.5, baseWidth * rightMul);
+      leftHalfWidth = Math.max(2.0, baseWidth * leftMul);
+      rightHalfWidth = Math.max(2.0, baseWidth * rightMul);
     } else if (style === 'fountain') {
-      // 5. 万年筆・Gペン: Directional angle contrast with downward flex nib dynamics (crisp dip pen)
       const ux = txArr[i];
       const uy = tyArr[i];
       const angle = Math.atan2(Math.abs(uy), Math.abs(ux) + 0.001);
-      // Downward strokes pull nib slit open (flexing wide), while upward and horizontal lines are ultra sharp
-      const isDownward = uy > 0 ? 0.45 * uy : 0;
-      const angleContrast = 0.22 + 0.90 * Math.sin(angle) + isDownward;
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.28 + 1.25 * Math.pow(pointPressure, 1.15));
-      leftHalfWidth = rightHalfWidth = Math.max(1.8, (strokeWidth / 2) * angleContrast * presFactor);
+      const isDownward = uy > 0 ? 0.40 * uy : 0;
+      const angleContrast = 0.25 + 0.85 * Math.sin(angle) + isDownward;
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.20 + 1.40 * Math.pow(pointPressure, 1.15));
+      leftHalfWidth = rightHalfWidth = Math.max(2.0, (strokeWidth / 2) * angleContrast * presFactor);
+    } else if (style === 'mincho_nib') {
+      const ux = txArr[i];
+      const uy = tyArr[i];
+      const vertContrast = 0.38 + 1.12 * Math.pow(Math.abs(uy), 0.85);
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.35 + 1.15 * Math.pow(pointPressure, 1.1));
+      leftHalfWidth = rightHalfWidth = Math.max(2.0, (strokeWidth / 2) * vertContrast * presFactor);
+    } else if (style === 'reisho_chisel') {
+      const ux = txArr[i];
+      const uy = tyArr[i];
+      const flatAngle = Math.atan2(Math.abs(uy * 0.9 + ux * 0.25), Math.abs(ux) + 0.001);
+      const reishoContrast = 0.32 + 1.05 * Math.sin(flatAngle);
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.50 + 0.90 * pointPressure);
+      leftHalfWidth = rightHalfWidth = Math.max(3.0, (strokeWidth / 2) * reishoContrast * presFactor);
+    } else if (style === 'g_pen') {
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.12 + 1.65 * Math.pow(pointPressure, 1.30));
+      leftHalfWidth = rightHalfWidth = Math.max(1.5, (strokeWidth / 2) * presFactor);
+    } else if (style === 'pixel_dot') {
+      leftHalfWidth = rightHalfWidth = Math.max(3.0, strokeWidth / 2);
     } else if (style === 'marker') {
-      // 6. 丸マーカー: Stable consistent monoline
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.85 + 0.30 * pointPressure);
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.55 + 0.70 * pointPressure);
       leftHalfWidth = rightHalfWidth = Math.max(3, (strokeWidth / 2) * presFactor);
     } else if (style === 'ballpoint') {
-      // 7. ゲルボールペン: Crisp fine notebook line (0.38mm - 0.5mm feel)
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.65 + 0.65 * pointPressure);
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.40 + 1.00 * pointPressure);
       leftHalfWidth = rightHalfWidth = Math.max(2, (strokeWidth / 3.0) * presFactor);
     } else if (style === 'chalk') {
-      // 8. ぽってりクレヨン・チョーク: Chubby bubbly stroke with soft volume
       let bubble = 1.0;
-      if (normDist < 0.10 || normDist > 0.90) {
-        bubble = 1.15;
-      }
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.75 + 0.45 * pointPressure);
+      if (normDist < 0.10 || normDist > 0.90) bubble = 1.12;
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.50 + 0.85 * pointPressure);
       leftHalfWidth = rightHalfWidth = Math.max(4, (strokeWidth * 0.54) * presFactor * bubble);
     } else if (style === 'calligraphy') {
-      // 9. 平筆カリグラフィー (45° Broad-Edge Chisel Nib): Pure fixed 45° nib ribbon geometry
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.35 + 1.15 * Math.pow(pointPressure, 1.0));
-      leftHalfWidth = rightHalfWidth = Math.max(2.0, (strokeWidth / 2) * presFactor);
-    } else if (style === 'highlighter') {
-      // 10. 平マーカー・リボン (90° Flat Nib): Pure fixed 90° flat ribbon geometry
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.80 + 0.40 * pointPressure);
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.25 + 1.35 * Math.pow(pointPressure, 1.05));
       leftHalfWidth = rightHalfWidth = Math.max(2.5, (strokeWidth / 2) * presFactor);
+    } else if (style === 'highlighter') {
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.70 + 0.50 * pointPressure);
+      leftHalfWidth = rightHalfWidth = Math.max(3.0, (strokeWidth / 2) * presFactor);
     } else if (style === 'pencil') {
-      // 11. 鉛筆・細字: Fine delicate stroke with responsive pressure sensitivity
-      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.40 + 0.95 * pointPressure);
-      leftHalfWidth = rightHalfWidth = Math.max(1.5, (strokeWidth / 3.6) * presFactor);
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.25 + 1.25 * Math.pow(pointPressure, 1.10));
+      leftHalfWidth = rightHalfWidth = Math.max(1.8, (strokeWidth / 3.6) * presFactor);
     } else if (style === 'wobbly') {
-      // 13. ゆらぎ手書き: Gentle organic micro-wobble and human tremolo
-      const wobble = Math.sin(normDist * 24 + i * 1.2) * 0.14;
-      const presFactor = (pressureSensitivity === 'off' ? 1.0 : (0.75 + 0.45 * pointPressure)) + wobble;
-      leftHalfWidth = rightHalfWidth = Math.max(3, (strokeWidth / 2) * presFactor);
+      const wobbleLeft = Math.sin(normDist * 28 + i * 0.75) * 0.12;
+      const wobbleRight = Math.cos(normDist * 32 - i * 0.65) * 0.11;
+      const presFactor = pressureSensitivity === 'off' ? 1.0 : (0.50 + 0.80 * pointPressure);
+      leftHalfWidth = Math.max(3, (strokeWidth / 2) * (presFactor + wobbleLeft));
+      rightHalfWidth = Math.max(3, (strokeWidth / 2) * (presFactor + wobbleRight));
     }
 
     rawLeftWidths[i] = leftHalfWidth;
     rawRightWidths[i] = rightHalfWidth;
   }
 
-  // 2. Width Smoothing Pass (Guaranteeing zero bumpiness / mokomoko along the stroke)
+  // 7. Width Smoothing Pass (Adaptive pass count for silky smooth transitions)
   const smoothedLeftWidths = new Float64Array(n);
   const smoothedRightWidths = new Float64Array(n);
-  if (n > 0) {
-    smoothedLeftWidths[0] = rawLeftWidths[0];
-    smoothedRightWidths[0] = rawRightWidths[0];
-    const lastIdx = n - 1;
-    for (let i = 1; i < lastIdx; i++) {
-      smoothedLeftWidths[i] = (rawLeftWidths[i - 1] + rawLeftWidths[i] * 2 + rawLeftWidths[i + 1]) * 0.25;
-      smoothedRightWidths[i] = (rawRightWidths[i - 1] + rawRightWidths[i] * 2 + rawRightWidths[i + 1]) * 0.25;
+  smoothedLeftWidths.set(rawLeftWidths);
+  smoothedRightWidths.set(rawRightWidths);
+
+  const defaultPasses = intensityNorm > 0.05 ? Math.max(2, Math.round(2 + 4 * intensityNorm)) : 2;
+  const widthPasses = options?.widthSmoothingPasses ?? defaultPasses;
+  for (let pass = 0; pass < widthPasses; pass++) {
+    for (let i = 1; i < n - 1; i++) {
+      smoothedLeftWidths[i] = (smoothedLeftWidths[i - 1] + smoothedLeftWidths[i] * 2 + smoothedLeftWidths[i + 1]) * 0.25;
+      smoothedRightWidths[i] = (smoothedRightWidths[i - 1] + smoothedRightWidths[i] * 2 + smoothedRightWidths[i + 1]) * 0.25;
     }
-    smoothedLeftWidths[lastIdx] = rawLeftWidths[lastIdx];
-    smoothedRightWidths[lastIdx] = rawRightWidths[lastIdx];
   }
 
-  // Generate left and right offset boundary points
-  const leftPoints: Point[] = [];
-  const rightPoints: Point[] = [];
+  // Width rate of change with respect to arc length for boundary curvature calculations
+  const dwL_ds = new Float64Array(n);
+  const dwR_ds = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const prevIdx = Math.max(0, i - 1);
+    const nextIdx = Math.min(n - 1, i + 1);
+    const ds = Math.max(0.001, dists[nextIdx] - dists[prevIdx]);
+    dwL_ds[i] = (smoothedLeftWidths[nextIdx] - smoothedLeftWidths[prevIdx]) / ds;
+    dwR_ds[i] = (smoothedRightWidths[nextIdx] - smoothedRightWidths[prevIdx]) / ds;
+  }
 
+  // Curvature-based inner edge clamping: prevents inner curve from self-intersecting or forming knots
+  for (let i = 1; i < n - 1; i++) {
+    const turn = turnArr[i];
+    const absTurn = Math.abs(turn);
+    if (absTurn > 0.03) {
+      const stepDist = dists[i + 1] - dists[i - 1];
+      const radiusOfCurvature = stepDist / absTurn;
+      if (turn > 0) {
+        // Turning left: left side is inner edge
+        const maxInnerW = Math.max(2.5, radiusOfCurvature * 0.85);
+        if (smoothedLeftWidths[i] > maxInnerW) {
+          smoothedLeftWidths[i] = maxInnerW;
+        }
+      } else {
+        // Turning right: right side is inner edge
+        const maxInnerW = Math.max(2.5, radiusOfCurvature * 0.85);
+        if (smoothedRightWidths[i] > maxInnerW) {
+          smoothedRightWidths[i] = maxInnerW;
+        }
+      }
+    }
+  }
+
+  // 8. Chisel Ribbon vs Normal Offset Coordinates
   const isChiselStyle = style === 'calligraphy' || style === 'highlighter';
   const chiselAngleRad = style === 'highlighter' ? (90 * Math.PI) / 180 : (45 * Math.PI) / 180;
   const chiselDx = Math.cos(chiselAngleRad);
   const chiselDy = Math.sin(chiselAngleRad);
+
+  const rightOffsets: Point[] = new Array(n);
+  const leftOffsets: Point[] = new Array(n);
 
   for (let i = 0; i < n; i++) {
     const nx = nxArr[i];
@@ -2438,94 +3288,234 @@ export function strokePointsToOutline(
     const rw = smoothedRightWidths[i];
 
     if (isChiselStyle) {
-      // Broad-edge chisel nib: fixed nib angle ribbon offset
-      // A tiny normal offset ensures strokes drawn along 45° remain a clean 2D vector path
-      const minNormalPad = 0.8;
-      leftPoints.push({
-        x: Math.round(resampled[i].x + chiselDx * lw + nx * minNormalPad),
-        y: Math.round(resampled[i].y + chiselDy * lw + ny * minNormalPad),
-      });
-      rightPoints.push({
-        x: Math.round(resampled[i].x - chiselDx * rw - nx * minNormalPad),
-        y: Math.round(resampled[i].y - chiselDy * rw - ny * minNormalPad),
-      });
+      // 法線ベクトルとチゼルベクトルの内積により、進行方向に対する「左側」を常に正しく判定
+      const dotN = chiselDx * nx + chiselDy * ny;
+      const sign = dotN >= 0 ? 1 : -1;
+      const cLeftX = chiselDx * sign;
+      const cLeftY = chiselDy * sign;
+
+      // チゼル角度とストロークが平行に動いた際のリボンの潰れ・裏返りを防ぐ最小厚み
+      const minEdgeThickness = Math.max(2.0, (strokeWidth / 2) * 0.09);
+
+      leftOffsets[i] = {
+        x: Math.round(resampled[i].x + cLeftX * lw + nx * minEdgeThickness),
+        y: Math.round(resampled[i].y + cLeftY * lw + ny * minEdgeThickness),
+      };
+      rightOffsets[i] = {
+        x: Math.round(resampled[i].x - cLeftX * rw - nx * minEdgeThickness),
+        y: Math.round(resampled[i].y - cLeftY * rw - ny * minEdgeThickness),
+      };
     } else {
-      leftPoints.push({
-        x: Math.round(resampled[i].x + nx * lw),
-        y: Math.round(resampled[i].y + ny * lw),
-      });
-      rightPoints.push({
+      rightOffsets[i] = {
         x: Math.round(resampled[i].x - nx * rw),
         y: Math.round(resampled[i].y - ny * rw),
+      };
+      leftOffsets[i] = {
+        x: Math.round(resampled[i].x + nx * lw),
+        y: Math.round(resampled[i].y + ny * lw),
+      };
+    }
+  }
+
+  // 9. Adaptive Boundary Sampling
+  // Subdivides into adaptive segments where thickness or curvature changes dynamically.
+  // When smoothing is turned off or lowered, preserves full fidelity with appropriate minimum step
+  // to avoid creating redundant microscopic nodes (e.g. 500+ nodes on a single straight line).
+  const baseSampleDist = intensityNorm <= 0.05 ? 6.0 : 6.0 + 4.0 * intensityNorm;
+  const sampleTurnThreshold = intensityNorm <= 0.05 ? 0.16 : 0.16 + 0.12 * intensityNorm;
+
+  const sampleRight: { pt: Point; idx: number }[] = [{ pt: rightOffsets[0], idx: 0 }];
+  let accumDistRight = 0;
+  let accumTurnRight = 0;
+
+  for (let i = 1; i < n; i++) {
+    const d = Math.hypot(rightOffsets[i].x - rightOffsets[i - 1].x, rightOffsets[i].y - rightOffsets[i - 1].y);
+    accumDistRight += d;
+    accumTurnRight += Math.abs(turnArr[i]);
+    const isEnd = i === n - 1;
+    const localGrad = Math.abs(dwR_ds[i]);
+    const localTurn = Math.abs(turnArr[i]);
+    const dynamicThresh = Math.max(3.0, baseSampleDist / (1.0 + 5.0 * localGrad + 2.5 * localTurn));
+
+    if (accumDistRight >= dynamicThresh || accumTurnRight >= sampleTurnThreshold || isEnd) {
+      sampleRight.push({ pt: rightOffsets[i], idx: i });
+      accumDistRight = 0;
+      accumTurnRight = 0;
+    }
+  }
+
+  const sampleLeft: { pt: Point; idx: number }[] = [{ pt: leftOffsets[n - 1], idx: n - 1 }];
+  let accumDistLeft = 0;
+  let accumTurnLeft = 0;
+
+  for (let i = n - 2; i >= 0; i--) {
+    const d = Math.hypot(leftOffsets[i].x - leftOffsets[i + 1].x, leftOffsets[i].y - leftOffsets[i + 1].y);
+    accumDistLeft += d;
+    accumTurnLeft += Math.abs(turnArr[i]);
+    const isStart = i === 0;
+    const localGrad = Math.abs(dwL_ds[i]);
+    const localTurn = Math.abs(turnArr[i]);
+    const dynamicThresh = Math.max(3.0, baseSampleDist / (1.0 + 5.0 * localGrad + 2.5 * localTurn));
+
+    if (accumDistLeft >= dynamicThresh || accumTurnLeft >= sampleTurnThreshold || isStart) {
+      sampleLeft.push({ pt: leftOffsets[i], idx: i });
+      accumDistLeft = 0;
+      accumTurnLeft = 0;
+    }
+  }
+
+  // 10. Assemble Closed Loop with Semicircular / Tapered Caps
+  const loopPoints: Point[] = [];
+
+  // Add Right Side Points
+  for (let i = 0; i < sampleRight.length; i++) {
+    loopPoints.push(sampleRight[i].pt);
+  }
+
+  // End Cap
+  const endP = resampled[n - 1];
+  const endTx = txArr[n - 1];
+  const endTy = tyArr[n - 1];
+  const endNx = nxArr[n - 1];
+  const endNy = nyArr[n - 1];
+  const endHalfW = (smoothedLeftWidths[n - 1] + smoothedRightWidths[n - 1]) / 2;
+
+  if (style === 'brush' || style === 'sumi') {
+    if (isTailFlick || endHalfW < 4.5) {
+      // 払い・跳ね：丸い半円にせず、鋭利な穂先の1点として自然に抜く
+      const tipExt = Math.max(2.0, Math.min(10.0, endHalfW * 1.25));
+      loopPoints.push({
+        x: Math.round(endP.x + endTx * tipExt),
+        y: Math.round(endP.y + endTy * tipExt),
+      });
+    } else {
+      // 止め（トメ）：端正な蔵鋒・筆返しの納まり
+      loopPoints.push({
+        x: Math.round(endP.x + (endTx * 0.55 - endNx * 0.45) * endHalfW),
+        y: Math.round(endP.y + (endTy * 0.55 - endNy * 0.45) * endHalfW),
+      });
+      loopPoints.push({
+        x: Math.round(endP.x + endTx * (endHalfW * 0.60)),
+        y: Math.round(endP.y + endTy * (endHalfW * 0.60)),
+      });
+      loopPoints.push({
+        x: Math.round(endP.x + (endTx * 0.55 + endNx * 0.45) * endHalfW),
+        y: Math.round(endP.y + (endTy * 0.55 + endNy * 0.45) * endHalfW),
+      });
+    }
+  } else if (roundCap && !isChiselStyle) {
+    if (endHalfW > 3.0) {
+      // 3-point smooth semicircular cap from right boundary to left boundary
+      loopPoints.push({
+        x: Math.round(endP.x + (endTx * 0.707 - endNx * 0.707) * endHalfW),
+        y: Math.round(endP.y + (endTy * 0.707 - endNy * 0.707) * endHalfW),
+      });
+      loopPoints.push({
+        x: Math.round(endP.x + endTx * endHalfW),
+        y: Math.round(endP.y + endTy * endHalfW),
+      });
+      loopPoints.push({
+        x: Math.round(endP.x + (endTx * 0.707 + endNx * 0.707) * endHalfW),
+        y: Math.round(endP.y + (endTy * 0.707 + endNy * 0.707) * endHalfW),
+      });
+    } else {
+      loopPoints.push({
+        x: Math.round(endP.x + endTx * Math.max(2, endHalfW * 0.8)),
+        y: Math.round(endP.y + endTy * Math.max(2, endHalfW * 0.8)),
       });
     }
   }
 
-  // Simplify left and right sides with RDP to keep path nodes clean and easily editable while preserving hand-drawn nuances
-  // Adaptive epsilon based on brush style (0.9 - 1.2px) to prevent polygonal faceting / jagged corners
-  const epsilon = style === 'signpen' || style === 'ballpoint' || style === 'pencil' ? 0.9 : 1.1;
-  const simpLeft = simplifyPointsRDP(leftPoints, epsilon);
-  const simpRight = simplifyPointsRDP(rightPoints, epsilon);
+  // Add Left Side Points (traversing backwards)
+  for (let i = 0; i < sampleLeft.length; i++) {
+    loopPoints.push(sampleLeft[i].pt);
+  }
 
-  // Assemble full loop
-  const allPoints: Point[] = [];
+  // Start Cap
+  const startP = resampled[0];
+  const startTx = txArr[0];
+  const startTy = tyArr[0];
+  const startNx = nxArr[0];
+  const startNy = nyArr[0];
+  const startHalfW = (smoothedLeftWidths[0] + smoothedRightWidths[0]) / 2;
 
-  // Start cap
-  if (roundCap && !isChiselStyle && simpLeft.length > 0 && simpRight.length > 0) {
-    const p0 = resampled[0];
-    const p1 = resampled[1];
-    const dx0 = p0.x - p1.x;
-    const dy0 = p0.y - p1.y;
-    const len0 = Math.hypot(dx0, dy0) || 1;
-    const halfWidth0 = Math.hypot(simpLeft[0].x - simpRight[0].x, simpLeft[0].y - simpRight[0].y) / 2;
-    // For brush style, allow clean 45° entry contour without oversized artificial round cap if entry is sharp
-    if (halfWidth0 > 3) {
-      allPoints.push({
-        x: Math.round(p0.x + (dx0 / len0) * halfWidth0),
-        y: Math.round(p0.y + (dy0 / len0) * halfWidth0),
+  if (style === 'brush') {
+    if (startHalfW < 4.0) {
+      loopPoints.push({
+        x: Math.round(startP.x - startTx * 2.5),
+        y: Math.round(startP.y - startTy * 2.5),
+      });
+    } else {
+      // 伝統的な起筆の表情（斜め約45度の筆先タッチ）
+      loopPoints.push({
+        x: Math.round(startP.x - (startTx * 0.70 + startNx * 0.40) * startHalfW),
+        y: Math.round(startP.y - (startTy * 0.70 + startNy * 0.40) * startHalfW),
+      });
+      loopPoints.push({
+        x: Math.round(startP.x - (startTx * 0.35 - startNx * 0.50) * startHalfW),
+        y: Math.round(startP.y - (startTy * 0.35 - startNy * 0.50) * startHalfW),
+      });
+    }
+  } else if (roundCap && !isChiselStyle) {
+    if (startHalfW > 3.0) {
+      // 3-point smooth semicircular cap from left boundary to right boundary
+      loopPoints.push({
+        x: Math.round(startP.x - (startTx * 0.707 - startNx * 0.707) * startHalfW),
+        y: Math.round(startP.y - (startTy * 0.707 - startNy * 0.707) * startHalfW),
+      });
+      loopPoints.push({
+        x: Math.round(startP.x - startTx * startHalfW),
+        y: Math.round(startP.y - startTy * startHalfW),
+      });
+      loopPoints.push({
+        x: Math.round(startP.x - (startTx * 0.707 + startNx * 0.707) * startHalfW),
+        y: Math.round(startP.y - (startTy * 0.707 + startNy * 0.707) * startHalfW),
+      });
+    } else {
+      loopPoints.push({
+        x: Math.round(startP.x - startTx * Math.max(2, startHalfW * 0.8)),
+        y: Math.round(startP.y - startTy * Math.max(2, startHalfW * 0.8)),
       });
     }
   }
 
-  allPoints.push(...simpRight);
-
-  // End cap
-  if (roundCap && !isChiselStyle && simpLeft.length > 0 && simpRight.length > 0) {
-    const pn = resampled[n - 1];
-    const pnPrev = resampled[n - 2];
-    const dxn = pn.x - pnPrev.x;
-    const dyn = pn.y - pnPrev.y;
-    const lenn = Math.hypot(dxn, dyn) || 1;
-    const lastRight = simpRight[simpRight.length - 1];
-    const lastLeft = simpLeft[simpLeft.length - 1];
-    const halfWidthN = Math.hypot(lastRight.x - lastLeft.x, lastRight.y - lastLeft.y) / 2;
-    // If end has tapered to a sharp tip (払い/flick), do NOT add a round bulb cap, let it terminate cleanly into a point
-    if (halfWidthN > 4.5) {
-      allPoints.push({
-        x: Math.round(pn.x + (dxn / lenn) * halfWidthN),
-        y: Math.round(pn.y + (dyn / lenn) * halfWidthN),
-      });
-    } else if (halfWidthN > 1.5) {
-      // Small sharp tip apex
-      allPoints.push({
-        x: Math.round(pn.x + (dxn / lenn) * (halfWidthN * 0.8)),
-        y: Math.round(pn.y + (dyn / lenn) * (halfWidthN * 0.8)),
-      });
+  // Remove consecutive duplicates and microscopic jitter (minimum 2.0px distance)
+  const cleanLoop: Point[] = [];
+  for (let i = 0; i < loopPoints.length; i++) {
+    if (cleanLoop.length === 0) {
+      cleanLoop.push(loopPoints[i]);
+      continue;
+    }
+    const prev = cleanLoop[cleanLoop.length - 1];
+    const curr = loopPoints[i];
+    if (Math.hypot(curr.x - prev.x, curr.y - prev.y) >= 2.0) {
+      cleanLoop.push(curr);
     }
   }
 
-  // Reverse left side to close loop in clockwise order (area > 0 in screen, TrueType compatible)
-  allPoints.push(...simpLeft.reverse());
+  // Baseline geometric simplification:
+  // Apply a sub-pixel RDP pass (epsilon = 0.55px) on the closed loop to eliminate redundant collinear points
+  // (e.g. dozens of collinear nodes along a straight ruler edge) while preserving 100% of the drawn shape and sharp features.
+  let simplifiedLoop: Point[] = cleanLoop;
+  if (cleanLoop.length > 8) {
+    const halfLen = Math.floor(cleanLoop.length / 2);
+    const half1 = simplifyPointsRDP(cleanLoop.slice(0, halfLen + 1), 0.55);
+    const half2 = simplifyPointsRDP([...cleanLoop.slice(halfLen), cleanLoop[0]], 0.55);
+    const merged = [...half1.slice(0, -1), ...half2.slice(0, -1)];
+    if (merged.length >= 6) {
+      simplifiedLoop = merged;
+    }
+  }
 
-  // Convert to cubic bezier nodes with smooth, spike-protected tangents
-  const nodes: BezierNode[] = allPoints.map((p) => ({
+  // 11. Convert to smooth G1-continuous Bézier nodes
+  const total = simplifiedLoop.length;
+  const nodes: BezierNode[] = simplifiedLoop.map((p) => ({
     id: generateId(),
     x: p.x,
     y: p.y,
     type: 'smooth',
   }));
 
-  const total = nodes.length;
   for (let i = 0; i < total; i++) {
     const prev = nodes[(i - 1 + total) % total];
     const curr = nodes[i];
@@ -2539,51 +3529,53 @@ export function strokePointsToOutline(
     const vNextY = next.y - curr.y;
     const dNext = Math.hypot(vNextX, vNextY);
 
-    if (dPrev < 0.001 || dNext < 0.001) {
+    if (dPrev < 0.1 || dNext < 0.1) {
       curr.handleIn = { x: curr.x, y: curr.y };
       curr.handleOut = { x: curr.x, y: curr.y };
       continue;
     }
 
-    // Chord-weighted tangent direction for natural, non-jagged curvature transitions
+    // Chord direction vectors
     const uPrevX = vPrevX / dPrev;
     const uPrevY = vPrevY / dPrev;
     const uNextX = vNextX / dNext;
     const uNextY = vNextY / dNext;
 
+    // Harmonic bisector tangent: unbiased by asymmetric segment distances
     let tanX = uPrevX + uNextX;
     let tanY = uPrevY + uNextY;
-    const tanLen = Math.hypot(tanX, tanY);
+    let tanLen = Math.hypot(tanX, tanY);
 
-    if (tanLen > 0.001) {
-      tanX /= tanLen;
-      tanY /= tanLen;
-
-      // Calculate dot product (cosine of turning angle) between incoming and outgoing segments
-      const dot = (vPrevX * vNextX + vPrevY * vNextY) / (dPrev * dNext);
-      const cosAngle = Math.max(-1, Math.min(1, dot));
-
-      // Limit handle length relative to nearby segment lengths to prevent handle overshoot.
-      let handleRatio = 0.33;
-      if (cosAngle < 0) {
-        handleRatio = 0.12 + 0.21 * (1 + cosAngle); // Drops smoothly for tight U-turns
-      }
-
-      const hInLen = Math.min(dPrev * handleRatio, 120);
-      const hOutLen = Math.min(dNext * handleRatio, 120);
-
-      curr.handleIn = {
-        x: Math.round(curr.x - tanX * hInLen),
-        y: Math.round(curr.y - tanY * hInLen),
-      };
-      curr.handleOut = {
-        x: Math.round(curr.x + tanX * hOutLen),
-        y: Math.round(curr.y + tanY * hOutLen),
-      };
-    } else {
-      curr.handleIn = { x: curr.x, y: curr.y };
-      curr.handleOut = { x: curr.x, y: curr.y };
+    if (tanLen < 0.001) {
+      // Near 180-degree turnaround: fallback to perpendicular chord
+      tanX = -uPrevY;
+      tanY = uPrevX;
+      tanLen = Math.hypot(tanX, tanY) || 1;
     }
+
+    tanX /= tanLen;
+    tanY /= tanLen;
+
+    // Cosine of turning angle between the two incoming/outgoing segment chords
+    const dot = uPrevX * uNextX + uPrevY * uNextY;
+    const cosAngle = Math.max(-1, Math.min(1, dot));
+
+    // Curvature damping factor: gentle curves maintain full natural 0.35 bezier ratio,
+    // while sharp turns smoothly taper handles to prevent loop knots and kinks
+    const cornerDamping = Math.max(0.04, Math.pow((1 + cosAngle) * 0.5, 0.65));
+    const handleRatio = 0.35 * cornerDamping;
+
+    const hInLen = Math.min(dPrev * handleRatio, 110);
+    const hOutLen = Math.min(dNext * handleRatio, 110);
+
+    curr.handleIn = {
+      x: Math.round(curr.x - tanX * hInLen),
+      y: Math.round(curr.y - tanY * hInLen),
+    };
+    curr.handleOut = {
+      x: Math.round(curr.x + tanX * hOutLen),
+      y: Math.round(curr.y + tanY * hOutLen),
+    };
   }
 
   const resultContour: PathContour = {
@@ -3204,9 +4196,20 @@ export function createPillContour(
   width: number,
   height: number
 ): PathContour {
-  const isHorizontal = width >= height;
-  const radius = isHorizontal ? height / 2 : width / 2;
-  return createRoundedRectContour(cx, cy, width, height, radius);
+  let w = width;
+  let h = height;
+  // If square or near-square aspect ratio (e.g. 1-click stamp or 1:1 box),
+  // elongate to a 2:1 capsule aspect ratio so it never degenerates into a circle
+  if (Math.abs(w - h) < Math.max(w, h) * 0.25) {
+    if (w >= h) {
+      h = w * 0.48;
+    } else {
+      w = h * 0.48;
+    }
+  }
+  const isHorizontal = w >= h;
+  const radius = isHorizontal ? h / 2 : w / 2;
+  return createRoundedRectContour(cx, cy, w, h, radius);
 }
 
 /**
@@ -4227,26 +5230,49 @@ export function findContourIntersections(contours: PathContour[]): Point[] {
     segIdx: number;
   }
 
-  const allSegments: Segment[] = [];
+  interface FastSegment {
+    p1: Point;
+    p2: Point;
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    contourIdx: number;
+    segIdx: number;
+  }
+
+  const allSegments: FastSegment[] = [];
 
   contours.forEach((contour, cIdx) => {
     if (!contour.nodes || contour.nodes.length < 2) return;
-    const points = sampleContourPoints(contour, 6);
+    const points = sampleContourPoints(contour, 3);
     if (points.length < 2) return;
 
     for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
       allSegments.push({
-        p1: points[i],
-        p2: points[i + 1],
+        p1,
+        p2,
+        minX: p1.x < p2.x ? p1.x : p2.x,
+        maxX: p1.x > p2.x ? p1.x : p2.x,
+        minY: p1.y < p2.y ? p1.y : p2.y,
+        maxY: p1.y > p2.y ? p1.y : p2.y,
         contourIdx: cIdx,
         segIdx: i,
       });
     }
 
     if (contour.closed && points.length > 2) {
+      const p1 = points[points.length - 1];
+      const p2 = points[0];
       allSegments.push({
-        p1: points[points.length - 1],
-        p2: points[0],
+        p1,
+        p2,
+        minX: p1.x < p2.x ? p1.x : p2.x,
+        maxX: p1.x > p2.x ? p1.x : p2.x,
+        minY: p1.y < p2.y ? p1.y : p2.y,
+        maxY: p1.y > p2.y ? p1.y : p2.y,
         contourIdx: cIdx,
         segIdx: points.length - 1,
       });
@@ -4254,7 +5280,7 @@ export function findContourIntersections(contours: PathContour[]): Point[] {
   });
 
   const segCount = allSegments.length;
-  const maxSegsToCheck = 400;
+  const maxSegsToCheck = 300;
   const step = segCount > maxSegsToCheck ? Math.ceil(segCount / maxSegsToCheck) : 1;
 
   for (let i = 0; i < segCount; i += step) {
@@ -4266,6 +5292,16 @@ export function findContourIntersections(contours: PathContour[]): Point[] {
       if (s1.contourIdx === s2.contourIdx) {
         const diff = Math.abs(s1.segIdx - s2.segIdx);
         if (diff <= 1) continue;
+      }
+
+      // Fast AABB bounding box overlap rejection
+      if (
+        s1.maxX < s2.minX ||
+        s1.minX > s2.maxX ||
+        s1.maxY < s2.minY ||
+        s1.minY > s2.maxY
+      ) {
+        continue;
       }
 
       const pt = getLineSegmentIntersection(s1.p1, s1.p2, s2.p1, s2.p2);
@@ -4290,34 +5326,50 @@ export function findContourIntersections(contours: PathContour[]): Point[] {
 export function hasContourIntersections(contours: PathContour[]): boolean {
   if (!contours || contours.length === 0) return false;
 
-  interface Segment {
+  interface FastSegment {
     p1: Point;
     p2: Point;
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
     contourIdx: number;
     segIdx: number;
   }
 
-  const allSegments: Segment[] = [];
+  const allSegments: FastSegment[] = [];
 
   for (let cIdx = 0; cIdx < contours.length; cIdx++) {
     const contour = contours[cIdx];
     if (!contour.nodes || contour.nodes.length < 2) continue;
-    const points = sampleContourPoints(contour, 6);
+    const points = sampleContourPoints(contour, 3);
     if (points.length < 2) continue;
 
     for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
       allSegments.push({
-        p1: points[i],
-        p2: points[i + 1],
+        p1,
+        p2,
+        minX: p1.x < p2.x ? p1.x : p2.x,
+        maxX: p1.x > p2.x ? p1.x : p2.x,
+        minY: p1.y < p2.y ? p1.y : p2.y,
+        maxY: p1.y > p2.y ? p1.y : p2.y,
         contourIdx: cIdx,
         segIdx: i,
       });
     }
 
     if (contour.closed && points.length > 2) {
+      const p1 = points[points.length - 1];
+      const p2 = points[0];
       allSegments.push({
-        p1: points[points.length - 1],
-        p2: points[0],
+        p1,
+        p2,
+        minX: p1.x < p2.x ? p1.x : p2.x,
+        maxX: p1.x > p2.x ? p1.x : p2.x,
+        minY: p1.y < p2.y ? p1.y : p2.y,
+        maxY: p1.y > p2.y ? p1.y : p2.y,
         contourIdx: cIdx,
         segIdx: points.length - 1,
       });
@@ -4325,7 +5377,7 @@ export function hasContourIntersections(contours: PathContour[]): boolean {
   }
 
   const segCount = allSegments.length;
-  const maxSegsToCheck = 400;
+  const maxSegsToCheck = 300;
   const step = segCount > maxSegsToCheck ? Math.ceil(segCount / maxSegsToCheck) : 1;
 
   for (let i = 0; i < segCount; i += step) {
@@ -4337,6 +5389,16 @@ export function hasContourIntersections(contours: PathContour[]): boolean {
       if (s1.contourIdx === s2.contourIdx) {
         const diff = Math.abs(s1.segIdx - s2.segIdx);
         if (diff <= 1) continue;
+      }
+
+      // Fast AABB bounding box overlap rejection
+      if (
+        s1.maxX < s2.minX ||
+        s1.minX > s2.maxX ||
+        s1.maxY < s2.minY ||
+        s1.minY > s2.maxY
+      ) {
+        continue;
       }
 
       if (getLineSegmentIntersection(s1.p1, s1.p2, s2.p1, s2.p2)) {

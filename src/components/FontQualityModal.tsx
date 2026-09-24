@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   X,
   ShieldCheck,
@@ -24,9 +24,20 @@ import {
   Scale,
   Minimize2,
   Compass,
+  Flame,
+  BarChart3,
+  ClipboardList,
+  Copy,
+  Plus,
+  FileSearch,
+  ChevronDown,
+  ChevronUp,
+  CheckSquare,
+  ListFilter,
 } from 'lucide-react';
 import { FontProject, GlyphData, PathContour } from '../types';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
+import { GlyphDensityHeatmapModal } from './GlyphDensityHeatmapModal';
 import {
   contoursToSvgPath,
   normalizeGlyphContoursWinding,
@@ -49,6 +60,15 @@ import {
   QualityIssueType,
   QualitySeverity,
 } from '../utils/qualityChecker';
+import {
+  runProjectDiagnostics,
+  ProjectDiagnosticsReport,
+  DiagnosticItem,
+  DiagnosticStatus,
+  DiagnosticScope,
+  CategoryDiagnosticStat,
+} from '../utils/projectDiagnostics';
+import { ProjectDiagnosticsPanel } from './ProjectDiagnosticsPanel';
 
 interface FontQualityModalProps {
   isOpen: boolean;
@@ -73,7 +93,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   onShowToast,
   commitHistory,
 }) => {
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
 
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
   const [severityFilter, setSeverityFilter] = useState<'all' | QualitySeverity>('all');
@@ -104,6 +124,39 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   const [isOptimizingExtrema, setIsOptimizingExtrema] = useState<boolean>(false);
   const [lastExtremaResult, setLastExtremaResult] = useState<BatchExtremaOptimizationResult | null>(null);
 
+  // Density Heatmap Inspector state
+  const [heatmapModalUnicode, setHeatmapModalUnicode] = useState<number | null>(null);
+
+  // List of unicodes that have excessive_nodes issues
+  const excessiveNodesUnicodes = useMemo(() => {
+    if (!report || !report.issues) return [];
+    const list: number[] = [];
+    report.issues.forEach((iss) => {
+      if (iss.type === 'excessive_nodes' && !list.includes(iss.unicode)) {
+        list.push(iss.unicode);
+      }
+    });
+    return list;
+  }, [report]);
+
+  // Main View: 'quality' (品質検査) or 'diagnostics' (プロジェクト診断)
+  const [mainView, setMainView] = useState<'quality' | 'diagnostics'>('quality');
+
+  // Project Diagnostics state
+  const [diagScope, setDiagScope] = useState<DiagnosticScope>('standard_japanese');
+  const [diagFilter, setDiagFilter] = useState<'all_attention' | 'all' | 'empty' | 'critically_low' | 'draft' | 'complete'>('all_attention');
+  const [diagCategoryFilter, setDiagCategoryFilter] = useState<string>('all');
+  const [diagSortBy, setDiagSortBy] = useState<'complexity_asc' | 'complexity_desc' | 'nodes_asc' | 'unicode' | 'severity'>('complexity_asc');
+  const [diagSearchQuery, setDiagSearchQuery] = useState<string>('');
+  const [diagReport, setDiagReport] = useState<ProjectDiagnosticsReport | null>(null);
+  const [isDiagScanning, setIsDiagScanning] = useState<boolean>(false);
+  const [showCategoryProgress, setShowCategoryProgress] = useState<boolean>(true);
+
+  // Fullscreen view mode
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const diagSearchInputRef = React.useRef<HTMLInputElement>(null);
+
   const notify = (text: string, type: 'success' | 'info' | 'warning' | 'error' = 'info') => {
     if (onShowToast) {
       onShowToast(text, type);
@@ -111,21 +164,183 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   };
 
   // Run or refresh report
-  const runScan = () => {
+  const runScan = useCallback(() => {
     setIsScanning(true);
-    // Slight tick to let UI show loading animation smoothly
     setTimeout(() => {
       const rep = checkFontQuality(project);
       setReport(rep);
       setIsScanning(false);
     }, 50);
+  }, [project]);
+
+  // Run project diagnostics
+  const runDiagnostics = useCallback((scope?: DiagnosticScope) => {
+    setIsDiagScanning(true);
+    const targetScope = scope || diagScope;
+    setTimeout(() => {
+      const rep = runProjectDiagnostics(project, { scope: targetScope, includeCompletedInItems: true });
+      setDiagReport(rep);
+      setIsDiagScanning(false);
+    }, 40);
+  }, [project, diagScope]);
+
+  // Copy unfinished characters to clipboard
+  const handleCopyUnfinishedList = () => {
+    if (!diagReport) return;
+    const attentionItems = diagReport.items.filter((it) => it.status !== 'complete');
+    if (attentionItems.length === 0) {
+      notify('未完成または要確認の文字はありません', 'info');
+      return;
+    }
+
+    const charsText = attentionItems.map((it) => it.char).join('');
+    const detailText = attentionItems
+      .map((it) => `[${it.statusLabel}] ${it.char} (U+${it.unicode.toString(16).toUpperCase()}): ${it.reason}`)
+      .join('\n');
+
+    const fullExport = `【フォント制作診断 未完了・要確認文字リスト (${attentionItems.length}字)】\n文字一覧: ${charsText}\n\n詳細リスト:\n${detailText}`;
+
+    navigator.clipboard.writeText(fullExport).then(() => {
+      notify(`要確認文字 ${attentionItems.length} 字のリストをクリップボードにコピーしました`, 'success');
+    }).catch(() => {
+      notify('クリップボードへのコピーに失敗しました', 'error');
+    });
   };
+
+  // Add an empty glyph to project
+  const handleAddEmptyGlyph = (unicode: number, char: string, name?: string) => {
+    if (commitHistory) commitHistory();
+    const glyphName = name || `uni${unicode.toString(16).toUpperCase()}`;
+    const newGlyph: GlyphData = {
+      unicode,
+      char: char || String.fromCodePoint(unicode),
+      name: glyphName,
+      advanceWidth: project.metadata.unitsPerEm || 1000,
+      lsb: 50,
+      contours: [],
+      modified: true,
+    };
+
+    setProject((prev) => ({
+      ...prev,
+      glyphs: {
+        ...prev.glyphs,
+        [unicode]: newGlyph,
+      },
+      updatedAt: Date.now(),
+    }));
+
+    notify(`文字「${char}」(U+${unicode.toString(16).toUpperCase()}) を空グリフとして登録しました`, 'success');
+    runScan();
+    runDiagnostics();
+  };
+
+  // Batch add all empty chars in current filtered scope
+  const handleBatchAddFilteredEmptyGlyphs = () => {
+    if (!diagReport) return;
+    const emptyItems = diagReport.items.filter((it) => it.status === 'empty' && !it.isRegisteredInProject);
+    if (emptyItems.length === 0) {
+      notify('追加可能な未登録文字はありません', 'info');
+      return;
+    }
+
+    if (commitHistory) commitHistory();
+
+    setProject((prev) => {
+      const nextGlyphs = { ...prev.glyphs };
+      emptyItems.forEach((it) => {
+        nextGlyphs[it.unicode] = {
+          unicode: it.unicode,
+          char: it.char,
+          name: it.glyphName,
+          advanceWidth: prev.metadata.unitsPerEm || 1000,
+          lsb: 50,
+          contours: [],
+          modified: true,
+        };
+      });
+      return {
+        ...prev,
+        glyphs: nextGlyphs,
+        updatedAt: Date.now(),
+      };
+    });
+
+    notify(`未登録文字 ${emptyItems.length} 字をプロジェクトに一括登録しました`, 'success');
+    runScan();
+    runDiagnostics();
+  };
+
+  // Keyboard shortcuts: Escape, F (fullscreen), R (rescan), H (heatmap), D (diagnostics toggle), / (search focus), 1-7 (tabs)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
+        return;
+      }
+
+      if (!isInput) {
+        if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          setIsFullscreen((prev) => !prev);
+        } else if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          runScan();
+          runDiagnostics();
+          notify('再検査およびプロジェクト診断を実行しました', 'info');
+        } else if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          setMainView((prev) => (prev === 'quality' ? 'diagnostics' : 'quality'));
+        } else if ((e.key === 'h' || e.key === 'H') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          if (excessiveNodesUnicodes.length > 0) {
+            e.preventDefault();
+            setHeatmapModalUnicode(excessiveNodesUnicodes[0]);
+          }
+        } else if (e.key === '/') {
+          e.preventDefault();
+          if (mainView === 'diagnostics') {
+            diagSearchInputRef.current?.focus();
+          } else {
+            searchInputRef.current?.focus();
+          }
+        } else if (!e.ctrlKey && !e.metaKey && !e.altKey && mainView === 'quality') {
+          const tabMap: Record<string, TabFilter> = {
+            '1': 'all',
+            '2': 'duplicate_shape',
+            '3': 'path_intersection',
+            '4': 'excessive_nodes',
+            '5': 'missing_extrema',
+            '6': 'uneven_stroke',
+            '7': 'baseline_deviation',
+          };
+          if (tabMap[e.key]) {
+            e.preventDefault();
+            setActiveTab(tabMap[e.key]);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose, runScan, runDiagnostics, excessiveNodesUnicodes, mainView]);
 
   useEffect(() => {
     if (isOpen) {
       runScan();
+      runDiagnostics();
     }
-  }, [isOpen, project]);
+  }, [isOpen, project, diagScope]);
 
   // Filtered issue list
   const filteredIssues = useMemo(() => {
@@ -153,6 +368,188 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
       return true;
     });
   }, [report, activeTab, severityFilter, searchQuery]);
+
+  // Quality Health status and stats computations
+  const totalAutoFixableCount = useMemo(() => {
+    if (!report?.issues) return 0;
+    return report.issues.filter((iss) => iss.canAutoFix).length;
+  }, [report]);
+
+  const categoryStats = useMemo(() => {
+    const counts = report?.categoryCounts || {
+      duplicate_shape: 0,
+      path_intersection: 0,
+      excessive_nodes: 0,
+      missing_extrema: 0,
+      uneven_stroke: 0,
+      baseline_deviation: 0,
+    };
+    return [
+      {
+        id: 'duplicate_shape' as TabFilter,
+        label: '字形重複',
+        count: counts.duplicate_shape || 0,
+        desc: '同一形状・コピーの重複',
+        icon: Copy,
+        color: 'stone',
+      },
+      {
+        id: 'path_intersection' as TabFilter,
+        label: '重なり白抜き',
+        count: counts.path_intersection || 0,
+        desc: '交差による白抜き欠損',
+        icon: Sparkles,
+        color: 'amber',
+        canBatchFix: true,
+      },
+      {
+        id: 'missing_extrema' as TabFilter,
+        label: '極点ノード',
+        count: counts.missing_extrema || 0,
+        desc: '水平・垂直の最外端欠落',
+        icon: Compass,
+        color: 'cyan',
+        canBatchFix: true,
+      },
+      {
+        id: 'uneven_stroke' as TabFilter,
+        label: '線幅均一性',
+        count: counts.uneven_stroke || 0,
+        desc: 'かすれ線・潰れの偏り',
+        icon: Scale,
+        color: 'emerald',
+        canBatchFix: true,
+      },
+      {
+        id: 'excessive_nodes' as TabFilter,
+        label: '過剰ノード',
+        count: counts.excessive_nodes || 0,
+        desc: '冗長アンカー・肥大パス',
+        icon: Wand2,
+        color: 'purple',
+        canBatchFix: true,
+      },
+      {
+        id: 'baseline_deviation' as TabFilter,
+        label: 'ベースライン',
+        count: counts.baseline_deviation || 0,
+        desc: '基準線からの浮沈逸脱',
+        icon: Sliders,
+        color: 'blue',
+        canBatchFix: true,
+      },
+    ];
+  }, [report]);
+
+  const healthStatus = useMemo(() => {
+    const score = report?.score ?? 100;
+    if (score >= 90) {
+      return {
+        label: '極めて良好',
+        subtitle: 'すべての品質基準を満たしており、フォント出力準備が整っています',
+        colorText: isLight ? 'text-emerald-800' : 'text-emerald-400',
+        colorBg: isLight ? 'bg-emerald-50/80 border-emerald-200' : 'bg-emerald-950/40 border-emerald-800/60',
+        badgeBg: isLight ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-emerald-950 text-emerald-300 border-emerald-800',
+        icon: ShieldCheck,
+      };
+    }
+    if (score >= 70) {
+      return {
+        label: '概ね良好',
+        subtitle: '軽微な調整推奨項目がありますが、通常利用可能です',
+        colorText: isLight ? 'text-sky-800' : 'text-sky-400',
+        colorBg: isLight ? 'bg-sky-50/80 border-sky-200' : 'bg-sky-950/40 border-sky-800/60',
+        badgeBg: isLight ? 'bg-sky-100 text-sky-900 border-sky-300' : 'bg-sky-950 text-sky-300 border-sky-800',
+        icon: Info,
+      };
+    }
+    if (score >= 50) {
+      return {
+        label: '改善推奨',
+        subtitle: '白抜きや線幅の偏りなどの警告が検出されています',
+        colorText: isLight ? 'text-amber-800' : 'text-amber-400',
+        colorBg: isLight ? 'bg-amber-50/80 border-amber-200' : 'bg-amber-950/40 border-amber-800/60',
+        badgeBg: isLight ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-amber-950 text-amber-300 border-amber-800',
+        icon: AlertTriangle,
+      };
+    }
+    return {
+      label: '要修正',
+      subtitle: 'フォント描画や出力に影響するエラーが検出されています',
+      colorText: isLight ? 'text-rose-800' : 'text-rose-400',
+      colorBg: isLight ? 'bg-rose-50/80 border-rose-200' : 'bg-rose-950/40 border-rose-800/60',
+      badgeBg: isLight ? 'bg-rose-100 text-rose-900 border-rose-300' : 'bg-rose-950 text-rose-300 border-rose-800',
+      icon: AlertCircle,
+    };
+  }, [report, isLight]);
+
+  // Filtered diagnostic items for Project Diagnostics
+  const filteredDiagnosticItems = useMemo(() => {
+    if (!diagReport) return [];
+    return diagReport.items
+      .filter((item) => {
+        // Status filter
+        if (diagFilter === 'all_attention') {
+          if (item.status === 'complete') return false;
+        } else if (diagFilter === 'empty') {
+          if (item.status !== 'empty') return false;
+        } else if (diagFilter === 'critically_low') {
+          if (item.status !== 'critically_low_complexity') return false;
+        } else if (diagFilter === 'draft') {
+          if (item.status !== 'draft') return false;
+        } else if (diagFilter === 'complete') {
+          if (item.status !== 'complete') return false;
+        }
+
+        // Category filter
+        if (diagCategoryFilter !== 'all') {
+          if (diagCategoryFilter === 'kanji' && item.categoryType !== 'kanji') return false;
+          if (diagCategoryFilter === 'hiragana' && item.categoryType !== 'hiragana') return false;
+          if (diagCategoryFilter === 'katakana' && item.categoryType !== 'katakana') return false;
+          if (diagCategoryFilter === 'latin' && item.categoryType !== 'latin') return false;
+          if (diagCategoryFilter === 'digits' && item.categoryType !== 'digits') return false;
+          if (diagCategoryFilter === 'symbols' && item.categoryType !== 'symbols') return false;
+        }
+
+        // Search query
+        if (diagSearchQuery.trim()) {
+          const query = diagSearchQuery.trim().toLowerCase();
+          const charMatch = item.char.toLowerCase().includes(query);
+          const nameMatch = item.glyphName.toLowerCase().includes(query);
+          const hexMatch = item.unicode.toString(16).toLowerCase().includes(query);
+          const reasonMatch = item.reason.toLowerCase().includes(query);
+          const catMatch = item.categoryName.toLowerCase().includes(query);
+          if (!charMatch && !nameMatch && !hexMatch && !reasonMatch && !catMatch) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (diagSortBy === 'complexity_asc') {
+          return (
+            a.metrics.complexityScore - b.metrics.complexityScore ||
+            a.metrics.nodeCount - b.metrics.nodeCount ||
+            a.unicode - b.unicode
+          );
+        }
+        if (diagSortBy === 'complexity_desc') {
+          return b.metrics.complexityScore - a.metrics.complexityScore || b.unicode - a.unicode;
+        }
+        if (diagSortBy === 'nodes_asc') {
+          return a.metrics.nodeCount - b.metrics.nodeCount || a.unicode - b.unicode;
+        }
+        if (diagSortBy === 'unicode') {
+          return a.unicode - b.unicode;
+        }
+        if (diagSortBy === 'severity') {
+          const rank = { error: 0, warning: 1, info: 2, success: 3 };
+          return rank[a.severity] - rank[b.severity] || a.unicode - b.unicode;
+        }
+        return 0;
+      });
+  }, [diagReport, diagFilter, diagCategoryFilter, diagSearchQuery, diagSortBy]);
 
   // Single Fix
   const handleFixIssue = (issue: QualityIssue) => {
@@ -419,163 +816,193 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      className={`fixed inset-0 z-50 transition-all ${
+        isFullscreen
+          ? 'p-0 w-screen h-screen bg-black/85 flex flex-col'
+          : 'flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150'
+      }`}
+    >
       <div
-        className={`w-full max-w-5xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[92vh] transition-colors ${
-          isLight
-            ? 'bg-white border-stone-200 text-stone-900 shadow-emerald-950/10'
-            : 'bg-[#151f18] border-[#25362b] text-emerald-100 shadow-black/50'
+        className={`flex flex-col transition-all overflow-hidden ${
+          isFullscreen
+            ? isLight
+              ? 'w-screen h-screen rounded-none border-none shadow-none bg-white text-stone-900'
+              : 'w-screen h-screen rounded-none border-none shadow-none bg-[#151f18] text-emerald-100'
+            : isLight
+            ? 'w-full max-w-5xl xl:max-w-6xl rounded-2xl border border-stone-200 shadow-2xl max-h-[94vh] bg-white text-stone-900 shadow-emerald-950/10'
+            : 'w-full max-w-5xl xl:max-w-6xl rounded-2xl border border-[#25362b] shadow-2xl max-h-[94vh] bg-[#151f18] text-emerald-100 shadow-black/50'
         }`}
       >
         {/* Header */}
         <div
-          className={`flex items-center justify-between px-5 py-4 border-b ${
+          className={`flex flex-col md:flex-row md:items-center justify-between gap-2.5 px-3 py-3 sm:px-5 sm:py-4 border-b ${
             isLight ? 'bg-stone-50/80 border-stone-200' : 'bg-[#111a14] border-[#25362b]'
           }`}
         >
-          <div className="flex items-center space-x-3">
-            <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center border ${
-                isLight
-                  ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
-                  : 'bg-emerald-950/80 border-emerald-800 text-emerald-300'
-              }`}
-            >
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-bold tracking-tight">フォント品質チェック</h2>
-                {report && (
-                  <span
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
-                      report.score >= 90
-                        ? isLight
-                          ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                          : 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                        : report.score >= 70
-                        ? isLight
+          <div className="flex items-center justify-between md:justify-start space-x-3 min-w-0">
+            <div className="flex items-center space-x-2 min-w-0">
+              <div
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center border shrink-0 transition-colors ${
+                  mainView === 'diagnostics'
+                    ? isLight
+                      ? 'bg-amber-100 border-amber-300 text-amber-800'
+                      : 'bg-amber-950/80 border-amber-800 text-amber-300'
+                    : isLight
+                    ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                    : 'bg-emerald-950/80 border-emerald-800 text-emerald-300'
+                }`}
+              >
+                {mainView === 'diagnostics' ? (
+                  <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  {/* View Switcher Segment */}
+                  <div className="flex items-center bg-stone-200/80 dark:bg-[#1c2920] p-0.5 rounded-lg border border-stone-300/80 dark:border-[#2a3c2e]">
+                    <button
+                      type="button"
+                      onClick={() => setMainView('quality')}
+                      className={`px-2 py-1 sm:px-2.5 sm:py-1 rounded-md text-[11px] sm:text-xs font-bold flex items-center space-x-1.5 transition-all ${
+                        mainView === 'quality'
+                          ? isLight
+                            ? 'bg-white text-emerald-950 shadow-2xs'
+                            : 'bg-[#152319] text-emerald-300 shadow-2xs'
+                          : 'text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>品質検査</span>
+                      {report && report.totalIssues > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-mono font-bold">
+                          {report.totalIssues}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setMainView('diagnostics')}
+                      className={`px-2 py-1 sm:px-2.5 sm:py-1 rounded-md text-[11px] sm:text-xs font-bold flex items-center space-x-1.5 transition-all ${
+                        mainView === 'diagnostics'
+                          ? isLight
+                            ? 'bg-white text-amber-950 shadow-2xs'
+                            : 'bg-[#152319] text-amber-300 shadow-2xs'
+                          : 'text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'
+                      }`}
+                    >
+                      <Activity className="w-3.5 h-3.5 text-amber-600" />
+                      <span>プロジェクト診断</span>
+                      {diagReport && diagReport.totalAttentionCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-white font-mono font-bold">
+                          {diagReport.totalAttentionCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {mainView === 'quality' && report && (
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold border ${
+                        report.score >= 90
+                          ? isLight
+                            ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                            : 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                          : report.score >= 70
+                          ? isLight
+                            ? 'bg-amber-100 text-amber-900 border-amber-300'
+                            : 'bg-amber-950 text-amber-300 border-amber-800'
+                          : isLight
+                          ? 'bg-rose-100 text-rose-900 border-rose-300'
+                          : 'bg-rose-950 text-rose-300 border-rose-800'
+                      }`}
+                    >
+                      スコア: {report.score}/100
+                    </span>
+                  )}
+
+                  {mainView === 'diagnostics' && diagReport && (
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold border ${
+                        isLight
                           ? 'bg-amber-100 text-amber-900 border-amber-300'
                           : 'bg-amber-950 text-amber-300 border-amber-800'
-                        : isLight
-                        ? 'bg-rose-100 text-rose-900 border-rose-300'
-                        : 'bg-rose-950 text-rose-300 border-rose-800'
-                    }`}
-                  >
-                    品質スコア: {report.score} / 100
-                  </span>
-                )}
-                <span
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border flex items-center gap-1 ${
-                    isLight
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      : 'bg-emerald-950/50 text-emerald-300 border-emerald-800/70'
-                  }`}
-                  title="字形、角の尖り、線の太さ、曲率を崩さない安全な修正アルゴリズムを適用します"
-                >
-                  <ShieldCheck className="w-3 h-3" />
-                  形状保護モード
-                </span>
+                      }`}
+                    >
+                      完成率: {diagReport.overallCompletionRate}%
+                    </span>
+                  )}
+                </div>
               </div>
-              <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-                字形重複・交差・過剰ノード・線幅の偏り・ベースラインの総合検査と自動最適化
-              </p>
             </div>
-          </div>
 
-          <div className="flex items-center space-x-2">
-            {/* Extremum Optimization Button */}
-            <button
-              onClick={() => {
-                setIsExtremaPanelOpen((prev) => !prev);
-                if (!isExtremaPanelOpen) {
-                  setIsEqualizePanelOpen(false);
-                  setIsOptimizePanelOpen(false);
-                }
-              }}
-              className={`p-2 sm:px-3 sm:py-2 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs ${
-                isExtremaPanelOpen
-                  ? isLight
-                    ? 'bg-cyan-700 text-white border-cyan-800 shadow-sm ring-2 ring-cyan-500/20'
-                    : 'bg-cyan-600 text-white border-cyan-500 shadow-sm ring-2 ring-cyan-500/40'
-                  : isLight
-                  ? 'bg-cyan-50 text-cyan-900 border-cyan-200 hover:bg-cyan-100'
-                  : 'bg-cyan-950/60 text-cyan-200 border-cyan-800/80 hover:bg-cyan-900'
-              }`}
-              title="ベジェ曲線の極点（extremum）を分析し、必要に応じてノードを追加・配置して輪郭を数学的に正しく最適化するツール"
-            >
-              <Compass className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-              <span className="hidden sm:inline">極点最適化</span>
-            </button>
-
-            {/* Stroke Equalization Button */}
-            <button
-              onClick={() => {
-                setIsEqualizePanelOpen((prev) => !prev);
-                if (!isEqualizePanelOpen) {
-                  setIsOptimizePanelOpen(false);
-                  setIsExtremaPanelOpen(false);
-                }
-              }}
-              className={`p-2 sm:px-3 sm:py-2 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs ${
-                isEqualizePanelOpen
-                  ? isLight
-                    ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/20'
-                    : 'bg-emerald-600 text-white border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
-                  : isLight
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                  : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80 hover:bg-emerald-900'
-              }`}
-              title="線幅を幾何学的に分析し、かすれ線や潰れを自動均一化するツール"
-            >
-              <Scale className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span className="hidden sm:inline">ストローク均一化</span>
-            </button>
-
-            {/* Node Optimization Button */}
-            <button
-              onClick={() => {
-                setIsOptimizePanelOpen((prev) => !prev);
-                if (!isOptimizePanelOpen) {
-                  setIsEqualizePanelOpen(false);
-                  setIsExtremaPanelOpen(false);
-                }
-              }}
-              className={`p-2 sm:px-3 sm:py-2 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs ${
-                isOptimizePanelOpen
-                  ? isLight
-                    ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/20'
-                    : 'bg-emerald-600 text-white border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
-                  : isLight
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                  : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80 hover:bg-emerald-900'
-              }`}
-              title="ほぼ直線上に並ぶ冗長ノードを間引き、パスを滑らかにする最適化ツール"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-              <span className="hidden sm:inline">ノード最適化</span>
-            </button>
-
-            <button
-              onClick={runScan}
-              disabled={isScanning}
-              className={`p-2 rounded-xl border text-xs font-semibold flex items-center space-x-1.5 transition-colors ${
-                isLight
-                  ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-100'
-                  : 'bg-[#1a261f] border-[#25362b] text-emerald-200 hover:bg-[#223328]'
-              }`}
-              title="フォント全体を再検査"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">再検査</span>
-            </button>
+            {/* Mobile close button */}
             <button
               onClick={onClose}
-              className={`p-2 rounded-xl border transition-colors ${
+              className={`md:hidden p-1.5 rounded-xl border transition-colors shrink-0 ${
                 isLight
                   ? 'bg-white border-stone-200 text-stone-500 hover:bg-stone-100'
                   : 'bg-[#1a261f] border-[#25362b] text-stone-400 hover:bg-[#223328]'
               }`}
+              title="閉じる (Esc)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center space-x-1.5 shrink-0">
+            <button
+              onClick={runScan}
+              disabled={isScanning}
+              className={`px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border text-[11px] sm:text-xs font-semibold flex items-center space-x-1.5 transition-colors shrink-0 ${
+                isLight
+                  ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-100'
+                  : 'bg-[#1a261f] border-[#25362b] text-emerald-200 hover:bg-[#223328]'
+              }`}
+              title="フォント全体を再検査 (R)"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">再検査</span>
+            </button>
+
+            {/* Fullscreen Toggle Button */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`hidden sm:flex p-2 sm:px-2.5 sm:py-2 rounded-xl border text-xs font-semibold items-center space-x-1.5 transition-colors shrink-0 ${
+                isFullscreen
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300 shadow-xs'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700 shadow-xs'
+                  : isLight
+                  ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-100'
+                  : 'bg-[#1a261f] border-[#25362b] text-emerald-200 hover:bg-[#223328]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F または Esc)' : '全画面表示に拡大 (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>通常</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>全画面</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={onClose}
+              className={`hidden md:block p-2 rounded-xl border transition-colors shrink-0 ${
+                isLight
+                  ? 'bg-white border-stone-200 text-stone-500 hover:bg-stone-100'
+                  : 'bg-[#1a261f] border-[#25362b] text-stone-400 hover:bg-[#223328]'
+              }`}
+              title="閉じる (Esc)"
             >
               <X className="w-4 h-4" />
             </button>
@@ -1338,301 +1765,330 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
           </div>
         )}
 
-        {/* Dashboard Overview Cards */}
-        {report && (
-          <div
-            className={`grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 px-5 py-3 border-b text-xs ${
-              isLight ? 'bg-stone-50/50 border-stone-200' : 'bg-[#121c15] border-[#25362b]'
-            }`}
-          >
-            {/* Duplicate Shapes */}
-            <button
-              onClick={() => setActiveTab('duplicate_shape')}
-              className={`p-2.5 rounded-xl border text-left transition-all ${
-                activeTab === 'duplicate_shape'
-                  ? isLight
-                    ? 'bg-white border-emerald-500 shadow-xs ring-1 ring-emerald-500/20'
-                    : 'bg-[#1a261f] border-emerald-500 shadow-xs ring-1 ring-emerald-500/30'
-                  : isLight
-                  ? 'bg-white/80 border-stone-200 hover:border-stone-300'
-                  : 'bg-[#152018] border-[#25362b] hover:border-stone-700'
+        {/* Main View Mode: Project Diagnostics or Quality Issues */}
+        {mainView === 'diagnostics' ? (
+          <ProjectDiagnosticsPanel
+            project={project}
+            setProject={setProject}
+            isLight={isLight}
+            diagReport={diagReport}
+            diagScope={diagScope}
+            setDiagScope={setDiagScope}
+            diagFilter={diagFilter}
+            setDiagFilter={setDiagFilter}
+            diagCategoryFilter={diagCategoryFilter}
+            setDiagCategoryFilter={setDiagCategoryFilter}
+            diagSortBy={diagSortBy}
+            setDiagSortBy={setDiagSortBy}
+            diagSearchQuery={diagSearchQuery}
+            setDiagSearchQuery={setDiagSearchQuery}
+            isDiagScanning={isDiagScanning}
+            onRescan={runDiagnostics}
+            onSelectGlyph={onSelectGlyph}
+            onCloseModal={onClose}
+            onShowToast={onShowToast}
+            commitHistory={commitHistory}
+          />
+        ) : (
+          <>
+            {/* Top Quality Health Summary & Compact Controls */}
+            <div
+              className={`p-3 sm:p-4 border-b shrink-0 transition-colors space-y-2.5 ${
+                isLight ? 'bg-stone-50/70 border-stone-200' : 'bg-[#131d16] border-[#223326]'
               }`}
             >
-              <div className="text-[11px] text-stone-500 dark:text-stone-400 font-medium">字形の重複</div>
-              <div className="flex items-baseline space-x-1.5 mt-0.5">
-                <span className="text-base font-bold text-stone-900 dark:text-white">
-                  {report.categoryCounts.duplicate_shape}
-                </span>
-                <span className="text-[10px] text-stone-400">件</span>
-              </div>
-            </button>
+              {/* Health Score & Quick Tool Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center border shadow-xs shrink-0 ${
+                      healthStatus.badgeBg
+                    }`}
+                  >
+                    <healthStatus.icon className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs sm:text-sm font-bold truncate">
+                        品質スコア: <span className="font-mono font-black">{report?.score ?? 100}</span>/100
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${healthStatus.badgeBg}`}
+                      >
+                        {healthStatus.label}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate">
+                      {report && report.totalIssues > 0
+                        ? `${report.totalIssues}件の改善推奨事項（${report.totalGlyphsChecked}字検査済）`
+                        : 'すべての品質基準を満たしています'}
+                    </p>
+                  </div>
+                </div>
 
-            {/* Path Intersections */}
-            <button
-              onClick={() => setActiveTab('path_intersection')}
-              className={`p-2.5 rounded-xl border text-left transition-all ${
-                activeTab === 'path_intersection'
-                  ? isLight
-                    ? 'bg-white border-emerald-500 shadow-xs ring-1 ring-emerald-500/20'
-                    : 'bg-[#1a261f] border-emerald-500 shadow-xs ring-1 ring-emerald-500/30'
-                  : isLight
-                  ? 'bg-white/80 border-stone-200 hover:border-stone-300'
-                  : 'bg-[#152018] border-[#25362b] hover:border-stone-700'
+                {/* Right side: Global Auto-Fix & Advanced Tools Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  {report && report.totalIssues > 0 && (
+                    <button
+                      onClick={() => handleBatchFix(undefined)}
+                      title="安全な修正（白抜き解消・極点最適化・線幅均一化）を一括実行します"
+                      className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition-all shadow-sm active:scale-98 ${
+                        isLight
+                          ? 'bg-emerald-700 hover:bg-emerald-800 text-white border border-emerald-800'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                      <span>全 {report.totalIssues} 件を一括自動修正</span>
+                    </button>
+                  )}
+
+                  <div className="flex items-center gap-1 border-l pl-2 border-stone-300 dark:border-stone-700">
+                    <button
+                      onClick={() => {
+                        setIsExtremaPanelOpen((prev) => !prev);
+                        if (!isExtremaPanelOpen) {
+                          setIsEqualizePanelOpen(false);
+                          setIsOptimizePanelOpen(false);
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold flex items-center space-x-1 transition-all ${
+                        isExtremaPanelOpen
+                          ? isLight
+                            ? 'bg-cyan-700 text-white border-cyan-800'
+                            : 'bg-cyan-600 text-white border-cyan-500'
+                          : isLight
+                          ? 'bg-white text-cyan-900 border-cyan-200 hover:bg-cyan-50'
+                          : 'bg-[#17251d] text-cyan-200 border-cyan-900/60 hover:bg-[#1f3328]'
+                      }`}
+                      title="極点ノードの自動追加・軸整列ツールを開く"
+                    >
+                      <Compass className="w-3 h-3 text-cyan-500" />
+                      <span>極点最適化</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsEqualizePanelOpen((prev) => !prev);
+                        if (!isEqualizePanelOpen) {
+                          setIsOptimizePanelOpen(false);
+                          setIsExtremaPanelOpen(false);
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold flex items-center space-x-1 transition-all ${
+                        isEqualizePanelOpen
+                          ? isLight
+                            ? 'bg-emerald-700 text-white border-emerald-800'
+                            : 'bg-emerald-600 text-white border-emerald-500'
+                          : isLight
+                          ? 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-50'
+                          : 'bg-[#17251d] text-emerald-200 border-emerald-900/60 hover:bg-[#1f3328]'
+                      }`}
+                      title="線幅均一化・かすれ潰れ補正ツールを開く"
+                    >
+                      <Scale className="w-3 h-3 text-emerald-500" />
+                      <span>線幅均一化</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsOptimizePanelOpen((prev) => !prev);
+                        if (!isOptimizePanelOpen) {
+                          setIsEqualizePanelOpen(false);
+                          setIsExtremaPanelOpen(false);
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold flex items-center space-x-1 transition-all ${
+                        isOptimizePanelOpen
+                          ? isLight
+                            ? 'bg-emerald-700 text-white border-emerald-800'
+                            : 'bg-emerald-600 text-white border-emerald-500'
+                          : isLight
+                          ? 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-50'
+                          : 'bg-[#17251d] text-emerald-200 border-emerald-900/60 hover:bg-[#1f3328]'
+                      }`}
+                      title="冗長ノードの間引きツールを開く"
+                    >
+                      <Wand2 className="w-3 h-3 text-emerald-500" />
+                      <span>ノード軽量化</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (excessiveNodesUnicodes.length > 0) {
+                          setHeatmapModalUnicode(excessiveNodesUnicodes[0]);
+                        } else {
+                          const firstKey = Object.keys(project.glyphs || {})[0];
+                          if (firstKey) {
+                            setHeatmapModalUnicode(Number(firstKey));
+                          } else {
+                            notify('解析可能なグリフがありません', 'warning');
+                          }
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold flex items-center space-x-1 transition-all ${
+                        isLight
+                          ? 'bg-white text-amber-900 border-amber-300 hover:bg-amber-50'
+                          : 'bg-[#17251d] text-amber-200 border-amber-900/60 hover:bg-[#1f3328]'
+                      }`}
+                      title="アンカー密度ヒートマップを開く"
+                    >
+                      <Flame className="w-3 h-3 text-amber-500" />
+                      <span>ヒートマップ</span>
+                      {excessiveNodesUnicodes.length > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-500 text-white font-mono font-bold">
+                          {excessiveNodesUnicodes.length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter & Search Toolbar */}
+            <div
+              className={`flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-2 border-b text-xs ${
+                isLight ? 'bg-white border-stone-200' : 'bg-[#141e17] border-[#25362b]'
               }`}
             >
-              <div className="text-[11px] text-stone-500 dark:text-stone-400 font-medium">パス交差</div>
-              <div className="flex items-baseline space-x-1.5 mt-0.5">
-                <span className="text-base font-bold text-stone-900 dark:text-white">
-                  {report.categoryCounts.path_intersection}
-                </span>
-                <span className="text-[10px] text-stone-400">件</span>
+              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[240px]">
+                {/* Search Input */}
+                <div className="relative min-w-[140px] max-w-xs flex-1">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="文字、Unicode、指摘内容検索... (/)"
+                    className={`w-full pl-8 pr-3 py-1.5 rounded-lg border text-xs outline-hidden transition-colors ${
+                      isLight
+                        ? 'bg-stone-50 border-stone-200 focus:border-emerald-600 focus:bg-white text-stone-900'
+                        : 'bg-[#111913] border-[#25362b] focus:border-emerald-500 text-emerald-100'
+                    }`}
+                  />
+                </div>
+
+                {/* Category Tabs */}
+                <div className="flex items-center space-x-1 overflow-x-auto py-0.5 scrollbar-none">
+                  {[
+                    { id: 'all', label: 'すべて', count: report?.totalIssues ?? 0 },
+                    { id: 'duplicate_shape', label: '字形重複', count: report?.categoryCounts.duplicate_shape ?? 0 },
+                    { id: 'path_intersection', label: '重なり白抜き', count: report?.categoryCounts.path_intersection ?? 0 },
+                    { id: 'missing_extrema', label: '極点ノード', count: report?.categoryCounts.missing_extrema ?? 0 },
+                    { id: 'uneven_stroke', label: '線幅均一性', count: report?.categoryCounts.uneven_stroke ?? 0 },
+                    { id: 'excessive_nodes', label: 'ノード数', count: report?.categoryCounts.excessive_nodes ?? 0 },
+                    { id: 'baseline_deviation', label: 'ベースライン', count: report?.categoryCounts.baseline_deviation ?? 0 },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as TabFilter)}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors whitespace-nowrap flex items-center space-x-1 ${
+                        activeTab === tab.id
+                          ? isLight
+                            ? 'bg-emerald-800 text-white shadow-2xs'
+                            : 'bg-emerald-600 text-white shadow-2xs'
+                          : isLight
+                          ? 'text-stone-600 hover:bg-stone-100'
+                          : 'text-stone-400 hover:bg-[#1f2d22]'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      {tab.count > 0 && (
+                        <span
+                          className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold ${
+                            activeTab === tab.id
+                              ? 'bg-white/20 text-white'
+                              : isLight
+                              ? 'bg-stone-200 text-stone-700'
+                              : 'bg-stone-800 text-stone-300'
+                          }`}
+                        >
+                          {tab.count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </button>
 
-            {/* Excessive Nodes */}
-            <button
-              onClick={() => setActiveTab('excessive_nodes')}
-              className={`p-2.5 rounded-xl border text-left transition-all ${
-                activeTab === 'excessive_nodes'
-                  ? isLight
-                    ? 'bg-white border-emerald-500 shadow-xs ring-1 ring-emerald-500/20'
-                    : 'bg-[#1a261f] border-emerald-500 shadow-xs ring-1 ring-emerald-500/30'
-                  : isLight
-                  ? 'bg-white/80 border-stone-200 hover:border-stone-300'
-                  : 'bg-[#152018] border-[#25362b] hover:border-stone-700'
-              }`}
-            >
-              <div className="text-[11px] text-stone-500 dark:text-stone-400 font-medium">過剰ノード数</div>
-              <div className="flex items-baseline space-x-1.5 mt-0.5">
-                <span className="text-base font-bold text-stone-900 dark:text-white">
-                  {report.categoryCounts.excessive_nodes}
-                </span>
-                <span className="text-[10px] text-stone-400">件</span>
+              {/* Category-Specific Quick Batch Fix Button if filtered */}
+              <div className="flex items-center space-x-1.5 shrink-0 ml-auto">
+                {activeTab === 'path_intersection' && (report?.categoryCounts.path_intersection ?? 0) > 0 && (
+                  <button
+                    onClick={() => handleBatchFix('path_intersection')}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                      isLight
+                        ? 'bg-amber-600 text-white border-amber-700 hover:bg-amber-700'
+                        : 'bg-amber-600 text-white border-amber-500 hover:bg-amber-500'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                    <span>白抜き一括解消 ({report?.categoryCounts.path_intersection}件)</span>
+                  </button>
+                )}
+
+                {activeTab === 'missing_extrema' && (report?.categoryCounts.missing_extrema ?? 0) > 0 && (
+                  <button
+                    onClick={() => handleBatchFix('missing_extrema')}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                      isLight
+                        ? 'bg-cyan-700 text-white border-cyan-800 hover:bg-cyan-800'
+                        : 'bg-cyan-600 text-white border-cyan-500 hover:bg-cyan-500'
+                    }`}
+                  >
+                    <Compass className="w-3.5 h-3.5" />
+                    <span>極点一括最適化 ({report?.categoryCounts.missing_extrema}件)</span>
+                  </button>
+                )}
+
+                {activeTab === 'uneven_stroke' && (report?.categoryCounts.uneven_stroke ?? 0) > 0 && (
+                  <button
+                    onClick={() => handleBatchFix('uneven_stroke')}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                      isLight
+                        ? 'bg-emerald-700 text-white border-emerald-800 hover:bg-emerald-800'
+                        : 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500'
+                    }`}
+                  >
+                    <Scale className="w-3.5 h-3.5" />
+                    <span>線幅一括均一化 ({report?.categoryCounts.uneven_stroke}件)</span>
+                  </button>
+                )}
+
+                {activeTab === 'excessive_nodes' && (report?.categoryCounts.excessive_nodes ?? 0) > 0 && (
+                  <button
+                    onClick={() => handleBatchFix('excessive_nodes')}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                      isLight
+                        ? 'bg-purple-700 text-white border-purple-800 hover:bg-purple-800'
+                        : 'bg-purple-600 text-white border-purple-500 hover:bg-purple-500'
+                    }`}
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    <span>過剰ノード一括間引き ({report?.categoryCounts.excessive_nodes}件)</span>
+                  </button>
+                )}
+
+                {activeTab === 'baseline_deviation' && (report?.categoryCounts.baseline_deviation ?? 0) > 0 && (
+                  <button
+                    onClick={() => handleBatchFix('baseline_deviation')}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                      isLight
+                        ? 'bg-blue-700 text-white border-blue-800 hover:bg-blue-800'
+                        : 'bg-blue-600 text-white border-blue-500 hover:bg-blue-500'
+                    }`}
+                  >
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>ベースライン一括整列 ({report?.categoryCounts.baseline_deviation}件)</span>
+                  </button>
+                )}
               </div>
-            </button>
-
-            {/* Uneven Strokes */}
-            <button
-              onClick={() => setActiveTab('uneven_stroke')}
-              className={`p-2.5 rounded-xl border text-left transition-all ${
-                activeTab === 'uneven_stroke'
-                  ? isLight
-                    ? 'bg-white border-emerald-500 shadow-xs ring-1 ring-emerald-500/20'
-                    : 'bg-[#1a261f] border-emerald-500 shadow-xs ring-1 ring-emerald-500/30'
-                  : isLight
-                  ? 'bg-white/80 border-stone-200 hover:border-stone-300'
-                  : 'bg-[#152018] border-[#25362b] hover:border-stone-700'
-              }`}
-            >
-              <div className="text-[11px] text-stone-500 dark:text-stone-400 font-medium">線幅の偏り</div>
-              <div className="flex items-baseline space-x-1.5 mt-0.5">
-                <span className="text-base font-bold text-stone-900 dark:text-white">
-                  {report.categoryCounts.uneven_stroke || 0}
-                </span>
-                <span className="text-[10px] text-stone-400">件</span>
-              </div>
-            </button>
-
-            {/* Extremum Nodes */}
-            <button
-              onClick={() => setActiveTab('missing_extrema')}
-              className={`p-2.5 rounded-xl border text-left transition-all ${
-                activeTab === 'missing_extrema'
-                  ? isLight
-                    ? 'bg-white border-cyan-500 shadow-xs ring-1 ring-cyan-500/20'
-                    : 'bg-[#112429] border-cyan-500 shadow-xs ring-1 ring-cyan-500/30'
-                  : isLight
-                  ? 'bg-white/80 border-stone-200 hover:border-stone-300'
-                  : 'bg-[#152018] border-[#25362b] hover:border-stone-700'
-              }`}
-            >
-              <div className="text-[11px] text-stone-500 dark:text-stone-400 font-medium">極点ノード</div>
-              <div className="flex items-baseline space-x-1.5 mt-0.5">
-                <span className="text-base font-bold text-stone-900 dark:text-white">
-                  {report.categoryCounts.missing_extrema || 0}
-                </span>
-                <span className="text-[10px] text-stone-400">件</span>
-              </div>
-            </button>
-
-            {/* Baseline Deviations */}
-            <button
-              onClick={() => setActiveTab('baseline_deviation')}
-              className={`p-2.5 rounded-xl border text-left transition-all ${
-                activeTab === 'baseline_deviation'
-                  ? isLight
-                    ? 'bg-white border-emerald-500 shadow-xs ring-1 ring-emerald-500/20'
-                    : 'bg-[#1a261f] border-emerald-500 shadow-xs ring-1 ring-emerald-500/30'
-                  : isLight
-                  ? 'bg-white/80 border-stone-200 hover:border-stone-300'
-                  : 'bg-[#152018] border-[#25362b] hover:border-stone-700'
-              }`}
-            >
-              <div className="text-[11px] text-stone-500 dark:text-stone-400 font-medium">ベースライン</div>
-              <div className="flex items-baseline space-x-1.5 mt-0.5">
-                <span className="text-base font-bold text-stone-900 dark:text-white">
-                  {report.categoryCounts.baseline_deviation}
-                </span>
-                <span className="text-[10px] text-stone-400">件</span>
-              </div>
-            </button>
-
-            {/* All Issues / Overall */}
-            <button
-              onClick={() => setActiveTab('all')}
-              className={`p-2.5 rounded-xl border text-left transition-all ${
-                activeTab === 'all'
-                  ? isLight
-                    ? 'bg-white border-emerald-500 shadow-xs ring-1 ring-emerald-500/20'
-                    : 'bg-[#1a261f] border-emerald-500 shadow-xs ring-1 ring-emerald-500/30'
-                  : isLight
-                  ? 'bg-white/80 border-stone-200 hover:border-stone-300'
-                  : 'bg-[#152018] border-[#25362b] hover:border-stone-700'
-              }`}
-            >
-              <div className="text-[11px] text-stone-500 dark:text-stone-400 font-medium">全指摘事項</div>
-              <div className="flex items-baseline space-x-1.5 mt-0.5">
-                <span className="text-base font-bold text-stone-900 dark:text-white">
-                  {report.totalIssues}
-                </span>
-                <span className="text-[10px] text-stone-400">/ {report.totalGlyphsChecked} 字</span>
-              </div>
-            </button>
-          </div>
-        )}
-
-        {/* Action & Filter Bar */}
-        <div
-          className={`flex flex-wrap items-center justify-between gap-2 px-5 py-2.5 border-b text-xs ${
-            isLight ? 'bg-white border-stone-200' : 'bg-[#141e17] border-[#25362b]'
-          }`}
-        >
-          {/* Search Input */}
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="文字、Unicode、キーワード検索..."
-              className={`w-full pl-8 pr-3 py-1.5 rounded-lg border text-xs outline-hidden transition-colors ${
-                isLight
-                  ? 'bg-stone-50 border-stone-200 focus:border-emerald-600 focus:bg-white text-stone-900'
-                  : 'bg-[#111913] border-[#25362b] focus:border-emerald-500 text-emerald-100'
-              }`}
-            />
-          </div>
-
-          {/* Category Tabs */}
-          <div className="flex items-center space-x-1 overflow-x-auto py-0.5 scrollbar-none">
-            {[
-              { id: 'all', label: 'すべて' },
-              { id: 'duplicate_shape', label: '字形重複' },
-              { id: 'path_intersection', label: 'パス交差' },
-              { id: 'excessive_nodes', label: 'ノード数' },
-              { id: 'missing_extrema', label: '極点ノード' },
-              { id: 'uneven_stroke', label: '線幅均一性' },
-              { id: 'baseline_deviation', label: 'ベースライン' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabFilter)}
-                className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? isLight
-                      ? 'bg-emerald-800 text-white'
-                      : 'bg-emerald-600 text-white'
-                    : isLight
-                    ? 'text-stone-600 hover:bg-stone-100'
-                    : 'text-stone-400 hover:bg-[#1f2d22]'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Quick Batch Fixes */}
-          <div className="flex items-center space-x-1.5 ml-auto">
-            {report && (report.categoryCounts.missing_extrema || 0) > 0 && (
-              <button
-                onClick={() => handleBatchFix('missing_extrema')}
-                className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1 transition-colors border shadow-xs ${
-                  isLight
-                    ? 'bg-cyan-700 text-white border-cyan-800 hover:bg-cyan-800'
-                    : 'bg-cyan-600 text-white border-cyan-500 hover:bg-cyan-500'
-                }`}
-                title="極点ノードが不足しているグリフを一括最適化（ノード配置＆ハンドル軸整列）"
-              >
-                <Compass className="w-3 h-3" />
-                <span>極点最適化一括修正</span>
-              </button>
-            )}
-
-            {report && report.categoryCounts.path_intersection > 0 && (
-              <button
-                onClick={() => handleBatchFix('path_intersection')}
-                className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1 transition-colors border shadow-xs ${
-                  isLight
-                    ? 'bg-amber-600 text-white border-amber-700 hover:bg-amber-700'
-                    : 'bg-amber-600 text-white border-amber-500 hover:bg-amber-500'
-                }`}
-                title="一筆書きの交差やストローク重なりが検出された文字を一括結合し、白抜きを防止"
-              >
-                <Sparkles className="w-3 h-3 text-amber-200" />
-                <span>重なり白抜き一括解消</span>
-              </button>
-            )}
-
-            {report && report.categoryCounts.uneven_stroke > 0 && (
-              <button
-                onClick={() => handleBatchFix('uneven_stroke')}
-                className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1 transition-colors border ${
-                  isLight
-                    ? 'bg-emerald-700 text-white border-emerald-800 hover:bg-emerald-800 shadow-xs'
-                    : 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500 shadow-xs'
-                }`}
-                title="線幅の偏り・かすれ・潰れが検出されたグリフを一括均一化"
-              >
-                <Scale className="w-3 h-3" />
-                <span>線幅均一化一括修正</span>
-              </button>
-            )}
-
-            {report && report.categoryCounts.excessive_nodes > 0 && (
-              <button
-                onClick={() => handleBatchFix('excessive_nodes')}
-                className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1 transition-colors border ${
-                  isLight
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
-                    : 'bg-emerald-950/60 border-emerald-800 text-emerald-300 hover:bg-emerald-900'
-                }`}
-                title="過剰ノードが検出されたグリフの頂点を一括最適化"
-              >
-                <Wand2 className="w-3 h-3" />
-                <span>過剰ノード一括修正</span>
-              </button>
-            )}
-
-            {report && report.categoryCounts.baseline_deviation > 0 && (
-              <button
-                onClick={() => handleBatchFix('baseline_deviation')}
-                className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1 transition-colors border ${
-                  isLight
-                    ? 'bg-stone-100 border-stone-300 text-stone-800 hover:bg-stone-200'
-                    : 'bg-[#1c2920] border-[#25362b] text-emerald-200 hover:bg-[#25372b]'
-                }`}
-                title="ベースラインから浮遊・沈下している文字を一括整列"
-              >
-                <Sliders className="w-3 h-3" />
-                <span>ベースライン一括整列</span>
-              </button>
-            )}
-          </div>
-        </div>
+            </div>
 
         {/* Issue List View */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-5 space-y-3">
           {filteredIssues.length === 0 ? (
             <div className="py-16 text-center">
               <div
@@ -1777,6 +2233,23 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                             />
                           </g>
                         ))}
+                        {/* Excessive Nodes / Density Heatmap Dots in Mini Preview */}
+                        {issue.type === 'excessive_nodes' && issue.details?.densityAnalysis && (
+                          <g>
+                            {issue.details.densityAnalysis.contours.flatMap((c) =>
+                              c.nodes.map((n, nIdx) => (
+                                <circle
+                                  key={`dn-${c.contourIndex}-${nIdx}`}
+                                  cx={n.x}
+                                  cy={n.y}
+                                  r={n.level === 'critical' ? 24 : n.level === 'dense' ? 18 : 12}
+                                  fill={n.color}
+                                  opacity={n.level === 'optimal' ? 0.6 : 0.95}
+                                />
+                              ))
+                            )}
+                          </g>
+                        )}
                       </svg>
                     </div>
 
@@ -1849,6 +2322,28 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                       {issue.description}
                     </p>
 
+                    {/* Density Heatmap Statistics details if excessive_nodes */}
+                    {issue.type === 'excessive_nodes' && issue.details?.densityAnalysis && (
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] pt-0.5">
+                        <div
+                          className={`px-2 py-1 rounded-md border font-mono flex items-center gap-1.5 ${
+                            isLight
+                              ? 'bg-amber-50/70 border-amber-200 text-amber-900'
+                              : 'bg-amber-950/40 border-amber-800/80 text-amber-200'
+                          }`}
+                        >
+                          <Flame className="w-3 h-3 text-amber-500" />
+                          <span>総アンカー: <strong>{issue.details.totalNodes}個</strong></span>
+                          <span className="text-stone-300 dark:text-stone-600">/</span>
+                          <span>
+                            過密箇所: <strong className="text-rose-500 font-bold">{issue.details.densityAnalysis.criticalNodeCount}点</strong>
+                          </span>
+                          <span className="text-stone-300 dark:text-stone-600">/</span>
+                          <span>単一輪郭最大: <strong>{issue.details.maxContourNodes}点</strong></span>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Stroke Width Stats details if available */}
                     {issue.details?.minStrokeWidth !== undefined && (
                       <div className="flex flex-wrap items-center gap-2 text-[11px] pt-0.5">
@@ -1884,31 +2379,45 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                   </div>
 
                   {/* Actions Column */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-stone-100 dark:border-[#223025]">
+                  <div className="flex flex-row sm:flex-col items-center sm:items-end justify-end gap-1.5 w-full sm:w-auto shrink-0 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-stone-100 dark:border-[#223025]">
+                    {/* Primary Auto-Fix Action */}
                     {issue.canAutoFix && (
                       <button
                         onClick={() => handleFixIssue(issue)}
                         title="文字の形や角・曲率を崩さずに安全に修正します"
-                        className={`w-full sm:w-auto px-3 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors border shadow-xs ${
-                          isLight
-                            ? 'bg-emerald-700 text-white hover:bg-emerald-800 border-emerald-800'
-                            : 'bg-emerald-600 text-white hover:bg-emerald-500 border-emerald-500'
+                        className={`w-full sm:w-auto px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-all shadow-xs shrink-0 ${
+                          issue.autoFixType === 'merge_intersection'
+                            ? isLight
+                              ? 'bg-amber-600 hover:bg-amber-700 text-white border border-amber-700'
+                              : 'bg-amber-600 hover:bg-amber-500 text-white border border-amber-500'
+                            : issue.autoFixType === 'optimize_extrema'
+                            ? isLight
+                              ? 'bg-cyan-700 hover:bg-cyan-800 text-white border border-cyan-800'
+                              : 'bg-cyan-600 hover:bg-cyan-500 text-white border border-cyan-500'
+                            : isLight
+                            ? 'bg-emerald-700 text-white hover:bg-emerald-800 border border-emerald-800'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-500 border border-emerald-500'
                         }`}
                       >
                         {issue.autoFixType === 'equalize_strokes' ? (
                           <>
                             <Scale className="w-3.5 h-3.5" />
-                            <span>均一化を適用</span>
+                            <span>線幅を均一化</span>
                           </>
                         ) : issue.autoFixType === 'optimize_extrema' ? (
                           <>
                             <Compass className="w-3.5 h-3.5" />
-                            <span>極点最適化を適用</span>
+                            <span>極点を最適化</span>
                           </>
                         ) : issue.autoFixType === 'merge_intersection' ? (
                           <>
-                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                            <span>白抜き解消</span>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                            <span>白抜きを解消</span>
+                          </>
+                        ) : issue.autoFixType === 'excessive_nodes' ? (
+                          <>
+                            <Wand2 className="w-3.5 h-3.5" />
+                            <span>ノード間引き</span>
                           </>
                         ) : (
                           <>
@@ -1919,51 +2428,26 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                       </button>
                     )}
 
-                    {/* Single Glyph Extrema Optimization */}
-                    <button
-                      onClick={() => handleOptimizeSingleGlyphExtrema(issue.unicode, issue.char)}
-                      title="この文字のベジェ曲線極点（水平・垂直の最外端）を分析し、ノードを追加・配置して輪郭を数学的に最適化します"
-                      className={`w-full sm:w-auto px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors border ${
-                        isLight
-                          ? 'bg-cyan-50 border-cyan-300 text-cyan-900 hover:bg-cyan-100'
-                          : 'bg-cyan-950/60 border-cyan-800 text-cyan-200 hover:bg-cyan-900'
-                      }`}
-                    >
-                      <Compass className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-                      <span>極点最適化</span>
-                    </button>
+                    {/* Density Heatmap Modal Button if excessive nodes */}
+                    {issue.type === 'excessive_nodes' && (
+                      <button
+                        onClick={() => setHeatmapModalUnicode(issue.unicode)}
+                        title="この文字の輪郭密度ヒートマップを開き、過密アンカー箇所を可視化してクリックで即時単純化します"
+                        className={`w-full sm:w-auto px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors border shadow-xs shrink-0 ${
+                          isLight
+                            ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                            : 'bg-amber-950/60 text-amber-300 border-amber-800 hover:bg-amber-900'
+                        }`}
+                      >
+                        <Flame className="w-3.5 h-3.5 text-amber-500" />
+                        <span>ヒートマップ診断</span>
+                      </button>
+                    )}
 
-                    {/* Single Glyph Stroke Equalization button */}
-                    <button
-                      onClick={() => handleEqualizeSingleGlyph(issue.unicode, issue.char)}
-                      title="この文字の線幅（太さ）を自動均一化します（かすれ・潰れを補正）"
-                      className={`w-full sm:w-auto px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors border ${
-                        isLight
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
-                          : 'bg-emerald-950/60 border-emerald-800 text-emerald-300 hover:bg-emerald-900'
-                      }`}
-                    >
-                      <Scale className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      <span>ストローク均一化</span>
-                    </button>
-
-                    {/* Single Glyph Node Optimization */}
-                    <button
-                      onClick={() => handleOptimizeSingleGlyph(issue.unicode, issue.char)}
-                      title="この文字の直線上の冗長ノードを間引き、パスを滑らかに最適化します（形状保護済）"
-                      className={`w-full sm:w-auto px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors border ${
-                        isLight
-                          ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                          : 'bg-[#1a261f] border-[#25362b] text-emerald-200 hover:bg-[#223328]'
-                      }`}
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      <span>ノード最適化</span>
-                    </button>
-
+                    {/* Open in Canvas button */}
                     <button
                       onClick={() => handleGoToGlyph(issue.unicode)}
-                      className={`w-full sm:w-auto px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center justify-center space-x-1.5 transition-colors border ${
+                      className={`w-full sm:w-auto px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center justify-center space-x-1.5 transition-colors border shrink-0 ${
                         isLight
                           ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-100'
                           : 'bg-[#1b261f] border-[#25362b] text-emerald-200 hover:bg-[#233329]'
@@ -1978,28 +2462,87 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
             })
           )}
         </div>
+        </>
+        )}
 
         {/* Footer info and close button */}
         <div
-          className={`flex items-center justify-between px-5 py-3 border-t text-xs ${
+          className={`flex flex-col sm:flex-row items-center justify-between px-5 py-3 border-t text-xs gap-3 shrink-0 ${
             isLight ? 'bg-stone-50/80 border-stone-200' : 'bg-[#111a14] border-[#25362b]'
           }`}
         >
-          <div className="text-stone-500 dark:text-stone-400 text-[11px] leading-relaxed">
-            ※ 赤破線はベースライン (Y=800) です。ストローク均一化や自動修正は文字の形（角・筆先・曲率・縦横比）を保護しながら適用されます。「元に戻す (Ctrl+Z)」でいつでも取り消せます。
+          <div className="flex items-center space-x-2 text-stone-500 dark:text-stone-400 text-[11px] leading-relaxed">
+            <span className="hidden md:inline">
+              ※ 赤破線はベースライン (Y=800)。形状保護モードで安全に最適化。「元に戻す (Ctrl+Z)」でいつでも取り消せます。
+            </span>
+            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-stone-200/60 dark:bg-stone-800/80 font-mono text-[10px] text-stone-600 dark:text-stone-300">
+              <kbd className="font-bold">D</kbd>: 診断切替
+            </span>
+            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-stone-200/60 dark:bg-stone-800/80 font-mono text-[10px] text-stone-600 dark:text-stone-300">
+              <kbd className="font-bold">R</kbd>: 再検査
+            </span>
+            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-stone-200/60 dark:bg-stone-800/80 font-mono text-[10px] text-stone-600 dark:text-stone-300">
+              <kbd className="font-bold">H</kbd>: ヒートマップ
+            </span>
+            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-stone-200/60 dark:bg-stone-800/80 font-mono text-[10px] text-stone-600 dark:text-stone-300">
+              <kbd className="font-bold">/</kbd>: 検索
+            </span>
+            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-stone-200/60 dark:bg-stone-800/80 font-mono text-[10px] text-stone-600 dark:text-stone-300">
+              <kbd className="font-bold">F</kbd>: 全画面切替
+            </span>
+            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-stone-200/60 dark:bg-stone-800/80 font-mono text-[10px] text-stone-600 dark:text-stone-300">
+              <kbd className="font-bold">Esc</kbd>: 閉じる
+            </span>
           </div>
-          <button
-            onClick={onClose}
-            className={`px-4 py-2 rounded-xl font-bold transition-colors ${
-              isLight
-                ? 'bg-stone-800 text-white hover:bg-stone-900'
-                : 'bg-emerald-600 text-white hover:bg-emerald-500'
-            }`}
-          >
-            閉じる
-          </button>
+          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors flex items-center space-x-1.5 ${
+                isLight
+                  ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-100'
+                  : 'bg-[#1a261f] border-[#25362b] text-emerald-200 hover:bg-[#223328]'
+              }`}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>通常表示</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>全画面</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className={`px-4 py-1.5 rounded-xl font-bold transition-colors ${
+                isLight
+                  ? 'bg-stone-800 text-white hover:bg-stone-900'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-500'
+              }`}
+            >
+              閉じる
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Glyph Density Heatmap Inspector Modal */}
+      {heatmapModalUnicode !== null && (
+        <GlyphDensityHeatmapModal
+          isOpen={true}
+          onClose={() => setHeatmapModalUnicode(null)}
+          unicode={heatmapModalUnicode}
+          project={project}
+          setProject={setProject}
+          theme={theme}
+          onShowToast={onShowToast}
+          commitHistory={commitHistory}
+          onRefreshQualityReport={runScan}
+        />
+      )}
     </div>
   );
 };

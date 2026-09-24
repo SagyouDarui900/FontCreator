@@ -9,10 +9,11 @@ import {
   GridSettings,
   UserPenPreset,
   GlyphOverlaySettings,
+  PressureCurveConfig,
 } from './types';
 import { createDefaultProject } from './utils/fontCompiler';
 import { DEFAULT_SAMPLE_GLYPHS, isLegacyMockGlyph } from './data/defaultSampleGlyphs';
-import { loadUserPenPresets, loadStickyBrushConfigs, saveStickyBrushConfig } from './utils/presetData';
+import { loadUserPenPresets, loadStickyBrushConfigs, saveStickyBrushConfig, DEFAULT_PRESSURE_CURVES } from './utils/presetData';
 import { Header } from './components/Header';
 import { GlyphGrid } from './components/GlyphGrid';
 import { ToolBar } from './components/ToolBar';
@@ -30,10 +31,16 @@ import { KerningModal } from './components/KerningModal';
 import { WeightInterpolationModal } from './components/WeightInterpolationModal';
 import { GlyphCompareModal } from './components/GlyphCompareModal';
 import { RadicalStudioModal } from './components/RadicalStudioModal';
+import { StorageManagerModal } from './components/StorageManagerModal';
 import { PenPresetsModal } from './components/PenPresetsModal';
 import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
+import { ExportModal } from './components/ExportModal';
+import { OpenTypeFeaturesModal } from './components/OpenTypeFeaturesModal';
+import { GridFittingModal } from './components/GridFittingModal';
+import { PixelFontStudioModal } from './components/PixelFontStudioModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { Toast, ToastMessage } from './components/Toast';
-import { ThemeMode } from './utils/theme';
+import { ThemeMode, isLightTheme, getThemeClasses } from './utils/theme';
 import { createSmallKanaContours, generateId, simplifyGlyphContours } from './utils/pathUtils';
 import { DAKUTEN_MAPPINGS, createDakutenContours, createHandakutenContours, cloneContours } from './utils/dakutenHelper';
 import {
@@ -43,17 +50,25 @@ import {
   getNextUncompletedGlyphNav,
 } from './utils/navigationHelper';
 import { calculateOptimalSpacing, AutoSpacingPreset } from './utils/metricsHelper';
+import {
+  setLastAutoSaveTimestamp,
+  exportGlyphJsonFile,
+  LOCAL_STORAGE_PROJECT_KEY,
+  saveProjectToIndexedDB,
+  loadProjectFromIndexedDB,
+} from './utils/storageManager';
 import { KANA_PAIRS } from './data/unicodeTables';
 import { Grid, Paintbrush, Sliders, Eye, Undo2, Redo2, ChevronRight } from 'lucide-react';
 
-const LOCAL_STORAGE_KEY = 'font_editor_project_data_v2';
+const LOCAL_STORAGE_KEY = LOCAL_STORAGE_PROJECT_KEY;
 const THEME_STORAGE_KEY = 'font_editor_theme_mode';
 
 export default function App() {
-  // Theme Mode (light / dark) - default to light (Japonica style eye-friendly white/green)
+  // Theme Mode ('light' | 'dark' | 'sepia' | 'warm' | 'nord' | 'monochrome')
   const [theme, setTheme] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem(THEME_STORAGE_KEY);
-    return saved === 'dark' ? 'dark' : 'light';
+    const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode;
+    const validThemes: ThemeMode[] = ['light', 'dark', 'sepia', 'warm', 'nord', 'monochrome'];
+    return validThemes.includes(saved) ? saved : 'light';
   });
 
   // Toasts
@@ -78,17 +93,25 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const changeTheme = useCallback((nextTheme: ThemeMode) => {
+    setTheme(nextTheme);
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  }, []);
+
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
-      const next = t === 'light' ? 'dark' : 'light';
+      const allThemes: ThemeMode[] = ['light', 'dark', 'sepia', 'warm', 'nord', 'monochrome'];
+      const currentIndex = allThemes.indexOf(t);
+      const next = allThemes[(currentIndex + 1) % allThemes.length];
       localStorage.setItem(THEME_STORAGE_KEY, next);
       return next;
     });
   }, []);
 
-  // Synchronize dark class to documentElement for consistent Tailwind styling
+  // Synchronize data-theme & dark class to documentElement for consistent styling
   useEffect(() => {
-    if (theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'dark' || theme === 'nord') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
@@ -123,7 +146,7 @@ export default function App() {
     return createDefaultProject();
   });
 
-  // Seamlessly upgrade any cached legacy/oversized sample glyphs on mount
+  // Seamlessly upgrade any cached legacy/oversized sample glyphs on mount and check IndexedDB recovery
   useEffect(() => {
     let upgraded = false;
     const updated = { ...project.glyphs };
@@ -136,6 +159,19 @@ export default function App() {
     if (upgraded) {
       setProject((prev) => ({ ...prev, glyphs: updated }));
     }
+
+    // Check IndexedDB for a newer auto-saved version (e.g. if localStorage was cleared or quota exceeded)
+    loadProjectFromIndexedDB().then((dbData) => {
+      if (dbData && dbData.project) {
+        const localUpdatedAt = projectRef.current?.updatedAt || 0;
+        if (dbData.updatedAt > localUpdatedAt + 3000) {
+          setProject(dbData.project);
+          showToast('IndexedDBから最新の自動保存プロジェクトをクラッシュ復元しました', 'success');
+        }
+      }
+    }).catch((err) => {
+      console.warn('IndexedDB initial recovery check failed:', err);
+    });
   }, []);
 
   // Selected Glyph
@@ -152,6 +188,14 @@ export default function App() {
   const [pressureSensitivity, setPressureSensitivity] = useState<'high' | 'normal' | 'low' | 'off'>(() => {
     const saved = loadStickyBrushConfigs();
     return saved.brush?.pressureSensitivity ?? 'high';
+  });
+  const [pressureCurve, setPressureCurve] = useState<PressureCurveConfig>(() => {
+    const saved = loadStickyBrushConfigs();
+    return saved.brush?.pressureCurve ?? DEFAULT_PRESSURE_CURVES.soft;
+  });
+  const [smoothingIntensity, setSmoothingIntensity] = useState<number>(() => {
+    const saved = loadStickyBrushConfigs();
+    return saved.brush?.smoothingIntensity ?? 50;
   });
 
   // Advanced Writing Feeling Parameters
@@ -174,6 +218,12 @@ export default function App() {
       }
       if (targetConfig.pressureSensitivity) {
         setPressureSensitivity(targetConfig.pressureSensitivity);
+      }
+      if (targetConfig.pressureCurve) {
+        setPressureCurve(targetConfig.pressureCurve);
+      }
+      if (typeof targetConfig.smoothingIntensity === 'number') {
+        setSmoothingIntensity(targetConfig.smoothingIntensity);
       }
       if (typeof targetConfig.autoSmoothBrush === 'boolean') {
         setAutoSmoothBrush(targetConfig.autoSmoothBrush);
@@ -201,6 +251,17 @@ export default function App() {
     saveStickyBrushConfig(brushStyle, { pressureSensitivity: newSensitivity });
   }, [brushStyle]);
 
+  const handleChangePressureCurve = useCallback((newCurve: PressureCurveConfig) => {
+    setPressureCurve(newCurve);
+    saveStickyBrushConfig(brushStyle, { pressureCurve: newCurve });
+  }, [brushStyle]);
+
+  const handleChangeSmoothingIntensity = useCallback((newIntensity: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(newIntensity)));
+    setSmoothingIntensity(clamped);
+    saveStickyBrushConfig(brushStyle, { smoothingIntensity: clamped });
+  }, [brushStyle]);
+
   // Adjust brush size via [ / ] keys
   const handleAdjustBrushSize = useCallback((delta: number) => {
     setBrushWidth((current) => {
@@ -218,6 +279,12 @@ export default function App() {
     setBrushStyle(preset.brushStyle);
     setBrushWidth(preset.brushWidth);
     setPressureSensitivity(preset.pressureSensitivity);
+    if (preset.pressureCurve) {
+      setPressureCurve(preset.pressureCurve);
+    }
+    if (typeof preset.smoothingIntensity === 'number') {
+      setSmoothingIntensity(preset.smoothingIntensity);
+    }
     setAutoSmoothBrush(preset.autoSmoothBrush);
     setSmoothStrength(preset.smoothStrength);
     setSmoothPreserveCorners(preset.smoothPreserveCorners);
@@ -225,6 +292,8 @@ export default function App() {
     saveStickyBrushConfig(preset.brushStyle, {
       brushWidth: preset.brushWidth,
       pressureSensitivity: preset.pressureSensitivity,
+      pressureCurve: preset.pressureCurve,
+      smoothingIntensity: preset.smoothingIntensity,
       autoSmoothBrush: preset.autoSmoothBrush,
       smoothStrength: preset.smoothStrength,
       smoothPreserveCorners: preset.smoothPreserveCorners,
@@ -238,6 +307,8 @@ export default function App() {
     setBrushStyle('brush');
     setBrushWidth(38);
     setPressureSensitivity('high');
+    setPressureCurve(DEFAULT_PRESSURE_CURVES.soft);
+    setSmoothingIntensity(60);
     setAutoSmoothBrush(true);
     setSmoothStrength('standard');
     setSmoothPreserveCorners(true);
@@ -274,12 +345,13 @@ export default function App() {
     offsetY: 0,
   });
 
-  // Grid & Guideline Settings (Optimized for Japanese handwriting balance: cross guide + body/kana frame, snap OFF)
+  // Grid & Guideline Settings (Optimized for smooth vector editing: snap OFF by default)
   const [gridSettings, setGridSettings] = useState<GridSettings>({
     showGrid: true,
     gridSize: 50,
     snapToGrid: false,
     snapToPoints: false,
+    snapToGuides: false,
     showMetrics: true,
     showPoints: true,
     showHandles: true,
@@ -307,7 +379,12 @@ export default function App() {
   const [isWeightInterpModalOpen, setIsWeightInterpModalOpen] = useState<boolean>(false);
   const [isGlyphCompareModalOpen, setIsGlyphCompareModalOpen] = useState<boolean>(false);
   const [isRadicalStudioOpen, setIsRadicalStudioOpen] = useState<boolean>(false);
+  const [isStorageManagerOpen, setIsStorageManagerOpen] = useState<boolean>(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [isOpenTypeFeaturesModalOpen, setIsOpenTypeFeaturesModalOpen] = useState<boolean>(false);
+  const [isGridFittingModalOpen, setIsGridFittingModalOpen] = useState<boolean>(false);
+  const [isPixelStudioOpen, setIsPixelStudioOpen] = useState<boolean>(false);
 
   // Glyph Overlay Comparison Settings (Persisted in localStorage)
   const [overlaySettings, setOverlaySettings] = useState<GlyphOverlaySettings>(() => {
@@ -348,7 +425,12 @@ export default function App() {
     isGlyphCompareModalOpen ||
     isRadicalStudioOpen ||
     isPenPresetsModalOpen ||
-    isShortcutsModalOpen;
+    isShortcutsModalOpen ||
+    isStorageManagerOpen ||
+    isExportModalOpen ||
+    isOpenTypeFeaturesModalOpen ||
+    isGridFittingModalOpen ||
+    isPixelStudioOpen;
 
   // Responsive layout tracking to prevent sidebar/grid overlaps onto canvas
   const [viewportWidth, setViewportWidth] = useState<number>(() => {
@@ -386,7 +468,30 @@ export default function App() {
   const toggleGridDrawer = useCallback(() => setShowGridDrawer((prev) => !prev), []);
   const toggleMetricsDrawer = useCallback(() => setShowMetricsDrawer((prev) => !prev), []);
   const toggleRadicals = useCallback(() => setShowRadicals((prev) => !prev), []);
-  const openPenPresetsModal = useCallback(() => setIsPenPresetsModalOpen(true), []);
+  const handleOpenPenPresetsModal = useCallback(() => setIsPenPresetsModalOpen(true), []);
+  const openPenPresetsModal = handleOpenPenPresetsModal;
+
+  const handleOpenTestModal = useCallback(() => setIsTestModalOpen(true), []);
+  const handleOpenFontInfoModal = useCallback(() => setIsFontInfoModalOpen(true), []);
+  const handleOpenTraceModal = useCallback(() => setIsTraceModalOpen(true), []);
+  const handleOpenSvgModal = useCallback(() => setIsSvgModalOpen(true), []);
+  const handleOpenBatchNormalizeModal = useCallback(() => setIsBatchNormalizeModalOpen(true), []);
+  const handleOpenQualityModal = useCallback(() => setIsQualityModalOpen(true), []);
+  const handleOpenSynthesisModal = useCallback(() => setIsSynthesisModalOpen(true), []);
+  const handleOpenKerningModal = useCallback(() => setIsKerningModalOpen(true), []);
+  const handleOpenWeightInterpModal = useCallback(() => setIsWeightInterpModalOpen(true), []);
+  const handleOpenGlyphCompareModal = useCallback(() => setIsGlyphCompareModalOpen(true), []);
+  const handleOpenRadicalStudio = useCallback(() => setIsRadicalStudioOpen(true), []);
+  const handleOpenPixelStudio = useCallback(() => setIsPixelStudioOpen(true), []);
+  const handleOpenStorageManagerModal = useCallback(() => setIsStorageManagerOpen(true), []);
+  const handleOpenShortcutsModal = useCallback(() => setIsShortcutsModalOpen(true), []);
+  const handleCloseGridDrawer = useCallback(() => setShowGridDrawer(false), []);
+  const handleCloseMetricsDrawer = useCallback(() => setShowMetricsDrawer(false), []);
+  const handleCloseRadicalsDrawer = useCallback(() => setShowRadicals(false), []);
+  const handleOpenRadicalStudioFromDrawer = useCallback(() => {
+    setShowRadicals(false);
+    setIsRadicalStudioOpen(true);
+  }, []);
 
   // Clipboard for copying glyph shapes
   const [clipboardContours, setClipboardContours] = useState<PathContour[] | null>(null);
@@ -423,12 +528,18 @@ export default function App() {
 
   // Quota warning throttle ref
   const lastQuotaWarningRef = useRef<number>(0);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Auto-save to LocalStorage with 750ms debounce to prevent UI stutter during drawing
+  // Dual Auto-save to LocalStorage & IndexedDB with 2000ms debounce
   useEffect(() => {
-    const timer = setTimeout(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    autoSaveTimerRef.current = setTimeout(() => {
+      // 1. Write to LocalStorage
       try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(project));
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projectRef.current));
+        setLastAutoSaveTimestamp(Date.now());
       } catch (e: any) {
         console.warn('Auto-save to localStorage failed:', e);
         const isQuota =
@@ -439,33 +550,101 @@ export default function App() {
         if (isQuota && Date.now() - lastQuotaWarningRef.current > 120000) {
           lastQuotaWarningRef.current = Date.now();
           showToast(
-            'ブラウザの保存容量の上限に達しました。上部の「保存」ボタンからプロジェクトファイル(.json)をダウンロードしてバックアップしてください。',
-            'warning'
+            'LocalStorage容量上限に達しましたが、IndexedDB大容量ストレージへ安全にデュアル自動保存されています。',
+            'info'
           );
         }
       }
-    }, 750);
-    return () => clearTimeout(timer);
-  }, [project, showToast]);
 
-  // Ensure synchronous save before window closes or refreshes
+      // 2. Dual-save asynchronously to IndexedDB (bypasses LocalStorage 5MB quota)
+      saveProjectToIndexedDB(projectRef.current).catch((err) => {
+        console.warn('Background IndexedDB auto-save error:', err);
+      });
+    }, 2000);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [project.updatedAt, showToast]);
+
+  // Ensure synchronous flush to LocalStorage & IndexedDB before window closes, refreshes, or tab hides
   useEffect(() => {
     const handleBeforeUnload = () => {
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projectRef.current));
+        setLastAutoSaveTimestamp(Date.now());
+        saveProjectToIndexedDB(projectRef.current);
       } catch {
         // Ignored
       }
     };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projectRef.current));
+          setLastAutoSaveTimestamp(Date.now());
+          saveProjectToIndexedDB(projectRef.current);
+        } catch {
+          // Ignored
+        }
+      }
+    };
+
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
+
+  // Quick Save Current Glyph (即座にLocalStorageへ永続化 + 単体JSONファイル書き出しバックアップ)
+  const handleQuickSaveCurrentGlyph = useCallback(() => {
+    // 1. Immediately persist full project to localStorage without waiting for debounce
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projectRef.current));
+      setLastAutoSaveTimestamp(Date.now());
+    } catch (e) {
+      console.warn('Immediate project save failed:', e);
+    }
+
+    // 2. Export single glyph JSON backup
+    const g = projectRef.current.glyphs?.[selectedUnicode] || {
+      unicode: selectedUnicode,
+      char: selectedChar,
+      advanceWidth: projectRef.current.metadata.unitsPerEm || 1000,
+      contours: [],
+      strokes: [],
+      anchors: [],
+    };
+
+    const res = exportGlyphJsonFile(
+      g,
+      selectedUnicode,
+      selectedChar,
+      projectRef.current.metadata?.familyName || projectRef.current.name || '手書きフォント',
+      projectRef.current.metadata?.version || '1.0'
+    );
+
+    if (res.success) {
+      showToast(
+        `文字「${selectedChar}」(U+${selectedUnicode.toString(16).toUpperCase().padStart(4, '0')}) を即時保存し、『${res.filename}』をダウンロードしました`,
+        'success'
+      );
+    } else {
+      showToast(`文字「${selectedChar}」の変更をブラウザに即時永続化しました`, 'success');
+    }
+  }, [selectedUnicode, selectedChar, showToast]);
 
   // Record history snapshot before mutation
   const commitHistory = useCallback(() => {
     const glyphSnapshot = currentGlyphRef.current;
     setUndoStack((prev) => [...prev.slice(-30), JSON.parse(JSON.stringify(glyphSnapshot))]);
     setRedoStack([]);
+    setProject((prev) => ({ ...prev, updatedAt: Date.now() }));
   }, []);
 
   // Undo action
@@ -550,7 +729,7 @@ export default function App() {
   // Update current glyph contours
   const handleUpdateContours = useCallback(
     (newContours: PathContour[]) => {
-      if (project.glyphs[selectedUnicode]?.locked) {
+      if (projectRef.current.glyphs[selectedUnicode]?.locked) {
         showToast(`文字「${selectedChar}」は編集ロックされています。ヘッダーの鍵アイコンで解除してください。`, 'warning');
         return;
       }
@@ -563,6 +742,8 @@ export default function App() {
           lsb: 50,
         };
 
+        if (existing.contours === newContours) return prev;
+
         return {
           ...prev,
           glyphs: {
@@ -573,11 +754,10 @@ export default function App() {
               modified: true,
             },
           },
-          updatedAt: Date.now(),
         };
       });
     },
-    [selectedUnicode, selectedChar]
+    [selectedUnicode, selectedChar, showToast]
   );
 
   // Update Advance Width
@@ -971,6 +1151,7 @@ export default function App() {
         updatedGlyphs[unicode] = {
           ...existingGlyph,
           contours: [...(existingGlyph.contours || []), ...clonedRadical],
+          modified: true,
           updatedAt: Date.now(),
         };
       });
@@ -1060,6 +1241,16 @@ export default function App() {
           );
           return { ...prev, showGrid: nextShow };
         });
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        setGridSettings((prev) => {
+          const nextSnap = !(prev.snapToGrid || prev.snapToGuides);
+          showToast(
+            `スマートスナップ: ${nextSnap ? 'ON (吸着有効)' : 'OFF (自由配置)'} (S: 切替 / Altキー長押し: ドラッグ時一時解除)`,
+            'info'
+          );
+          return { ...prev, snapToGrid: nextSnap, snapToGuides: nextSnap };
+        });
       } else if (
         e.altKey &&
         !e.ctrlKey &&
@@ -1129,14 +1320,55 @@ export default function App() {
         e.preventDefault();
         handleAutoSpaceCurrentGlyph('smart');
         return;
-      } else if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 's') {
-        // Simplify shortcut: Alt+S
+      } else if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        const key = e.key.toLowerCase();
+        if (key === 's') {
+          // Simplify shortcut: Alt+S
+          e.preventDefault();
+          handleSimplifyCurrentGlyph('normal');
+          return;
+        } else if (key === 'e') {
+          // Export modal: Alt+E
+          e.preventDefault();
+          setIsExportModalOpen(true);
+          return;
+        } else if (key === 't') {
+          // Test Drive modal: Alt+T
+          e.preventDefault();
+          setIsTestModalOpen(true);
+          return;
+        } else if (key === 'q') {
+          // Quality check modal: Alt+Q
+          e.preventDefault();
+          setIsQualityModalOpen(true);
+          return;
+        } else if (key === 'i') {
+          // Font info & metrics: Alt+I
+          e.preventDefault();
+          setIsFontInfoModalOpen(true);
+          return;
+        } else if (key === 'k') {
+          // Kerning modal: Alt+K
+          e.preventDefault();
+          setIsKerningModalOpen(true);
+          return;
+        } else if (key === 'm') {
+          // Storage manager modal: Alt+M
+          e.preventDefault();
+          setIsStorageManagerOpen(true);
+          return;
+        }
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'e') {
+        // Export modal: Ctrl+E / Cmd+E
         e.preventDefault();
-        handleSimplifyCurrentGlyph('normal');
+        setIsExportModalOpen(true);
         return;
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         const key = e.key.toLowerCase();
-        if (key === 'v') setToolMode('select');
+        if (key === 'z') {
+          e.preventDefault();
+          toggleZenMode();
+        } else if (key === 'v') setToolMode('select');
         else if (key === 'a') setToolMode('node');
         else if (key === 'p') setToolMode('pen');
         else if (key === 'b') setToolMode('brush');
@@ -1174,13 +1406,12 @@ export default function App() {
     isAnyModalOpen,
   ]);
 
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
+  const themeClasses = getThemeClasses(theme);
 
   return (
     <div
-      className={`flex flex-col h-full w-full overflow-hidden font-sans select-none transition-colors ${
-        isLight ? 'bg-[#f7faf8] text-stone-900' : 'dark bg-[#0f1712] text-emerald-100'
-      }`}
+      className={`flex flex-col h-full w-full overflow-hidden font-sans select-none transition-colors ${themeClasses.appBg}`}
     >
       {/* Top Main Navigation Bar */}
       <Header
@@ -1190,42 +1421,47 @@ export default function App() {
         canRedo={redoStack.length > 0}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        onOpenTestModal={() => setIsTestModalOpen(true)}
-        onOpenFontInfoModal={() => setIsFontInfoModalOpen(true)}
-        onOpenTraceModal={() => setIsTraceModalOpen(true)}
-        onOpenSvgModal={() => setIsSvgModalOpen(true)}
-        onOpenBatchNormalizeModal={() => setIsBatchNormalizeModalOpen(true)}
-        onOpenQualityModal={() => setIsQualityModalOpen(true)}
-        onOpenGlyphSynthesisModal={() => setIsSynthesisModalOpen(true)}
-        onOpenKerningModal={() => setIsKerningModalOpen(true)}
-        onOpenWeightInterpolationModal={() => setIsWeightInterpModalOpen(true)}
-        onOpenGlyphCompareModal={() => setIsGlyphCompareModalOpen(true)}
-        onOpenRadicalStudio={() => setIsRadicalStudioOpen(true)}
-        onToggleRadicals={() => setShowRadicals(!showRadicals)}
+        onOpenTestModal={handleOpenTestModal}
+        onOpenFontInfoModal={handleOpenFontInfoModal}
+        onOpenTraceModal={handleOpenTraceModal}
+        onOpenSvgModal={handleOpenSvgModal}
+        onOpenBatchNormalizeModal={handleOpenBatchNormalizeModal}
+        onOpenQualityModal={handleOpenQualityModal}
+        onOpenGlyphSynthesisModal={handleOpenSynthesisModal}
+        onOpenKerningModal={handleOpenKerningModal}
+        onOpenWeightInterpolationModal={handleOpenWeightInterpModal}
+        onOpenGlyphCompareModal={handleOpenGlyphCompareModal}
+        onOpenRadicalStudio={handleOpenRadicalStudio}
+        onOpenPixelStudio={handleOpenPixelStudio}
+        onOpenOpenTypeFeaturesModal={() => setIsOpenTypeFeaturesModalOpen(true)}
+        onOpenGridFittingModal={() => setIsGridFittingModalOpen(true)}
+        onOpenStorageManagerModal={handleOpenStorageManagerModal}
+        onToggleRadicals={toggleRadicals}
         showRadicals={showRadicals}
-        onToggleGridDrawer={() => setShowGridDrawer(!showGridDrawer)}
+        onToggleGridDrawer={toggleGridDrawer}
         showGridDrawer={showGridDrawer}
-        onToggleMetricsDrawer={() => setShowMetricsDrawer(!showMetricsDrawer)}
+        onToggleMetricsDrawer={toggleMetricsDrawer}
         showMetricsDrawer={showMetricsDrawer}
         onToggleZenMode={toggleZenMode}
         isZenMode={isZenMode}
         onApplyHandwritingPreset={handleApplyHandwritingPreset}
-        onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
+        onOpenShortcutsModal={handleOpenShortcutsModal}
         selectedChar={selectedChar}
         selectedUnicode={selectedUnicode}
         isGlyphLocked={Boolean(currentGlyph.locked)}
         onToggleLockGlyph={handleToggleLockGlyph}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onChangeTheme={changeTheme}
         onShowToast={showToast}
       />
 
       {/* Main Workspace Body */}
-      <div className="flex-1 flex flex-col sm:flex-row min-h-0 min-w-0 w-full flex-grow flex-shrink grow shrink relative overflow-hidden isolate">
+      <div className={`flex-1 flex flex-col sm:flex-row min-h-0 min-w-0 w-full flex-grow flex-shrink grow shrink relative overflow-hidden isolate ${isAnyModalOpen ? 'pointer-events-none select-none' : ''}`}>
         {/* Quick expand tab for GlyphGrid when closed (desktop) */}
         {!showGridDrawer && (
           <button
-            onClick={() => setShowGridDrawer(true)}
+            onClick={toggleGridDrawer}
             className={`hidden sm:flex absolute left-13 md:left-14 top-14 z-20 px-2 py-1.5 rounded-r-xl border border-l-0 shadow-md items-center space-x-1 text-xs font-bold transition-all hover:pl-2.5 ${
               isLight
                 ? 'bg-white text-emerald-950 border-[#d4e5dc] hover:bg-emerald-50 shadow-emerald-950/5'
@@ -1248,12 +1484,12 @@ export default function App() {
           onPasteGlyph={handlePasteGlyph}
           onDuplicateAsSmallKana={handleDuplicateAsSmallKana}
           onGenerateDakutenTarget={handleGenerateDakutenTarget}
-          onOpenGlyphSynthesisModal={() => setIsSynthesisModalOpen(true)}
-          onOpenKerningModal={() => setIsKerningModalOpen(true)}
-          onOpenQualityModal={() => setIsQualityModalOpen(true)}
+          onOpenGlyphSynthesisModal={handleOpenSynthesisModal}
+          onOpenKerningModal={handleOpenKerningModal}
+          onOpenQualityModal={handleOpenQualityModal}
           hasClipboard={Boolean(clipboardContours)}
           isOpen={showGridDrawer}
-          onClose={() => setShowGridDrawer(false)}
+          onClose={handleCloseGridDrawer}
           theme={theme}
           isOverlay={isGridOverlay}
         />
@@ -1269,10 +1505,14 @@ export default function App() {
             setBrushStyle={handleChangeBrushStyle}
             pressureSensitivity={pressureSensitivity}
             onChangePressureSensitivity={handleChangePressureSensitivity}
+            smoothingIntensity={smoothingIntensity}
+            onChangeSmoothingIntensity={handleChangeSmoothingIntensity}
             gridSettings={gridSettings}
             setGridSettings={setGridSettings}
-            onOpenTraceModal={() => setIsTraceModalOpen(true)}
-            onOpenPenPresetsModal={() => setIsPenPresetsModalOpen(true)}
+            onOpenTraceModal={handleOpenTraceModal}
+            onOpenPenPresetsModal={handleOpenPenPresetsModal}
+            onOpenPixelStudio={handleOpenPixelStudio}
+            onQuickSaveGlyph={handleQuickSaveCurrentGlyph}
             theme={theme}
           />
         </div>
@@ -1294,6 +1534,9 @@ export default function App() {
             onChangeBrushWidth={handleChangeBrushWidth}
             pressureSensitivity={pressureSensitivity}
             onChangePressureSensitivity={handleChangePressureSensitivity}
+            pressureCurve={pressureCurve}
+            smoothingIntensity={smoothingIntensity}
+            onChangeSmoothingIntensity={handleChangeSmoothingIntensity}
             traceSettings={traceSettings}
             onChangeTraceSettings={setTraceSettings}
             selectedUnicode={selectedUnicode}
@@ -1322,7 +1565,7 @@ export default function App() {
             isAnyModalOpen={isAnyModalOpen}
             overlaySettings={overlaySettings}
             project={project}
-            onOpenGlyphCompareModal={() => setIsGlyphCompareModalOpen(true)}
+            onOpenGlyphCompareModal={handleOpenGlyphCompareModal}
           />
         </div>
 
@@ -1338,7 +1581,7 @@ export default function App() {
           selectedChar={selectedChar}
           selectedUnicode={selectedUnicode}
           isOpen={showMetricsDrawer}
-          onClose={() => setShowMetricsDrawer(false)}
+          onClose={handleCloseMetricsDrawer}
           theme={theme}
           isOverlay={isMetricsOverlay}
           onSelectPrevGlyph={handleSelectPrevGlyph}
@@ -1353,16 +1596,13 @@ export default function App() {
         {/* Kanji Radicals Slide-over Drawer */}
         <RadicalsDrawer
           isOpen={showRadicals}
-          onClose={() => setShowRadicals(false)}
+          onClose={handleCloseRadicalsDrawer}
           onInsertRadical={handleInsertRadical}
           currentContours={currentGlyph.contours || []}
           selectedChar={selectedChar}
           allGlyphs={project.glyphs}
           theme={theme}
-          onOpenRadicalStudio={() => {
-            setShowRadicals(false);
-            setIsRadicalStudioOpen(true);
-          }}
+          onOpenRadicalStudio={handleOpenRadicalStudioFromDrawer}
         />
       </div>
 
@@ -1370,8 +1610,8 @@ export default function App() {
       <div
         className={`flex sm:hidden items-center justify-around py-1 px-2 border-t shrink-0 z-30 select-none pb-[max(env(safe-area-inset-bottom),6px)] ${
           isLight
-            ? 'bg-white/95 border-[#d8e6df] text-stone-700 backdrop-blur-md shadow-lg'
-            : 'bg-[#121a14]/95 border-[#25362b] text-emerald-200 backdrop-blur-md shadow-lg'
+            ? 'bg-white border-[#d8e6df] text-stone-700 shadow-lg'
+            : 'bg-[#121a14] border-[#25362b] text-emerald-200 shadow-lg'
         }`}
       >
         <button
@@ -1580,12 +1820,15 @@ export default function App() {
           brushStyle,
           brushWidth,
           pressureSensitivity,
+          pressureCurve,
+          smoothingIntensity,
           autoSmoothBrush,
           smoothStrength,
           smoothPreserveCorners,
           autoUnionBrush,
         }}
         onApplyPreset={handleApplyPenPreset}
+        onChangePressureCurve={handleChangePressureCurve}
         presets={penPresets}
         onUpdatePresets={setPenPresets}
         theme={theme}
@@ -1597,8 +1840,62 @@ export default function App() {
         theme={theme}
       />
 
+      <StorageManagerModal
+        isOpen={isStorageManagerOpen}
+        onClose={() => setIsStorageManagerOpen(false)}
+        project={project}
+        setProject={setProject}
+        theme={theme}
+        onShowToast={showToast}
+      />
+
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        project={project}
+        theme={theme}
+        onShowToast={showToast}
+        onOpenQualityModal={() => setIsQualityModalOpen(true)}
+      />
+
+      <OpenTypeFeaturesModal
+        isOpen={isOpenTypeFeaturesModalOpen}
+        onClose={() => setIsOpenTypeFeaturesModalOpen(false)}
+        project={project}
+        setProject={setProject}
+        isLight={isLight}
+        onShowToast={showToast}
+      />
+
+      {isGridFittingModalOpen && (
+        <GridFittingModal
+          isOpen={isGridFittingModalOpen}
+          onClose={() => setIsGridFittingModalOpen(false)}
+          project={project}
+          setProject={setProject}
+          isLight={isLight}
+          onShowToast={showToast}
+        />
+      )}
+
+      {isPixelStudioOpen && (
+        <PixelFontStudioModal
+          project={project}
+          setProject={setProject}
+          isOpen={isPixelStudioOpen}
+          onClose={() => setIsPixelStudioOpen(false)}
+          isLight={isLight}
+          selectedUnicode={selectedUnicode}
+          onSelectGlyph={handleSelectGlyph}
+          onShowToast={showToast}
+        />
+      )}
+
       {/* Floating Toast Notification System */}
       <Toast toasts={toasts} onDismiss={dismissToast} theme={theme} />
+
+      {/* Offline Connectivity Status Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }

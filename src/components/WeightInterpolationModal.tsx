@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   X,
   Sliders,
@@ -11,10 +11,12 @@ import {
   Eye,
   RefreshCw,
   FolderArchive,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { FontProject, GlyphData, PathContour } from '../types';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
 import {
   adjustContoursWeight,
   contoursToSvgPath,
@@ -63,7 +65,7 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
   theme,
   onShowToast,
 }) => {
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
 
   // Mode: 'family' (Weight expansion / variation) or 'master' (Master-to-master morphing)
   const [activeTab, setActiveTab] = useState<'family' | 'master'>('family');
@@ -75,6 +77,31 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
   const [showOriginalOverlay, setShowOriginalOverlay] = useState<boolean>(true);
   const [previewSampleText, setPreviewSampleText] = useState<string>('永青木あいうABC123');
   const [isExportingZip, setIsExportingZip] = useState<boolean>(false);
+
+  // Fullscreen mode state
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Keyboard shortcut listener: Escape and F
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
+      } else if ((e.key === 'f' || e.key === 'F') && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose]);
 
   // Master interpolation settings
   const [masterAUnicode, setMasterAUnicode] = useState<number>(selectedUnicode);
@@ -260,6 +287,7 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
         const result = compileFont(weightProj, {
           mergeOverlaps: true,
           normalizeWinding: true,
+          skipBlobUrl: true,
         });
 
         if (result?.buffer) {
@@ -323,14 +351,22 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 transition-all ${
+        isFullscreen
+          ? 'p-0 w-screen h-screen bg-black/85 flex flex-col'
+          : 'flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200'
+      }`}
       onClick={onClose}
     >
       <div
-        className={`w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden border transition-colors ${
-          isLight
-            ? 'bg-white border-stone-200 text-stone-800'
-            : 'bg-[#141c16] border-[#25362b] text-emerald-100'
+        className={`flex flex-col transition-all overflow-hidden ${
+          isFullscreen
+            ? isLight
+              ? 'w-screen h-screen rounded-none border-none shadow-none bg-white text-stone-800'
+              : 'w-screen h-screen rounded-none border-none shadow-none bg-[#141c16] text-emerald-100'
+            : isLight
+            ? 'w-full max-w-4xl xl:max-w-5xl rounded-2xl shadow-2xl max-h-[92vh] border border-stone-200 bg-white text-stone-800'
+            : 'w-full max-w-4xl xl:max-w-5xl rounded-2xl shadow-2xl max-h-[92vh] border border-[#25362b] bg-[#141c16] text-emerald-100'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -347,26 +383,61 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
             <div>
               <h2 className="text-base font-bold flex items-center gap-2">
                 <span>複数ウェイト自動補間 & ファミリー生成</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 font-normal">
-                  Vector Interpolation
-                </span>
+                {isFullscreen ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-medium">
+                    全画面モード
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 font-normal">
+                    Vector Interpolation
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-stone-500 dark:text-emerald-400/80">
                 線の太さ（ウェイト）の一括増減・ファミリー展開・2マスター間幾何補間
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1a251e] transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-1.5">
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1.5 px-2.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-colors ${
+                isFullscreen
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                  : isLight
+                  ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+                  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F または Esc)' : '全画面表示に拡大 (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">通常</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">全画面</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1a251e] transition-colors"
+              title="閉じる (Esc)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}
         <div
-          className={`flex border-b px-5 pt-2 shrink-0 gap-4 ${
+          className={`flex border-b px-3 sm:px-5 pt-2 shrink-0 gap-4 overflow-x-auto no-scrollbar whitespace-nowrap ${
             isLight ? 'border-stone-200 bg-stone-50/40' : 'border-[#25362b] bg-[#101712]/50'
           }`}
         >
@@ -395,7 +466,7 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-6">
           {activeTab === 'family' ? (
             <>
               {/* Top: Presets Bar */}

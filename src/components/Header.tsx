@@ -17,6 +17,7 @@ import {
   Upload,
   FileCode,
   Sliders,
+  SlidersHorizontal,
   Shapes,
   Scale,
   Maximize,
@@ -33,11 +34,17 @@ import {
   Lock,
   Unlock,
   Eye,
+  HardDrive,
+  Palette,
+  Check,
+  ChevronDown,
 } from 'lucide-react';
 import { FontProject } from '../types';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, THEME_PRESETS, getThemePreset, isLightTheme, getThemeClasses } from '../utils/theme';
 import { downloadFont, loadFontFromFile, createDefaultProject } from '../utils/fontCompiler';
+import { exportProjectJsonFile } from '../utils/storageManager';
 import { ExportModal } from './ExportModal';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   project: FontProject;
@@ -57,6 +64,10 @@ interface HeaderProps {
   onOpenWeightInterpolationModal?: () => void;
   onOpenGlyphCompareModal?: () => void;
   onOpenRadicalStudio: () => void;
+  onOpenPixelStudio?: () => void;
+  onOpenOpenTypeFeaturesModal?: () => void;
+  onOpenGridFittingModal?: () => void;
+  onOpenStorageManagerModal?: () => void;
   onToggleRadicals: () => void;
   showRadicals: boolean;
   onToggleGridDrawer: () => void;
@@ -73,6 +84,7 @@ interface HeaderProps {
   onToggleLockGlyph?: () => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
+  onChangeTheme?: (mode: ThemeMode) => void;
   onShowToast?: (text: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
 }
 
@@ -94,6 +106,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onOpenWeightInterpolationModal,
   onOpenGlyphCompareModal,
   onOpenRadicalStudio,
+  onOpenPixelStudio,
+  onOpenOpenTypeFeaturesModal,
+  onOpenGridFittingModal,
+  onOpenStorageManagerModal,
   onToggleRadicals,
   showRadicals,
   onToggleGridDrawer,
@@ -110,20 +126,26 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onToggleLockGlyph,
   theme,
   onToggleTheme,
+  onChangeTheme,
   onShowToast,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [isConfirmingNew, setIsConfirmingNew] = useState(false);
   const [newProjectName, setNewProjectName] = useState<string>('新規手書きフォント');
   const toolsMenuRef = useRef<HTMLDivElement>(null);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (toolsMenuRef.current && !toolsMenuRef.current.contains(e.target as Node)) {
         setShowToolsMenu(false);
+      }
+      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
+        setShowThemeMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -150,23 +172,13 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   // セーブデータ (.json) のエクスポート (PC/iPad/スマホ間で移行可能・大容量対応)
   const handleSaveProjectJson = () => {
     try {
-      const jsonStr = JSON.stringify(project, null, 2);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const downloadAnchor = document.createElement('a');
-      const safeName = (project.metadata.familyName || 'FontProject').replace(/[^a-zA-Z0-9_\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff-]/g, '_');
-      downloadAnchor.href = url;
-      downloadAnchor.download = `${safeName}.fontproj.json`;
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      setTimeout(() => {
-        try {
-          document.body.removeChild(downloadAnchor);
-          URL.revokeObjectURL(url);
-        } catch (_) {}
-      }, 1000);
-      setShowToolsMenu(false);
-      notify('プロジェクトセーブデータを保存しました', 'success');
+      const res = exportProjectJsonFile(project);
+      if (res.success) {
+        setShowToolsMenu(false);
+        notify(`プロジェクトセーブデータ『${res.filename}』を保存しました`, 'success');
+      } else {
+        notify('プロジェクトの保存に失敗しました', 'error');
+      }
     } catch (err) {
       console.error('Failed to export project JSON:', err);
       notify('プロジェクトの保存に失敗しました', 'error');
@@ -227,15 +239,12 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   };
 
   const glyphCount = Object.keys(project.glyphs).length;
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
+  const themeClasses = getThemeClasses(theme);
 
   return (
     <header
-      className={`h-12 sm:h-13 border-b flex items-center justify-between px-1.5 sm:px-3 shrink-0 z-30 select-none relative transition-colors overflow-x-auto scrollbar-none gap-1 sm:gap-2.5 ${
-        isLight
-          ? 'bg-white text-stone-800 border-stone-200 shadow-xs'
-          : 'bg-[#121914] text-emerald-100 border-[#222e25] shadow-xs'
-      }`}
+      className={`h-12 sm:h-13 border-b flex items-center justify-between px-1.5 sm:px-3.5 shrink-0 z-40 select-none relative transition-colors overflow-x-auto sm:overflow-x-visible scrollbar-none gap-1 sm:gap-3 ${themeClasses.headerBg}`}
     >
       {/* Hidden file inputs */}
       <input
@@ -254,10 +263,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({
       />
 
       {/* Left: Sidebar Toggle & Brand & Project Info */}
-      <div className="flex items-center space-x-1 sm:space-x-2.5 shrink-0 min-w-0">
+      <div className="flex items-center gap-1 sm:gap-2.5 shrink-0 min-w-0">
         <button
           onClick={onToggleGridDrawer}
-          className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl transition-colors flex items-center space-x-1 sm:space-x-1.5 text-xs font-bold shrink-0 ${
+          className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl transition-colors flex items-center gap-1 sm:gap-1.5 text-xs font-bold shrink-0 ${
             showGridDrawer
               ? isLight
                 ? 'bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-xs'
@@ -269,13 +278,13 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           title="文字一覧（コード表）の表示/非表示"
         >
           <Grid className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          <span className="hidden sm:inline">文字一覧</span>
+          <span className="hidden sm:inline leading-none">文字一覧</span>
         </button>
 
         <div className={`h-4 sm:h-5 w-[1px] hidden sm:block ${isLight ? 'bg-stone-200' : 'bg-[#222e25]'}`} />
 
         {/* Brand Logo & Name */}
-        <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 min-w-0">
+        <div className="flex items-center gap-1.5 shrink-0 min-w-0">
           <div
             className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center font-bold text-[11px] sm:text-xs shadow-xs tracking-tighter shrink-0 ${
               isLight
@@ -285,16 +294,16 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           >
             FC
           </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs font-bold tracking-tight flex items-center space-x-1 min-w-0">
-              <span className="truncate max-w-[65px] xs:max-w-[90px] sm:max-w-[140px] md:max-w-[180px]">
+          <div className="flex flex-col min-w-0 justify-center">
+            <span className="text-xs font-bold tracking-tight flex items-center gap-1 min-w-0 leading-tight">
+              <span className="truncate max-w-[58px] xs:max-w-[95px] sm:max-w-[140px] md:max-w-[190px]">
                 {project.metadata.familyName && project.metadata.familyName !== 'OTEdit-Style Font' && project.metadata.familyName !== '新規フォント'
                   ? project.metadata.familyName
                   : 'FontCreator'}
               </span>
               {project.metadata.styleName && project.metadata.styleName !== 'Regular' && (
                 <span
-                  className={`text-[8.5px] px-1 py-0.2 rounded font-mono hidden md:inline-block ${
+                  className={`text-[8.5px] px-1 py-0.2 rounded font-mono hidden md:inline-block leading-none ${
                     isLight ? 'bg-stone-100 text-stone-700 border border-stone-200' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                   }`}
                 >
@@ -302,9 +311,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 </span>
               )}
             </span>
-            <div className="flex items-center space-x-1.5">
+            <div className="flex items-center gap-1.5">
               <span
-                className={`text-[9.5px] font-mono hidden md:inline truncate ${
+                className={`text-[9.5px] font-mono hidden md:inline truncate leading-tight ${
                   isLight ? 'text-stone-500' : 'text-emerald-400'
                 }`}
               >
@@ -315,7 +324,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 <button
                   id="btn-header-lock-glyph"
                   onClick={onToggleLockGlyph}
-                  className={`p-1 px-1.5 rounded-lg transition-all flex items-center space-x-1 border text-[10px] font-bold shrink-0 ${
+                  className={`p-1 px-1.5 rounded-lg transition-all flex items-center gap-1 border text-[10px] font-bold shrink-0 ${
                     isGlyphLocked
                       ? isLight
                         ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-xs ring-1 ring-amber-400/30'
@@ -333,12 +342,12 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                   {isGlyphLocked ? (
                     <>
                       <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                      <span className="hidden sm:inline text-amber-800 dark:text-amber-300">ロック中</span>
+                      <span className="hidden sm:inline text-amber-800 dark:text-amber-300 leading-none">ロック中</span>
                     </>
                   ) : (
                     <>
                       <Unlock className="w-3 h-3 text-stone-400" />
-                      <span className="hidden sm:inline">ロック</span>
+                      <span className="hidden sm:inline leading-none">ロック</span>
                     </>
                   )}
                 </button>
@@ -349,10 +358,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({
       </div>
 
       {/* Center: Undo/Redo & Essential Preview / Guide */}
-      <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
         {/* Undo / Redo Group */}
         <div
-          className={`flex items-center rounded-xl border p-0.5 ${
+          className={`flex items-center rounded-xl border p-0.5 gap-0.5 ${
             isLight ? 'bg-stone-100/80 border-stone-200' : 'bg-[#18241d] border-[#223025]'
           }`}
         >
@@ -395,22 +404,22 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         {/* Test Waterfall Modal */}
         <button
           onClick={onOpenTestModal}
-          className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs active:scale-95 border ${
+          className={`px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs active:scale-95 border ${
             isLight
               ? 'bg-stone-100/90 text-stone-800 hover:bg-stone-200/90 border-stone-200'
               : 'bg-[#18241d] text-emerald-200 hover:bg-[#202f26] border-[#25362b]'
           }`}
           title="フォント試し打ち・文章リアルタイムプレビュー"
         >
-          <Play className="w-3.5 h-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
-          <span className="hidden sm:inline">試し打ち</span>
+          <Play className="w-3.5 h-3.5 fill-current text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className="hidden sm:inline leading-none">試し打ち</span>
         </button>
 
         {/* Manual & Tutorial & Shortcuts Guide Button */}
         {onOpenShortcutsModal && (
           <button
             onClick={onOpenShortcutsModal}
-            className={`px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs border active:scale-95 ${
+            className={`px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs border active:scale-95 ${
               isLight
                 ? 'bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-900 border-emerald-200 hover:border-emerald-300'
                 : 'bg-[#1a2d21] hover:bg-[#223b2c] text-emerald-200 border-emerald-800/60 hover:border-emerald-700'
@@ -418,9 +427,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             title="説明書・チュートリアル・ショートカット集 [?]"
           >
             <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="hidden md:inline">説明書・ガイド</span>
-            <span className="md:hidden">ガイド</span>
-            <kbd className="hidden lg:inline-block px-1 py-0.2 rounded text-[10px] font-mono font-bold bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-700 dark:text-stone-300">
+            <span className="hidden md:inline leading-none">説明書・ガイド</span>
+            <span className="hidden xs:inline md:hidden leading-none">ガイド</span>
+            <kbd className="hidden lg:inline-block px-1 py-0.2 rounded text-[10px] font-mono font-bold bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-700 dark:text-stone-300 leading-none">
               ?
             </kbd>
           </button>
@@ -430,7 +439,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <button
           id="btn-header-radicals"
           onClick={onToggleRadicals}
-          className={`hidden xl:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-all active:scale-95 ${
+          className={`hidden xl:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center gap-1.5 transition-all active:scale-95 ${
             showRadicals
               ? isLight
                 ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300 shadow-xs'
@@ -441,18 +450,39 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           }`}
           title="部首パレット (康熙214部首・高品質パーツ)"
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-          <span>部首</span>
+          <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <span className="leading-none">部首</span>
         </button>
       </div>
 
       {/* Right: Clean Tools Dropdown & Theme & Settings & TTF Export */}
-      <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        {/* Metrics Panel toggle (Universal across desktop & mobile) */}
+        {onToggleMetricsDrawer && (
+          <button
+            id="btn-header-metrics"
+            onClick={onToggleMetricsDrawer}
+            className={`px-2 sm:px-2.5 py-1 sm:py-1.5 h-8 sm:h-9 rounded-lg sm:rounded-xl text-xs font-bold flex items-center gap-1 sm:gap-1.5 transition-all shadow-xs border active:scale-95 ${
+              showMetricsDrawer
+                ? isLight
+                  ? 'bg-emerald-100 text-emerald-950 border-emerald-300 ring-2 ring-emerald-500/20'
+                  : 'bg-emerald-950 text-emerald-200 border-emerald-700/60 ring-2 ring-emerald-400/20'
+                : isLight
+                ? 'bg-white hover:bg-emerald-50/70 text-stone-700 hover:text-emerald-900 border-stone-200 hover:border-emerald-300'
+                : 'bg-[#151f19] hover:bg-[#1d2b22] text-emerald-200 border-[#25362b] hover:border-emerald-700/60'
+            }`}
+            title="メトリクス・文字ツール（送り幅・字面枠・変形など）"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="font-bold leading-none hidden sm:inline">メトリクス</span>
+          </button>
+        )}
+
         {/* Unified Tools Dropdown */}
         <div className="relative" ref={toolsMenuRef}>
           <button
             onClick={() => setShowToolsMenu(!showToolsMenu)}
-            className={`px-2 sm:px-2.5 py-1 sm:py-1.5 h-8 sm:h-9 rounded-lg sm:rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs border active:scale-95 ${
+            className={`px-2 sm:px-2.5 py-1 sm:py-1.5 h-8 sm:h-9 rounded-lg sm:rounded-xl text-xs font-bold flex items-center gap-1 sm:gap-1.5 transition-all shadow-xs border active:scale-95 ${
               showToolsMenu
                 ? isLight
                   ? 'bg-emerald-100 text-emerald-950 border-emerald-300 ring-2 ring-emerald-500/20'
@@ -464,9 +494,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             title="機能メニュー（制作スタジオ・自動化・ファイル管理）"
           >
             <Sliders className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="font-bold">機能</span>
+            <span className="font-bold leading-none">機能</span>
             <span
-              className={`hidden sm:inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+              className={`hidden sm:inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold leading-none ${
                 isLight
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                   : 'bg-[#1a2d21] text-emerald-300 border border-emerald-800'
@@ -475,7 +505,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
               12
             </span>
             <span
-              className={`text-[9px] opacity-70 transition-transform duration-150 ${
+              className={`text-[9px] opacity-70 transition-transform duration-150 leading-none ${
                 showToolsMenu ? 'rotate-180' : ''
               }`}
             >
@@ -484,13 +514,23 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           </button>
 
           {showToolsMenu && (
-            <div
-              className={`fixed right-2 sm:right-4 top-[50px] w-[calc(100vw-16px)] sm:w-[460px] md:w-[500px] max-h-[calc(100vh-64px)] overflow-y-auto overscroll-contain rounded-2xl shadow-2xl border p-2.5 sm:p-3.5 z-50 flex flex-col gap-2.5 animate-in fade-in duration-150 ${
-                isLight
-                  ? 'bg-white/98 backdrop-blur-md border-stone-200 text-stone-800 shadow-xl'
-                  : 'bg-[#151f19]/98 backdrop-blur-md border-[#25362b] text-emerald-100 shadow-xl'
-              }`}
-            >
+            <>
+              {/* Invisible click-away backdrop */}
+              <div
+                className="fixed inset-0 z-45 bg-black/20 backdrop-blur-2xs"
+                onClick={() => setShowToolsMenu(false)}
+              />
+              <div
+                style={{
+                  maxHeight: 'calc(100vh - 68px)',
+                  paddingBottom: 'max(env(safe-area-inset-bottom, 16px), 20px)',
+                }}
+                className={`fixed right-2 sm:right-4 top-[50px] sm:top-[56px] w-[calc(100vw-16px)] sm:w-[460px] md:w-[500px] overflow-y-auto overscroll-contain rounded-2xl shadow-2xl border p-2.5 sm:p-3.5 z-50 flex flex-col gap-2.5 animate-in fade-in duration-150 ${
+                  isLight
+                    ? 'bg-white/98 backdrop-blur-md border-stone-200 text-stone-800 shadow-xl'
+                    : 'bg-[#151f19]/98 backdrop-blur-md border-[#25362b] text-emerald-100 shadow-xl'
+                }`}
+              >
               {/* Menu Header with Count and Close Button */}
               <div className="flex items-center justify-between px-1 pb-1.5 border-b border-stone-200/80 dark:border-[#223025]">
                 <div className="flex items-center space-x-2">
@@ -500,7 +540,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                   <div>
                     <span className="text-xs font-bold tracking-tight">機能・制作スタジオ</span>
                     <span className="ml-1.5 text-[10px] text-stone-400 dark:text-emerald-400 font-normal">
-                      全12ツール
+                      全13ツール
                     </span>
                   </div>
                 </div>
@@ -736,6 +776,86 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                     </button>
                   )}
 
+                  {/* OpenType Features (Vertical & Ligatures) */}
+                  {onOpenOpenTypeFeaturesModal && (
+                    <button
+                      onClick={() => {
+                        onOpenOpenTypeFeaturesModal();
+                        setShowToolsMenu(false);
+                      }}
+                      className={`text-left p-2 rounded-xl border transition-all flex items-start space-x-2 group ${
+                        isLight
+                          ? 'bg-stone-50 hover:bg-emerald-50/60 border-stone-200 hover:border-emerald-300'
+                          : 'bg-[#1a251e] hover:bg-[#202f26] border-[#25362b] hover:border-emerald-700/60'
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                        <FileCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold truncate">縦書き・合字 (OpenType)</div>
+                        <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-snug line-clamp-2">
+                          `vert` 縦書き置換・合字(GSUB)設計
+                        </div>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Grid Fitting & Auto Hinting */}
+                  {onOpenGridFittingModal && (
+                    <button
+                      onClick={() => {
+                        onOpenGridFittingModal();
+                        setShowToolsMenu(false);
+                      }}
+                      className={`text-left p-2 rounded-xl border transition-all flex items-start space-x-2 group ${
+                        isLight
+                          ? 'bg-stone-50 hover:bg-emerald-50/60 border-stone-200 hover:border-emerald-300'
+                          : 'bg-[#1a251e] hover:bg-[#202f26] border-[#25362b] hover:border-emerald-700/60'
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                        <Grid className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold truncate">低解像度グリッド整列</div>
+                        <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-snug line-clamp-2">
+                          12〜24px 自動ステムヒンティング
+                        </div>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Pixel / Dot Font Studio */}
+                  {onOpenPixelStudio && (
+                    <button
+                      onClick={() => {
+                        onOpenPixelStudio();
+                        setShowToolsMenu(false);
+                      }}
+                      className={`text-left p-2 rounded-xl border transition-all flex items-start space-x-2 group ${
+                        isLight
+                          ? 'bg-emerald-50/70 hover:bg-emerald-100/80 border-emerald-300 text-emerald-950 shadow-xs'
+                          : 'bg-[#18271e] hover:bg-[#203428] border-emerald-600/70 text-emerald-100 shadow-xs'
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform text-xs font-bold shadow-xs">
+                        <Grid className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold truncate flex items-center gap-1">
+                          <span>ピクセルフォント工房</span>
+                          <span className="text-[8.5px] px-1 py-0.2 bg-emerald-600 text-white rounded font-mono">
+                            ゼロからドット制作
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-snug line-clamp-2">
+                          8x8/16x16/JIS規格・全文字自動保存・スプライトシート/Cヘッダー出力
+                        </div>
+                      </div>
+                    </button>
+                  )}
+
                   {/* Radical Studio */}
                   <button
                     onClick={() => {
@@ -858,6 +978,28 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                     <span className="text-xs font-medium truncate">セーブ保存 (.json)</span>
                   </button>
 
+                  {onOpenStorageManagerModal && (
+                    <button
+                      onClick={() => {
+                        onOpenStorageManagerModal();
+                        setShowToolsMenu(false);
+                      }}
+                      className={`text-left p-2 rounded-xl border transition-all flex items-center space-x-2 col-span-2 ${
+                        isLight
+                          ? 'bg-emerald-50/70 hover:bg-emerald-100/70 border-emerald-200 text-emerald-950 shadow-xs'
+                          : 'bg-[#1a2d21] hover:bg-[#223b2c] border-emerald-800/60 text-emerald-200 shadow-xs'
+                      }`}
+                    >
+                      <HardDrive className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold truncate">保存管理・バックアップパネル</div>
+                        <div className="text-[10px] text-stone-500 dark:text-stone-400 truncate">
+                          localStorage容量監視・スナップショット履歴復元・削除
+                        </div>
+                      </div>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => {
                       onOpenFontInfoModal();
@@ -881,8 +1023,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                       }}
                       className={`text-left p-2 rounded-xl border transition-all flex items-center space-x-2 col-span-2 ${
                         isLight
-                          ? 'bg-emerald-50/70 hover:bg-emerald-100/70 border-emerald-200 text-emerald-950'
-                          : 'bg-[#1a2d21] hover:bg-[#223b2c] border-emerald-800/60 text-emerald-200'
+                          ? 'bg-stone-50 hover:bg-stone-100 border-stone-200 text-stone-800'
+                          : 'bg-[#1a251e] hover:bg-[#202d24] border-[#25362b] text-emerald-200'
                       }`}
                     >
                       <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -906,19 +1048,122 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 </button>
               </div>
             </div>
-          )}
+          </>
+        )}
         </div>
 
-        {/* Dark/Light Theme Toggle */}
-        <button
-          onClick={onToggleTheme}
-          className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl transition-colors shrink-0 ${
-            isLight ? 'text-stone-600 hover:bg-stone-100' : 'text-emerald-300 hover:bg-[#1d2720]'
-          }`}
-          title={isLight ? 'ダークモードに切り替え' : 'ライトモードに切り替え'}
-        >
-          {isLight ? <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />}
-        </button>
+        {/* In-App PWA Install Button */}
+        <PWAInstallButton isLight={isLight} />
+
+        {/* Theme Preset Selector Dropdown */}
+        <div className="relative shrink-0" ref={themeMenuRef}>
+          <button
+            onClick={() => setShowThemeMenu((prev) => !prev)}
+            className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl transition-all flex items-center space-x-1 border ${
+              isLight
+                ? 'bg-stone-100/80 hover:bg-stone-200/80 text-stone-700 border-stone-200/90'
+                : 'bg-[#18241d] hover:bg-[#203027] text-emerald-300 border-[#25362b]'
+            }`}
+            title="カラーテーマ・目の保護（セピア/ブルーライトカット）の切り替え"
+          >
+            <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 dark:text-amber-400" />
+            <span className="hidden xl:inline text-[11px] font-bold">
+              {getThemePreset(theme).name.split(' ')[0]}
+            </span>
+            <ChevronDown className="w-3 h-3 opacity-60 hidden xl:inline" />
+          </button>
+
+          {/* Theme Selector Popover Menu */}
+          {showThemeMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-45 bg-black/10 backdrop-blur-2xs"
+                onClick={() => setShowThemeMenu(false)}
+              />
+              <div
+                className={`fixed right-2 sm:absolute sm:right-0 top-[50px] sm:top-auto sm:mt-1.5 w-[calc(100vw-20px)] sm:w-80 max-w-sm rounded-xl border shadow-xl z-50 p-2 text-left backdrop-blur-md transition-all ${themeClasses.cardBg}`}
+              >
+              <div className="px-2 py-1.5 border-b border-stone-200/80 dark:border-stone-800/80 flex items-center justify-between mb-1.5">
+                <div className="flex items-center space-x-1.5">
+                  <Palette className="w-4 h-4 text-amber-500" />
+                  <span className="text-xs font-bold">テーマ・目への優しさ設定</span>
+                </div>
+                <span className="text-[10px] text-stone-400 font-mono">全6プリセット</span>
+              </div>
+
+              <div className="space-y-1 max-h-[380px] overflow-y-auto p-0.5">
+                {THEME_PRESETS.map((p) => {
+                  const isActive = theme === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        onChangeTheme ? onChangeTheme(p.id) : onToggleTheme();
+                        setShowThemeMenu(false);
+                      }}
+                      className={`w-full text-left p-2 rounded-lg border transition-all flex items-start space-x-2.5 ${
+                        isActive
+                          ? isLight
+                            ? 'bg-emerald-50/90 border-emerald-400 ring-1 ring-emerald-400'
+                            : 'bg-[#1c2c22] border-emerald-500 ring-1 ring-emerald-500'
+                          : isLight
+                          ? 'bg-stone-50/70 hover:bg-stone-100 border-stone-200/80'
+                          : 'bg-[#18231c]/70 hover:bg-[#202f26] border-[#25362b]'
+                      }`}
+                    >
+                      {/* Color Preview Swatch */}
+                      <div
+                        className="w-7 h-7 rounded-md border shadow-xs shrink-0 flex items-center justify-center relative overflow-hidden mt-0.5"
+                        style={{
+                          backgroundColor: p.previewBg,
+                          borderColor: p.previewBorder,
+                        }}
+                      >
+                        <div
+                          className="w-3.5 h-3.5 rounded-sm border"
+                          style={{
+                            backgroundColor: p.previewCard,
+                            borderColor: p.previewAccent,
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold truncate">{p.name}</span>
+                          <span className={`text-[9px] px-1.5 py-0.2 rounded border font-semibold ${p.badgeClass}`}>
+                            {p.badge}
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] text-stone-500 dark:text-stone-400 leading-snug mt-0.5">
+                          {p.description}
+                        </p>
+                      </div>
+
+                      {isActive && (
+                        <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-1" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+        </div>
+
+        {/* Storage & Backup Manager */}
+        {onOpenStorageManagerModal && (
+          <button
+            onClick={onOpenStorageManagerModal}
+            className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl transition-colors shrink-0 ${
+              isLight ? 'text-stone-600 hover:bg-stone-100' : 'text-emerald-300 hover:bg-[#1d2720]'
+            }`}
+            title="保存管理・バックアップ（localStorage容量・スナップショット）"
+          >
+            <HardDrive className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+        )}
 
         {/* Font Info / Settings */}
         <button
@@ -934,11 +1179,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         {/* Export Font Modal Prominent Trigger */}
         <button
           onClick={handleExportTtf}
-          className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 h-8 sm:h-9 rounded-lg sm:rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-md active:scale-95 shrink-0 ${
-            isLight
-              ? 'bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold shadow-xs'
-              : 'bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-extrabold shadow-xs'
-          }`}
+          className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 h-8 sm:h-9 rounded-lg sm:rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all active:scale-95 shrink-0 ${themeClasses.accentBtn}`}
           title="OSやiPad・アプリで使えるフォントを出力"
         >
           <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
@@ -965,8 +1206,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({
       {isConfirmingNew && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
           <div
-            className={`w-full max-w-md rounded-2xl p-5 border shadow-2xl space-y-4 ${
-              isLight ? 'bg-white border-stone-200 text-stone-900 shadow-xl' : 'bg-[#151e18] border-[#25362b] text-emerald-100 shadow-xl'
+            className={`w-full max-w-md rounded-2xl p-5 border shadow-xl space-y-4 ${
+              isLight ? 'bg-white border-stone-200 text-stone-900' : 'bg-[#151e18] border-[#25362b] text-emerald-100'
             }`}
           >
             <div className="flex items-center justify-between border-b pb-3 border-stone-200 dark:border-[#25362b]">

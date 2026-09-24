@@ -5,6 +5,7 @@
 @theme {
   --font-sans: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+  --breakpoint-xs: 480px;
 }
 
 html, body, #root {
@@ -43,4 +44,460 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
+  line-height: 1.6;
+  line-break: strict;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-wrap: pretty;
 }
+
+/* Ensure badges, chips, buttons don't wrap awkwardly mid-word */
+button, .badge, .chip, [role="button"] {
+  white-space: nowrap;
+}
+
+/* Modal header and description responsive typography */
+p {
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.35;
+  line-break: strict;
+}
+
+/* Accessibility: Honor user preference for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   CANVAS PERFORMANCE & HARDWARE ACCELERATION
+   Enables GPU rasterization and zero-latency pan/zoom transformations on containers
+   (Note: We strictly avoid setting CSS transform on SVG <g> elements to prevent overriding SVG matrix attributes)
+   ========================================================================== */
+.glyph-canvas-container,
+#canvas-container {
+  will-change: transform;
+}
+
+/* ==========================================================================
+   MOBILE & SMARTPHONE PERFORMANCE OPTIMIZATIONS
+   Completely removes and disables GPU-intensive backdrop blurs on mobile layouts
+   (<768px / touch devices) to prevent GPU throttling and guarantee fluid canvas manipulation.
+   ========================================================================== */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  /* Disable backdrop-filter blurs across all classes */
+  [class*="backdrop-blur"],
+  .backdrop-blur-md,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl,
+  .backdrop-blur-sm,
+  .backdrop-blur-xs,
+  .backdrop-blur-2xs {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Fallback high-contrast solid backgrounds for blurred overlays on mobile */
+  .bg-black\/50,
+  .bg-black\/60,
+  .bg-black\/65,
+  .bg-black\/70 {
+    background-color: rgba(0, 0, 0, 0.88) !important;
+  }
+}
+
+/* ==========================================================================
+   THEME STYLING SYSTEM
+   Ensures consistent, complete theme colors across all components & panels
+   ========================================================================== */
+
+/* --- 1. SEPIA / 和紙珈琲 THEME --- */
+[data-theme="sepia"] {
+  --color-emerald-50: #faf6ee;
+  --color-emerald-100: #f4ebd9;
+  --color-emerald-200: #e7d4b7;
+  --color-emerald-300: #d5b58c;
+  --color-emerald-400: #be925a;
+  --color-emerald-500: #9e6f36;
+  --color-emerald-600: #854d0e;
+  --color-emerald-700: #713f12;
+  --color-emerald-800: #552f0f;
+  --color-emerald-900: #3f220a;
+  --color-emerald-950: #291505;
+}
+
+[data-theme="sepia"] body {
+  background-color: #f4ede2;
+  color: #3d2b1f;
+}
+
+[data-theme="sepia"] [class*="bg-[#18231c]"],
+[data-theme="sepia"] [class*="bg-[#18241d]"],
+[data-theme="sepia"] [class*="bg-[#18261e]"],
+[data-theme="sepia"] [class*="bg-[#151f18]"],
+[data-theme="sepia"] [class*="bg-[#151f19]"],
+[data-theme="sepia"] [class*="bg-[#121914]"],
+[data-theme="sepia"] [class*="bg-[#121a14]"],
+[data-theme="sepia"] [class*="bg-[#141d16]"],
+[data-theme="sepia"] [class*="bg-[#16221a]"],
+[data-theme="sepia"] [class*="bg-[#1a261f]"],
+[data-theme="sepia"] [class*="bg-[#1a251e]"] {
+  background-color: #eae1d2;
+}
+
+[data-theme="sepia"] [class*="bg-[#101813]"],
+[data-theme="sepia"] [class*="bg-[#101712]"],
+[data-theme="sepia"] [class*="bg-[#131b16]"],
+[data-theme="sepia"] [class*="bg-[#0f1712]"] {
+  background-color: #f4ede2;
+}
+
+[data-theme="sepia"] [class*="bg-[#edf5f"],
+[data-theme="sepia"] [class*="bg-[#f7faf8]"] {
+  background-color: #ede3d4;
+}
+
+[data-theme="sepia"] [class*="border-[#25362b]"],
+[data-theme="sepia"] [class*="border-[#2d4034]"],
+[data-theme="sepia"] [class*="border-[#223025]"],
+[data-theme="sepia"] [class*="border-[#222e25]"],
+[data-theme="sepia"] [class*="border-[#2b3e32]"],
+[data-theme="sepia"] [class*="border-[#233327]"],
+[data-theme="sepia"] [class*="border-[#d8e6df]"],
+[data-theme="sepia"] [class*="border-[#c8ded3]"],
+[data-theme="sepia"] [class*="border-[#d4e5dc]"] {
+  border-color: #d9caaf;
+}
+
+[data-theme="sepia"] [class*="bg-[#202d24]"],
+[data-theme="sepia"] [class*="bg-[#202f26]"],
+[data-theme="sepia"] [class*="bg-[#1d2720]"],
+[data-theme="sepia"] [class*="bg-[#1f2d24]"],
+[data-theme="sepia"] [class*="bg-[#223127]"] {
+  background-color: #dfd3bf;
+}
+
+[data-theme="sepia"] .bg-white {
+  background-color: #faf5eb;
+}
+
+[data-theme="sepia"] .bg-stone-50 {
+  background-color: #f7f0e4;
+}
+
+[data-theme="sepia"] .bg-stone-100 {
+  background-color: #ede3d4;
+}
+
+[data-theme="sepia"] .border-stone-200 {
+  border-color: #d9caaf;
+}
+
+[data-theme="sepia"] .border-stone-300 {
+  border-color: #cbb99b;
+}
+
+[data-theme="sepia"] .text-stone-900,
+[data-theme="sepia"] .text-stone-800 {
+  color: #3d2b1f;
+}
+
+[data-theme="sepia"] .text-stone-700,
+[data-theme="sepia"] .text-stone-600,
+[data-theme="sepia"] .text-stone-500 {
+  color: #735641;
+}
+
+[data-theme="sepia"] .text-emerald-100,
+[data-theme="sepia"] .text-emerald-200 {
+  color: #3d2b1f;
+}
+
+[data-theme="sepia"] .text-emerald-300,
+[data-theme="sepia"] .text-emerald-400 {
+  color: #854d0e;
+}
+
+/* --- 2. WARM / ブルーライト低減・黄昏暖色 THEME --- */
+[data-theme="warm"] {
+  --color-emerald-50: #fff7ed;
+  --color-emerald-100: #ffedd5;
+  --color-emerald-200: #fed7aa;
+  --color-emerald-300: #fdba74;
+  --color-emerald-400: #fb923c;
+  --color-emerald-500: #f97316;
+  --color-emerald-600: #ea580c;
+  --color-emerald-700: #c2410c;
+  --color-emerald-800: #9a3412;
+  --color-emerald-900: #7c2d12;
+  --color-emerald-950: #431407;
+}
+
+[data-theme="warm"] body {
+  background-color: #fbf3e8;
+  color: #431407;
+}
+
+[data-theme="warm"] [class*="bg-[#18231c]"],
+[data-theme="warm"] [class*="bg-[#18241d]"],
+[data-theme="warm"] [class*="bg-[#18261e]"],
+[data-theme="warm"] [class*="bg-[#151f18]"],
+[data-theme="warm"] [class*="bg-[#151f19]"],
+[data-theme="warm"] [class*="bg-[#121914]"],
+[data-theme="warm"] [class*="bg-[#121a14]"],
+[data-theme="warm"] [class*="bg-[#141d16]"],
+[data-theme="warm"] [class*="bg-[#16221a]"],
+[data-theme="warm"] [class*="bg-[#1a261f]"],
+[data-theme="warm"] [class*="bg-[#1a251e]"] {
+  background-color: #f5e7d5;
+}
+
+[data-theme="warm"] [class*="bg-[#101813]"],
+[data-theme="warm"] [class*="bg-[#101712]"],
+[data-theme="warm"] [class*="bg-[#131b16]"],
+[data-theme="warm"] [class*="bg-[#0f1712]"] {
+  background-color: #fbf3e8;
+}
+
+[data-theme="warm"] [class*="bg-[#edf5f"],
+[data-theme="warm"] [class*="bg-[#f7faf8]"] {
+  background-color: #f7e8d6;
+}
+
+[data-theme="warm"] [class*="border-[#25362b]"],
+[data-theme="warm"] [class*="border-[#2d4034]"],
+[data-theme="warm"] [class*="border-[#223025]"],
+[data-theme="warm"] [class*="border-[#222e25]"],
+[data-theme="warm"] [class*="border-[#2b3e32]"],
+[data-theme="warm"] [class*="border-[#233327]"],
+[data-theme="warm"] [class*="border-[#d8e6df]"],
+[data-theme="warm"] [class*="border-[#c8ded3]"],
+[data-theme="warm"] [class*="border-[#d4e5dc]"] {
+  border-color: #ebcfb2;
+}
+
+[data-theme="warm"] [class*="bg-[#202d24]"],
+[data-theme="warm"] [class*="bg-[#202f26]"],
+[data-theme="warm"] [class*="bg-[#1d2720]"],
+[data-theme="warm"] [class*="bg-[#1f2d24]"],
+[data-theme="warm"] [class*="bg-[#223127]"] {
+  background-color: #edd9c2;
+}
+
+[data-theme="warm"] .bg-white {
+  background-color: #fffdf7;
+}
+
+[data-theme="warm"] .bg-stone-50 {
+  background-color: #faf0e1;
+}
+
+[data-theme="warm"] .bg-stone-100 {
+  background-color: #f5e7d5;
+}
+
+[data-theme="warm"] .border-stone-200 {
+  border-color: #ebcfb2;
+}
+
+[data-theme="warm"] .border-stone-300 {
+  border-color: #dfbe9c;
+}
+
+[data-theme="warm"] .text-stone-900,
+[data-theme="warm"] .text-stone-800 {
+  color: #431407;
+}
+
+[data-theme="warm"] .text-stone-700,
+[data-theme="warm"] .text-stone-600,
+[data-theme="warm"] .text-stone-500 {
+  color: #7c2d12;
+}
+
+[data-theme="warm"] .text-emerald-100,
+[data-theme="warm"] .text-emerald-200 {
+  color: #431407;
+}
+
+[data-theme="warm"] .text-emerald-300,
+[data-theme="warm"] .text-emerald-400 {
+  color: #ea580c;
+}
+
+/* --- 3. NORD / 北欧フロスト THEME --- */
+[data-theme="nord"] {
+  --color-emerald-50: #ebf5f8;
+  --color-emerald-100: #d8eef3;
+  --color-emerald-200: #b5e0ea;
+  --color-emerald-300: #88c0d0;
+  --color-emerald-400: #81a1c1;
+  --color-emerald-500: #5e81ac;
+  --color-emerald-600: #4c6f99;
+  --color-emerald-700: #3b5577;
+  --color-emerald-800: #2b3d56;
+  --color-emerald-900: #1d2a3c;
+  --color-emerald-950: #111823;
+}
+
+[data-theme="nord"] body {
+  background-color: #2e3440;
+  color: #eceff4;
+}
+
+[data-theme="nord"] [class*="bg-[#18231c]"],
+[data-theme="nord"] [class*="bg-[#18241d]"],
+[data-theme="nord"] [class*="bg-[#18261e]"],
+[data-theme="nord"] [class*="bg-[#151f18]"],
+[data-theme="nord"] [class*="bg-[#151f19]"],
+[data-theme="nord"] [class*="bg-[#121914]"],
+[data-theme="nord"] [class*="bg-[#121a14]"] {
+  background-color: #242933;
+}
+
+[data-theme="nord"] [class*="bg-[#101813]"],
+[data-theme="nord"] [class*="bg-[#101712]"],
+[data-theme="nord"] [class*="bg-[#131b16]"],
+[data-theme="nord"] [class*="bg-[#0f1712]"] {
+  background-color: #2e3440;
+}
+
+[data-theme="nord"] [class*="bg-[#16221a]"],
+[data-theme="nord"] [class*="bg-[#141d16]"],
+[data-theme="nord"] [class*="bg-[#1a261f]"],
+[data-theme="nord"] [class*="bg-[#1a251e]"] {
+  background-color: #3b4252;
+}
+
+[data-theme="nord"] [class*="border-[#25362b]"],
+[data-theme="nord"] [class*="border-[#2d4034]"],
+[data-theme="nord"] [class*="border-[#223025]"],
+[data-theme="nord"] [class*="border-[#222e25]"],
+[data-theme="nord"] [class*="border-[#2b3e32]"],
+[data-theme="nord"] [class*="border-[#233327]"] {
+  border-color: #434c5e;
+}
+
+[data-theme="nord"] [class*="bg-[#202d24]"],
+[data-theme="nord"] [class*="bg-[#202f26]"],
+[data-theme="nord"] [class*="bg-[#1d2720]"],
+[data-theme="nord"] [class*="bg-[#1f2d24]"],
+[data-theme="nord"] [class*="bg-[#223127]"] {
+  background-color: #434c5e;
+}
+
+[data-theme="nord"] .text-emerald-100 {
+  color: #eceff4;
+}
+
+[data-theme="nord"] .text-emerald-200 {
+  color: #e5e9f0;
+}
+
+[data-theme="nord"] .text-emerald-300 {
+  color: #88c0d0;
+}
+
+[data-theme="nord"] .text-emerald-400 {
+  color: #81a1c1;
+}
+
+/* --- 4. MONOCHROME / 高コントラスト・白黒 THEME --- */
+[data-theme="monochrome"] {
+  --color-emerald-50: #fafafa;
+  --color-emerald-100: #f4f4f5;
+  --color-emerald-200: #e4e4e7;
+  --color-emerald-300: #d4d4d8;
+  --color-emerald-400: #a1a1aa;
+  --color-emerald-500: #71717a;
+  --color-emerald-600: #3f3f46;
+  --color-emerald-700: #27272a;
+  --color-emerald-800: #18181b;
+  --color-emerald-900: #09090b;
+  --color-emerald-950: #000000;
+}
+
+[data-theme="monochrome"] body {
+  background-color: #f4f4f5;
+  color: #09090b;
+}
+
+[data-theme="monochrome"] [class*="bg-[#18231c]"],
+[data-theme="monochrome"] [class*="bg-[#18241d]"],
+[data-theme="monochrome"] [class*="bg-[#18261e]"],
+[data-theme="monochrome"] [class*="bg-[#151f18]"],
+[data-theme="monochrome"] [class*="bg-[#151f19]"],
+[data-theme="monochrome"] [class*="bg-[#121914]"],
+[data-theme="monochrome"] [class*="bg-[#121a14]"],
+[data-theme="monochrome"] [class*="bg-[#141d16]"],
+[data-theme="monochrome"] [class*="bg-[#16221a]"],
+[data-theme="monochrome"] [class*="bg-[#1a261f]"],
+[data-theme="monochrome"] [class*="bg-[#1a251e]"] {
+  background-color: #ffffff;
+}
+
+[data-theme="monochrome"] [class*="bg-[#101813]"],
+[data-theme="monochrome"] [class*="bg-[#101712]"],
+[data-theme="monochrome"] [class*="bg-[#131b16]"],
+[data-theme="monochrome"] [class*="bg-[#0f1712]"] {
+  background-color: #f4f4f5;
+}
+
+[data-theme="monochrome"] [class*="bg-[#edf5f"],
+[data-theme="monochrome"] [class*="bg-[#f7faf8]"] {
+  background-color: #f4f4f5;
+}
+
+[data-theme="monochrome"] [class*="border-[#25362b]"],
+[data-theme="monochrome"] [class*="border-[#2d4034]"],
+[data-theme="monochrome"] [class*="border-[#223025]"],
+[data-theme="monochrome"] [class*="border-[#222e25]"],
+[data-theme="monochrome"] [class*="border-[#2b3e32]"],
+[data-theme="monochrome"] [class*="border-[#233327]"],
+[data-theme="monochrome"] [class*="border-[#d8e6df]"],
+[data-theme="monochrome"] [class*="border-[#c8ded3]"],
+[data-theme="monochrome"] [class*="border-[#d4e5dc]"] {
+  border-color: #d4d4d8;
+}
+
+[data-theme="monochrome"] [class*="bg-[#202d24]"],
+[data-theme="monochrome"] [class*="bg-[#202f26]"],
+[data-theme="monochrome"] [class*="bg-[#1d2720]"],
+[data-theme="monochrome"] [class*="bg-[#1f2d24]"],
+[data-theme="monochrome"] [class*="bg-[#223127]"] {
+  background-color: #e4e4e7;
+}
+
+[data-theme="monochrome"] .text-emerald-100,
+[data-theme="monochrome"] .text-emerald-200 {
+  color: #09090b;
+}
+
+[data-theme="monochrome"] .text-emerald-300,
+[data-theme="monochrome"] .text-emerald-400 {
+  color: #3f3f46;
+}
+
+/* --- 5. LIGHT / 標準ライト (白・翡翠) THEME --- */
+[data-theme="light"] body {
+  background-color: #f7faf8;
+  color: #1c1917;
+}
+
+/* --- 6. DARK / 夜間ダーク (深碧・墨黒) THEME --- */
+[data-theme="dark"] body {
+  background-color: #0f1712;
+  color: #ecfdf5;
+}
+
+

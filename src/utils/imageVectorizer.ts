@@ -341,16 +341,25 @@ export function perpendicularDistance(p: Point, p1: Point, p2: Point): number {
  * while accurately preserving sharp corners (strokes, serifs, turns) and flat edges.
  */
 export function pointsToBezierContourNodes(points: Point[]): BezierNode[] {
-  const n = points.length;
+  let cleanPoints = points;
+  if (cleanPoints.length >= 2) {
+    const first = cleanPoints[0];
+    const last = cleanPoints[cleanPoints.length - 1];
+    if (first.x === last.x && first.y === last.y) {
+      cleanPoints = cleanPoints.slice(0, -1);
+    }
+  }
+
+  const n = cleanPoints.length;
   if (n === 0) return [];
 
   const nodes: BezierNode[] = [];
   const tension = 0.30; // smoothness factor for genuine curves
 
   for (let i = 0; i < n; i++) {
-    const curr = points[i];
-    const prev = points[(i - 1 + n) % n];
-    const next = points[(i + 1) % n];
+    const curr = cleanPoints[i];
+    const prev = cleanPoints[(i - 1 + n) % n];
+    const next = cleanPoints[(i + 1) % n];
 
     const v1x = curr.x - prev.x;
     const v1y = curr.y - prev.y;

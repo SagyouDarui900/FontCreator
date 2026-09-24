@@ -55,7 +55,18 @@ export const RADICAL_FONT_OPTIONS: FontStyleOption[] = [
   },
 ];
 
+const MAX_RADICAL_CACHE_SIZE = 100;
 const radicalContoursCache = new Map<string, PathContour[]>();
+
+function cacheRadicalContours(key: string, contours: PathContour[]): void {
+  if (radicalContoursCache.size >= MAX_RADICAL_CACHE_SIZE) {
+    const firstKey = radicalContoursCache.keys().next().value;
+    if (firstKey !== undefined) {
+      radicalContoursCache.delete(firstKey);
+    }
+  }
+  radicalContoursCache.set(key, contours);
+}
 
 export const DEFAULT_RADICAL_FONT_FAMILY = "'Noto Serif JP', serif";
 export const DEFAULT_RADICAL_FONT_WEIGHT = 600;
@@ -227,7 +238,7 @@ export async function getOrExtractRadicalContours(
   });
 
   if (contours && contours.length > 0) {
-    radicalContoursCache.set(cacheKey, contours);
+    cacheRadicalContours(cacheKey, contours);
     return JSON.parse(JSON.stringify(contours));
   }
   return [];

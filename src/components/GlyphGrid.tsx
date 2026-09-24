@@ -27,7 +27,7 @@ import { FontProject, GlyphData } from '../types';
 import { UNICODE_CATEGORIES, getCategoryCharList, KANA_PAIRS } from '../data/unicodeTables';
 import { DAKUTEN_MAPPINGS } from '../utils/dakutenHelper';
 import { contoursToSvgPath, normalizeGlyphContoursWinding } from '../utils/pathUtils';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme, getThemeClasses } from '../utils/theme';
 
 interface GlyphGridProps {
   project: FontProject;
@@ -332,6 +332,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
   });
   const [isResizing, setIsResizing] = useState<boolean>(false);
   const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(true);
+  const [isSearchHeaderExpanded, setIsSearchHeaderExpanded] = useState<boolean>(true);
 
   // Drag resizer handler for left sidebar
   const handleResizeStart = (e: React.PointerEvent) => {
@@ -392,7 +393,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
     window.addEventListener('pointercancel', handlePointerUp);
   };
 
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
+  const themeClasses = getThemeClasses(theme);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Close context menu on outside click
@@ -416,28 +418,59 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
   const rawCategoryList = useMemo(() => {
     if (activeCategoryId === 'modified') {
       const glyphs = Object.values(project.glyphs) as GlyphData[];
-      return glyphs.map((g) => ({
-        char: g.char || String.fromCodePoint(g.unicode),
-        code: g.unicode,
-        name: `U+${g.unicode.toString(16).toUpperCase().padStart(4, '0')}`,
-      }));
+      return glyphs.map((g) => {
+        let displayChar = g.char;
+        if (!displayChar) {
+          try {
+            displayChar = g.unicode > 0 && g.unicode <= 0x10ffff ? String.fromCodePoint(g.unicode) : '';
+          } catch {
+            displayChar = '';
+          }
+        }
+        return {
+          char: displayChar,
+          code: g.unicode,
+          name: `U+${g.unicode.toString(16).toUpperCase().padStart(4, '0')}`,
+        };
+      });
     }
     return getCategoryCharList(activeCategory);
-  }, [activeCategory, activeCategoryId, project.glyphs]);
+  }, [activeCategory, activeCategoryId, activeCategoryId === 'modified' ? project.glyphs : null]);
+
+  // Stable key representing which glyphs have at least 1 contour
+  // Editing points or moving nodes inside existing glyphs does NOT change this key, preventing unnecessary grid re-filtering
+  const completedGlyphKeys = useMemo(() => {
+    const completedCodes: number[] = [];
+    for (const [codeStr, item] of Object.entries(project.glyphs)) {
+      const g = item as GlyphData | undefined;
+      if (g && g.contours && g.contours.length > 0) {
+        completedCodes.push(Number(codeStr));
+      }
+    }
+    return completedCodes.sort((a, b) => a - b).join(',');
+  }, [project.glyphs]);
+
+  const completedSet = useMemo(() => {
+    const set = new Set<number>();
+    if (!completedGlyphKeys) return set;
+    for (const codeStr of completedGlyphKeys.split(',')) {
+      if (codeStr) set.add(Number(codeStr));
+    }
+    return set;
+  }, [completedGlyphKeys]);
 
   // Category completion statistics
   const categoryStats = useMemo(() => {
     const total = rawCategoryList.length;
     let completed = 0;
     for (const item of rawCategoryList) {
-      const g = project.glyphs[item.code];
-      if (g && g.contours && g.contours.length > 0) {
+      if (completedSet.has(item.code)) {
         completed++;
       }
     }
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { total, completed, percent };
-  }, [rawCategoryList, project.glyphs]);
+  }, [rawCategoryList, completedSet]);
 
   // Filtered by search & status
   const charList = useMemo(() => {
@@ -445,15 +478,9 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
 
     // Apply status filter
     if (statusFilter === 'completed') {
-      list = list.filter((item) => {
-        const g = project.glyphs[item.code];
-        return g && g.contours && g.contours.length > 0;
-      });
+      list = list.filter((item) => completedSet.has(item.code));
     } else if (statusFilter === 'pending') {
-      list = list.filter((item) => {
-        const g = project.glyphs[item.code];
-        return !g || !g.contours || g.contours.length === 0;
-      });
+      list = list.filter((item) => !completedSet.has(item.code));
     }
 
     if (!searchQuery.trim()) {
@@ -476,7 +503,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
         (query === 'スペース' && (item.code === 0x3000 || item.code === 0x0020))
       );
     });
-  }, [rawCategoryList, statusFilter, searchQuery, project.glyphs]);
+  }, [rawCategoryList, statusFilter, searchQuery, completedSet]);
 
   // Dynamic page size: Keep single-page view for Hiragana, Katakana, Latin, Grade 1 Kanji
   const pageSize = useMemo(() => {
@@ -657,11 +684,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
           effectiveIsOverlay
             ? 'fixed inset-y-0 left-0 z-40 w-full sm:w-80 md:w-[340px] shadow-2xl animate-in slide-in-from-left duration-200'
             : 'relative z-10 shadow-none shrink-0'
-        } border-r flex flex-col h-full select-none ${isResizing ? '' : 'transition-[width] duration-150'} ${
-          isLight
-            ? 'bg-[#f8faf9] border-[#d4e5dc] text-stone-800'
-            : 'bg-[#141d17] border-[#25362b] text-emerald-100'
-        }`}
+        } border-r flex flex-col h-full select-none ${isResizing ? '' : 'transition-[width] duration-150'} ${themeClasses.sidebarBg}`}
       >
         {/* Left Sidebar Drag Resizer Handle */}
         {!effectiveIsOverlay && (
@@ -840,6 +863,24 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
               </div>
 
               <button
+                type="button"
+                onClick={() => setIsSearchHeaderExpanded((prev) => !prev)}
+                className={`p-1.5 rounded text-xs font-semibold flex items-center gap-0.5 transition-all ${
+                  isSearchHeaderExpanded
+                    ? isLight
+                      ? 'text-stone-600 hover:bg-emerald-100'
+                      : 'text-emerald-300 hover:bg-[#202d24]'
+                    : isLight
+                    ? 'bg-emerald-100 text-emerald-950 font-bold shadow-xs'
+                    : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
+                }`}
+                title={isSearchHeaderExpanded ? '分類・検索バーを折りたたんで一覧領域を拡大' : '分類・検索バーを展開'}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                {isSearchHeaderExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+
+              <button
                 onClick={onClose}
                 className={`p-1.5 sm:px-2 sm:py-1 rounded text-xs font-semibold flex items-center gap-0.5 transition-all ${
                   isLight
@@ -863,210 +904,240 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
             </div>
           </div>
 
-          {/* Row 2: Custom In-App Category Popover & Smooth 1-Tap Swipeable Category Tabs */}
-          <div className="space-y-1.5 relative">
-            {/* Main Category Dropdown Trigger Button */}
-            <div className="relative" ref={categoryDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all shadow-xs cursor-pointer ${
-                  isLight
-                    ? isCategoryDropdownOpen
-                      ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-600/30'
-                      : 'bg-white border-[#c8ded3] text-stone-800 hover:border-emerald-600 hover:bg-emerald-50/50'
-                    : isCategoryDropdownOpen
-                    ? 'bg-emerald-950/80 border-emerald-400 text-emerald-200 ring-2 ring-emerald-500/30'
-                    : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 hover:border-emerald-500 hover:bg-[#141f18]'
-                }`}
-                title="カテゴリー一覧メニューを開く（タップで全分類から選択）"
-              >
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Layers className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
-                  <span className="truncate">{activeCategoryDisplayName}</span>
-                </div>
-                <div className="flex items-center gap-1 shrink-0 ml-1">
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+          {/* Collapsible Header Controls (Category Dropdown, Swipeable Tabs, Search Box) */}
+          {isSearchHeaderExpanded ? (
+            <>
+              {/* Row 2: Custom In-App Category Popover & Smooth 1-Tap Swipeable Category Tabs */}
+              <div className="space-y-1.5 relative">
+                {/* Main Category Dropdown Trigger Button */}
+                <div className="relative" ref={categoryDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all shadow-xs cursor-pointer ${
                       isLight
-                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                        : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                        ? isCategoryDropdownOpen
+                          ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-600/30'
+                          : 'bg-white border-[#c8ded3] text-stone-800 hover:border-emerald-600 hover:bg-emerald-50/50'
+                        : isCategoryDropdownOpen
+                        ? 'bg-emerald-950/80 border-emerald-400 text-emerald-200 ring-2 ring-emerald-500/30'
+                        : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 hover:border-emerald-500 hover:bg-[#141f18]'
                     }`}
+                    title="カテゴリー一覧メニューを開く（タップで全分類から選択）"
                   >
-                    分類選択
-                  </span>
-                  {isCategoryDropdownOpen ? (
-                    <ChevronUp className="w-3.5 h-3.5 text-stone-500" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5 text-stone-500" />
-                  )}
-                </div>
-              </button>
-
-              {/* Custom In-App Dropdown Popover (Zero OS Full-Screen takeover on Mobile) */}
-              {isCategoryDropdownOpen && (
-                <div
-                  className={`absolute top-full left-0 right-0 z-50 mt-1 max-h-72 overflow-y-auto rounded-xl shadow-2xl border backdrop-blur-md p-1.5 animate-in fade-in zoom-in-95 duration-150 ${
-                    isLight
-                      ? 'bg-white/98 border-emerald-200 shadow-emerald-950/15 text-stone-800'
-                      : 'bg-[#121c15]/98 border-[#2d4034] shadow-black/80 text-emerald-100'
-                  }`}
-                >
-                  {categoryGroups.map((group) => (
-                    <div key={group.groupName} className="mb-2 last:mb-0">
-                      <div
-                        className={`text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider ${
-                          isLight ? 'text-emerald-900/60' : 'text-emerald-400/60'
+                    <div className="flex items-center gap-1.5 min-w-0 truncate">
+                      <Layers className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
+                      <span className="truncate">{activeCategoryDisplayName}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          isLight
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                            : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                         }`}
                       >
-                        {group.groupName}
-                      </div>
-                      <div className="space-y-0.5 mt-0.5">
-                        {group.items.map((item) => {
-                          const isSelected = activeCategoryId === item.id;
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => {
-                                setActiveCategoryId(item.id);
-                                setSearchQuery('');
-                                setCurrentPage(1);
-                                setIsCategoryDropdownOpen(false);
-                              }}
-                              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left ${
-                                isSelected
-                                  ? isLight
-                                    ? 'bg-emerald-600 text-white font-bold shadow-xs'
-                                    : 'bg-emerald-500 text-stone-950 font-bold shadow-xs'
-                                  : isLight
-                                  ? 'hover:bg-emerald-50 text-stone-800'
-                                  : 'hover:bg-[#1a281e] text-emerald-200'
-                              }`}
-                            >
-                              <div className="flex items-center gap-1.5 truncate">
-                                {isSelected ? (
-                                  <Check className="w-3.5 h-3.5 shrink-0" />
-                                ) : (
-                                  <div className="w-3.5 h-3.5 shrink-0" />
-                                )}
-                                <span className="truncate">{item.name}</span>
-                              </div>
-                              <span
-                                className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono shrink-0 ml-1.5 ${
-                                  isSelected
-                                    ? isLight
-                                      ? 'bg-white/25 text-white'
-                                      : 'bg-stone-950/30 text-stone-950'
-                                    : isLight
-                                    ? 'bg-stone-100 text-stone-600'
-                                    : 'bg-[#1c2a21] text-emerald-400'
-                                }`}
-                              >
-                                {item.count}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                        分類選択
+                      </span>
+                      {isCategoryDropdownOpen ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-stone-500" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-stone-500" />
+                      )}
                     </div>
+                  </button>
+
+                  {/* Custom In-App Dropdown Popover (Zero OS Full-Screen takeover on Mobile) */}
+                  {isCategoryDropdownOpen && (
+                    <div
+                      className={`absolute top-full left-0 right-0 z-50 mt-1 max-h-72 overflow-y-auto rounded-xl shadow-2xl border backdrop-blur-md p-1.5 animate-in fade-in zoom-in-95 duration-150 ${
+                        isLight
+                          ? 'bg-white/98 border-emerald-200 shadow-emerald-950/15 text-stone-800'
+                          : 'bg-[#121c15]/98 border-[#2d4034] shadow-black/80 text-emerald-100'
+                      }`}
+                    >
+                      {categoryGroups.map((group) => (
+                        <div key={group.groupName} className="mb-2 last:mb-0">
+                          <div
+                            className={`text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider ${
+                              isLight ? 'text-emerald-900/60' : 'text-emerald-400/60'
+                            }`}
+                          >
+                            {group.groupName}
+                          </div>
+                          <div className="space-y-0.5 mt-0.5">
+                            {group.items.map((item) => {
+                              const isSelected = activeCategoryId === item.id;
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveCategoryId(item.id);
+                                    setSearchQuery('');
+                                    setCurrentPage(1);
+                                    setIsCategoryDropdownOpen(false);
+                                  }}
+                                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left ${
+                                    isSelected
+                                      ? isLight
+                                        ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                                        : 'bg-emerald-500 text-stone-950 font-bold shadow-xs'
+                                      : isLight
+                                      ? 'hover:bg-emerald-50 text-stone-800'
+                                      : 'hover:bg-[#1a281e] text-emerald-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    {isSelected ? (
+                                      <Check className="w-3.5 h-3.5 shrink-0" />
+                                    ) : (
+                                      <div className="w-3.5 h-3.5 shrink-0" />
+                                    )}
+                                    <span className="truncate">{item.name}</span>
+                                  </div>
+                                  <span
+                                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono shrink-0 ml-1.5 ${
+                                      isSelected
+                                        ? isLight
+                                          ? 'bg-white/25 text-white'
+                                          : 'bg-stone-950/30 text-stone-950'
+                                        : isLight
+                                        ? 'bg-stone-100 text-stone-600'
+                                        : 'bg-[#1c2a21] text-emerald-400'
+                                    }`}
+                                  >
+                                    {item.count}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick 1-Tap Horizontal Swipeable Category Tabs (Direct Switching without any Modal/Picker) */}
+                <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar touch-pan-x text-[10px] select-none">
+                  {quickCategoryTabs.map((pill) => (
+                    <button
+                      key={pill.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveCategoryId(pill.id);
+                        setSearchQuery('');
+                        setCurrentPage(1);
+                        setIsCategoryDropdownOpen(false);
+                      }}
+                      className={`px-2.5 py-1 rounded-full font-bold shrink-0 transition-all cursor-pointer ${
+                        activeCategoryId === pill.id
+                          ? isLight
+                            ? 'bg-emerald-700 text-white shadow-xs'
+                            : 'bg-emerald-500 text-stone-950 shadow-xs'
+                          : isLight
+                          ? 'bg-emerald-100/70 text-emerald-900 hover:bg-emerald-200/80 active:scale-95'
+                          : 'bg-[#18261e] text-emerald-300 hover:bg-[#22352a] active:scale-95'
+                      }`}
+                    >
+                      {pill.label}
+                    </button>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Quick 1-Tap Horizontal Swipeable Category Tabs (Direct Switching without any Modal/Picker) */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar touch-pan-x text-[10px] select-none">
-              {quickCategoryTabs.map((pill) => (
-                <button
-                  key={pill.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveCategoryId(pill.id);
-                    setSearchQuery('');
-                    setCurrentPage(1);
-                    setIsCategoryDropdownOpen(false);
-                  }}
-                  className={`px-2.5 py-1 rounded-full font-bold shrink-0 transition-all cursor-pointer ${
-                    activeCategoryId === pill.id
-                      ? isLight
-                        ? 'bg-emerald-700 text-white shadow-xs'
-                        : 'bg-emerald-500 text-stone-950 shadow-xs'
-                      : isLight
-                      ? 'bg-emerald-100/70 text-emerald-900 hover:bg-emerald-200/80 active:scale-95'
-                      : 'bg-[#18261e] text-emerald-300 hover:bg-[#22352a] active:scale-95'
-                  }`}
-                >
-                  {pill.label}
-                </button>
-              ))}
-            </div>
-          </div>
+              {/* Row 3: Search input & Direct character input */}
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1 min-w-0">
+                  <Search
+                    className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${
+                      isLight ? 'text-emerald-700' : 'text-emerald-400'
+                    }`}
+                  />
+                  <input
+                    type="text"
+                    placeholder="文字・Unicode (あ, 3042, 学)..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className={`w-full border rounded-md pl-8 pr-7 py-1 text-xs placeholder-emerald-700/40 focus:outline-none transition-colors ${
+                      isLight
+                        ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 shadow-xs'
+                        : 'bg-[#0f1712] border-[#2d4034] text-emerald-100 placeholder-emerald-600 focus:border-emerald-500'
+                    }`}
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => {
+                        setSearchQuery('');
+                        setCurrentPage(1);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs p-0.5"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
 
-          {/* Row 3: Search input & Direct character input */}
-          <div className="flex items-center gap-1.5">
-            <div className="relative flex-1 min-w-0">
-              <Search
-                className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${
-                  isLight ? 'text-emerald-700' : 'text-emerald-400'
-                }`}
-              />
-              <input
-                type="text"
-                placeholder="文字・Unicode (あ, 3042, 学)..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className={`w-full border rounded-md pl-8 pr-7 py-1 text-xs placeholder-emerald-700/40 focus:outline-none transition-colors ${
-                  isLight
-                    ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 shadow-xs'
-                    : 'bg-[#0f1712] border-[#2d4034] text-emerald-100 placeholder-emerald-600 focus:border-emerald-500'
-                }`}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setCurrentPage(1);
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs p-0.5"
-                >
-                  ×
-                </button>
-              )}
+                {/* Quick Custom Character Jumper */}
+                <form onSubmit={handleAddCustomChar} className="flex items-center gap-1 shrink-0">
+                  <input
+                    type="text"
+                    maxLength={4}
+                    placeholder="文字直接"
+                    value={customCharInput}
+                    onChange={(e) => setCustomCharInput(e.target.value)}
+                    className={`w-16 border rounded-md px-1.5 py-1 text-xs text-center focus:outline-none ${
+                      isLight
+                        ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 shadow-xs'
+                        : 'bg-[#0f1712] border-[#2d4034] text-emerald-100 focus:border-emerald-500'
+                    }`}
+                    title="任意の文字を直接入力して即座に開く (例: 龍)"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!customCharInput.trim()}
+                    className={`px-2 py-1 rounded-md disabled:opacity-40 text-xs font-bold flex items-center transition-colors shrink-0 ${
+                      isLight
+                        ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                        : 'bg-emerald-800 hover:bg-emerald-700 text-emerald-100'
+                    }`}
+                    title="入力文字を開く"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              </div>
+            </>
+          ) : (
+            /* Compact 1-line bar when header is folded */
+            <div
+              onClick={() => setIsSearchHeaderExpanded(true)}
+              className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                isLight
+                  ? 'bg-white/80 border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
+                  : 'bg-[#101813] border-[#2d4034] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+              title="クリックして検索・分類バーを展開"
+            >
+              <div className="flex items-center gap-1.5 min-w-0 truncate text-[11px] font-bold">
+                <Layers className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <span className="truncate">{activeCategoryDisplayName}</span>
+                {searchQuery && (
+                  <span className="px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 text-[10px] font-mono truncate">
+                    「{searchQuery}」
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 shrink-0 text-[10px] text-stone-400 dark:text-stone-500">
+                <span>展開</span>
+                <ChevronDown className="w-3 h-3" />
+              </div>
             </div>
-
-            {/* Quick Custom Character Jumper */}
-            <form onSubmit={handleAddCustomChar} className="flex items-center gap-1 shrink-0">
-              <input
-                type="text"
-                maxLength={4}
-                placeholder="文字直接"
-                value={customCharInput}
-                onChange={(e) => setCustomCharInput(e.target.value)}
-                className={`w-16 border rounded-md px-1.5 py-1 text-xs text-center focus:outline-none ${
-                  isLight
-                    ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 shadow-xs'
-                    : 'bg-[#0f1712] border-[#2d4034] text-emerald-100 focus:border-emerald-500'
-                }`}
-                title="任意の文字を直接入力して即座に開く (例: 龍)"
-              />
-              <button
-                type="submit"
-                disabled={!customCharInput.trim()}
-                className={`px-2 py-1 rounded-md disabled:opacity-40 text-xs font-bold flex items-center transition-colors shrink-0 ${
-                  isLight
-                    ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
-                    : 'bg-emerald-800 hover:bg-emerald-700 text-emerald-100'
-                }`}
-                title="入力文字を開く"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </form>
-          </div>
+          )}
         </div>
 
         {/* Category Progress & Status Filter Bar */}
@@ -1107,7 +1178,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
               {/* Progress track */}
               <div className="w-full h-1.5 rounded-full bg-stone-200 dark:bg-stone-800 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-emerald-600 to-teal-500 rounded-full transition-all duration-300"
+                  className="h-full bg-emerald-600 rounded-full transition-all duration-300"
                   style={{ width: `${categoryStats.percent}%` }}
                 />
               </div>
@@ -1228,7 +1299,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
 
         {/* Glyphs Grid Matrix (Explicit row heights to guarantee zero vertical track collapse or overlap) */}
         <div
-          className={`flex-1 overflow-y-auto p-2 sm:p-2.5 grid gap-2 content-start ${
+          className={`flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 sm:p-2.5 pb-24 sm:pb-8 grid gap-2 content-start ${
             gridDensity === 'large'
               ? 'grid-cols-3'
               : gridDensity === 'medium'
@@ -1237,6 +1308,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
           } ${isLight ? 'bg-[#f7faf8]' : 'bg-[#121914]'}`}
           style={{
             gridAutoRows: gridDensity === 'large' ? '92px' : gridDensity === 'medium' ? '76px' : '62px',
+            paddingBottom: effectiveIsOverlay ? 'max(env(safe-area-inset-bottom, 0px) + 40px, 40px)' : undefined,
           }}
         >
           {charList.length === 0 ? (
@@ -1327,7 +1399,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
         {/* Pagination Footer */}
         {totalPages > 1 && (
           <div
-            className={`p-2 border-t flex items-center justify-between text-xs gap-1 shrink-0 ${
+            className={`p-2 border-t flex items-center justify-between text-xs gap-1 shrink-0 pb-[max(env(safe-area-inset-bottom),10px)] ${
               isLight ? 'bg-[#edf5f1] border-[#d4e5dc]' : 'bg-[#18231c] border-[#25362b]'
             }`}
           >

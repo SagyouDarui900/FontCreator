@@ -1,7 +1,19 @@
-import React, { useState, useMemo } from 'react';
-import { X, Sparkles, Sliders, CheckCircle2, ShieldCheck, Zap, Layers, RefreshCw, Cpu } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  X,
+  Sparkles,
+  Sliders,
+  CheckCircle2,
+  ShieldCheck,
+  Zap,
+  Layers,
+  RefreshCw,
+  Cpu,
+  Maximize2,
+  Minimize2,
+} from 'lucide-react';
 import { FontProject, GlyphData, PathContour } from '../types';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
 import { normalizeGlyph, getContoursBoundingBox, contoursToSvgPath, normalizeGlyphContoursWinding } from '../utils/pathUtils';
 import { KANA_PAIRS } from '../data/unicodeTables';
 
@@ -26,7 +38,7 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
   theme,
   onShowToast,
 }) => {
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
 
   const [scope, setScope] = useState<TargetScope>('all');
   const [sizePreset, setSizePreset] = useState<'standard' | 'large' | 'kana' | 'compact' | 'custom'>('standard');
@@ -39,6 +51,31 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
   const [optimizePoints, setOptimizePoints] = useState<boolean>(true);
   const [weightDelta, setWeightDelta] = useState<number>(0);
   const [normalizeWinding, setNormalizeWinding] = useState<boolean>(true);
+
+  // Fullscreen mode state
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Keyboard shortcut listener: Escape and F
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
+      } else if ((e.key === 'f' || e.key === 'F') && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose]);
 
   // Apply preset values
   const handlePresetChange = (preset: 'standard' | 'large' | 'kana' | 'compact' | 'custom') => {
@@ -201,21 +238,33 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
   const normBbox = getContoursBoundingBox(normalizedPreviewContours);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs select-none">
+    <div
+      className={`fixed inset-0 z-50 transition-all ${
+        isFullscreen
+          ? 'p-0 w-screen h-screen bg-black/85 flex flex-col'
+          : 'flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs select-none'
+      }`}
+    >
       <div
-        className={`w-full max-w-2xl border rounded-lg shadow-2xl flex flex-col max-h-[92vh] overflow-hidden transition-colors ${
-          isLight ? 'bg-[#f7faf8] border-[#c8ded3] text-stone-800' : 'bg-[#151e18] border-[#25362b] text-emerald-100'
+        className={`flex flex-col transition-all overflow-hidden ${
+          isFullscreen
+            ? isLight
+              ? 'w-screen h-screen rounded-none border-none shadow-none bg-[#f7faf8] text-stone-800'
+              : 'w-screen h-screen rounded-none border-none shadow-none bg-[#151e18] text-emerald-100'
+            : isLight
+            ? 'w-full max-w-3xl xl:max-w-4xl border rounded-2xl shadow-2xl max-h-[92vh] bg-[#f7faf8] border-[#c8ded3] text-stone-800'
+            : 'w-full max-w-3xl xl:max-w-4xl border rounded-2xl shadow-2xl max-h-[92vh] bg-[#151e18] border-[#25362b] text-emerald-100'
         }`}
       >
         {/* Header */}
         <div
-          className={`p-3 sm:p-4 border-b flex items-center justify-between ${
+          className={`p-3 sm:p-4 border-b flex items-center justify-between shrink-0 ${
             isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
           }`}
         >
           <div className="flex items-center space-x-2">
             <div
-              className={`p-1.5 rounded-md ${
+              className={`p-1.5 rounded-lg ${
                 isLight ? 'bg-amber-100 text-amber-900' : 'bg-emerald-950 text-emerald-300'
               }`}
             >
@@ -223,29 +272,63 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
             </div>
             <div>
               <h2
-                className={`text-sm font-bold tracking-wide ${
+                className={`text-sm font-bold tracking-wide flex items-center space-x-2 ${
                   isLight ? 'text-emerald-950' : 'text-emerald-200'
                 }`}
               >
-                最終調整・フォントサイズ＆品質一括統一スタジオ
+                <span>最終調整・フォントサイズ＆品質一括統一スタジオ</span>
+                {isFullscreen && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-medium">
+                    全画面モード
+                  </span>
+                )}
               </h2>
               <p className={`text-[10px] ${isLight ? 'text-stone-500' : 'text-emerald-400/80'}`}>
                 文字の大きさ、送り幅、余白バランス、ベジェ点数の軽量化を一括自動調整
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className={`p-1.5 rounded-md ${
-              isLight ? 'text-stone-500 hover:bg-emerald-100' : 'text-emerald-400 hover:bg-[#202d24]'
-            }`}
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center space-x-1.5">
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1.5 px-2.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-colors ${
+                isFullscreen
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                  : isLight
+                  ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F または Esc)' : '全画面表示に拡大 (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">通常</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">全画面</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className={`p-1.5 rounded-lg border transition-colors ${
+                isLight ? 'text-stone-500 border-stone-200 hover:bg-emerald-100' : 'text-emerald-400 border-[#25362b] hover:bg-[#202d24]'
+              }`}
+              title="閉じる (Esc)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 text-xs">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-4 text-xs">
           {/* Top Row: Preview & Scope */}
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-start">
             {/* Preview Box (5 cols) */}
@@ -572,24 +655,47 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
 
         {/* Footer */}
         <div
-          className={`p-3 sm:p-4 border-t flex items-center justify-between ${
+          className={`p-3 sm:p-4 border-t flex items-center justify-between shrink-0 ${
             isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
           }`}
         >
-          <button
-            onClick={onClose}
-            className={`px-3 py-1.5 rounded-md border text-xs ${
-              isLight
-                ? 'bg-stone-50 border-stone-300 text-stone-700 hover:bg-stone-100'
-                : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#18231c]'
-            }`}
-          >
-            キャンセル
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={onClose}
+              className={`px-3 py-1.5 rounded-lg border text-xs ${
+                isLight
+                  ? 'bg-stone-50 border-stone-300 text-stone-700 hover:bg-stone-100'
+                  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1.5 px-2.5 rounded-lg border text-xs font-medium flex items-center space-x-1.5 transition-colors hidden sm:flex ${
+                isLight
+                  ? 'border-stone-300 text-stone-600 hover:bg-stone-100'
+                  : 'border-[#25362b] text-stone-300 hover:bg-[#202f26]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F / Esc)' : '全画面表示モード (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>通常サイズに戻す</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>全画面表示</span>
+                </>
+              )}
+            </button>
+          </div>
 
           <button
             onClick={handleApplyBatch}
-            className={`px-5 py-2 rounded-md font-bold text-xs flex items-center space-x-1.5 shadow-md active:scale-95 transition-all ${
+            className={`px-5 py-2 rounded-lg font-bold text-xs flex items-center space-x-1.5 shadow-md active:scale-95 transition-all ${
               isLight
                 ? 'bg-emerald-800 hover:bg-emerald-700 text-white'
                 : 'bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold'

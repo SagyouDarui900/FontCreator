@@ -8,6 +8,7 @@ export interface StrokePoint {
   y: number;
   pressure?: number;
   time?: number;
+  pointerType?: string;
 }
 
 export type BrushStyle =
@@ -16,6 +17,10 @@ export type BrushStyle =
   | 'sumi'
   | 'marumoji'
   | 'fountain'
+  | 'mincho_nib'
+  | 'reisho_chisel'
+  | 'g_pen'
+  | 'pixel_dot'
   | 'marker'
   | 'ballpoint'
   | 'calligraphy'
@@ -36,6 +41,20 @@ export interface PenPresetInfo {
   defaultWidth: number;
 }
 
+export interface PressureCurvePoint {
+  x: number; // 0.0 to 1.0 (input pressure fraction)
+  y: number; // 0.0 to 1.0 (output thickness fraction)
+}
+
+export interface PressureCurveConfig {
+  enabled: boolean;
+  p1: PressureCurvePoint; // First cubic Bezier control handle (default 0.33, 0.33)
+  p2: PressureCurvePoint; // Second cubic Bezier control handle (default 0.67, 0.67)
+  minThreshold: number;   // Minimum deadzone below which pressure is 0 (0.0 to 0.3)
+  maxThreshold: number;   // Maximum saturation above which pressure is 1 (0.7 to 1.0)
+  presetId?: 'linear' | 'soft' | 'hard' | 's-curve' | 'delicate' | 'custom';
+}
+
 export interface UserPenPreset {
   id: string;
   name: string;
@@ -43,10 +62,12 @@ export interface UserPenPreset {
   brushStyle: BrushStyle;
   brushWidth: number;
   pressureSensitivity: 'high' | 'normal' | 'low' | 'off';
+  pressureCurve?: PressureCurveConfig;
   autoSmoothBrush: boolean;
   smoothStrength: 'mild' | 'standard' | 'strong';
   smoothPreserveCorners: boolean;
   autoUnionBrush: boolean;
+  smoothingIntensity?: number; // 0 (OFF / Raw) to 100 (Max stabilization)
   createdAt?: number;
 }
 
@@ -67,6 +88,14 @@ export interface PathContour {
   closed: boolean;
 }
 
+export interface PixelGlyphData {
+  width: number;
+  height: number;
+  data: number[]; // 0 or 1 binary array of length width * height
+  shape?: 'square' | 'round' | 'squircle' | 'diamond';
+  advanceWidthCells?: number;
+}
+
 export interface GlyphData {
   unicode: number;
   char: string;
@@ -74,6 +103,8 @@ export interface GlyphData {
   advanceWidth: number;
   lsb: number;
   contours: PathContour[];
+  vectorContoursBackup?: PathContour[];
+  pixelData?: PixelGlyphData;
   modified?: boolean;
   notes?: string;
   locked?: boolean;
@@ -117,6 +148,13 @@ export type ToolMode =
   | 'circle'
   | 'rounded_rect'
   | 'triangle'
+  | 'triangle_down'
+  | 'right_triangle'
+  | 'semicircle'
+  | 'ring'
+  | 'pill'
+  | 'parallelogram'
+  | 'crescent'
   | 'star'
   | 'heart'
   | 'sparkle'
@@ -264,12 +302,60 @@ export interface CharCategory {
   charList?: { char: string; code: number; name?: string }[];
 }
 
+export interface OpenTypeFeatureLigature {
+  id: string;
+  type: 'liga' | 'dlig' | 'rlig';
+  name: string;
+  inputChars: string[];
+  substituteUnicode: number;
+  enabled: boolean;
+}
+
+export interface VerticalWritingGlyphSub {
+  id: string;
+  sourceUnicode: number;
+  vertUnicode: number;
+  yOffset?: number;
+  xOffset?: number;
+  vertAdvanceHeight?: number;
+  enabled: boolean;
+}
+
+export interface OpenTypeFeaturesConfig {
+  enabled: boolean;
+  verticalWriting: {
+    enabled: boolean;
+    defaultVertAdvance: number;
+    vertOriginY: number;
+    substitutions: VerticalWritingGlyphSub[];
+  };
+  ligatures: OpenTypeFeatureLigature[];
+  customKerningPairs: {
+    id: string;
+    firstUnicode: number;
+    secondUnicode: number;
+    amount: number;
+    enabled: boolean;
+  }[];
+}
+
+export interface PixelFontProjectSettings {
+  isPixelFontProject?: boolean;
+  defaultWidth: number;
+  defaultHeight: number;
+  dotShape: 'square' | 'round' | 'squircle' | 'diamond';
+  mergeContours: boolean;
+  proportionalSpacing?: boolean;
+}
+
 export interface FontProject {
   id: string;
   name: string;
   metadata: FontMetadata;
   glyphs: Record<number, GlyphData>;
   kerning?: Record<string, number>; // Pair string "char1,char2" or "unicode1,unicode2" -> offset in font units
+  openTypeFeatures?: OpenTypeFeaturesConfig;
+  pixelFontSettings?: PixelFontProjectSettings;
   createdAt: number;
   updatedAt: number;
 }

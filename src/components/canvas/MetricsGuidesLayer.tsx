@@ -43,7 +43,7 @@ export const MetricsGuidesLayer: React.FC<MetricsGuidesLayerProps> = React.memo(
         <g opacity={isJapanese ? 0.45 : 1}>
           <line x1={-100} y1={800} x2={1100} y2={800} stroke="#dc2626" strokeWidth={isJapanese ? 1.5 : 2} strokeDasharray={isJapanese ? '8 4' : undefined} />
           <text x={-95} y={792} fill="#dc2626" fontWeight="bold">
-            Baseline (0) {isJapanese ? '欧文底線 (※和文は枠中央基準)' : '欧文底線 ★基準'}
+            Baseline (0) {isJapanese ? '欧文底線 (和文は枠中央基準)' : '欧文底線 (基準)'}
           </text>
         </g>
 

@@ -44,6 +44,12 @@ export interface CompileFontOptions {
    * Default: true
    */
   balanceSideBearings?: boolean;
+  /**
+   * When true, skip creating an internal object URL via URL.createObjectURL(blob)
+   * to avoid browser memory consumption when only the binary ArrayBuffer is needed.
+   * Default: false
+   */
+  skipBlobUrl?: boolean;
 }
 
 /**
@@ -224,6 +230,12 @@ export function openTypePathToContours(
   return contours;
 }
 
+// Small Hiragana & Katakana unicodes (should remain in their natural position, not centered)
+const SMALL_KANA_UNICODES = new Set<number>([
+  0x3041, 0x3043, 0x3045, 0x3047, 0x3049, 0x3063, 0x3083, 0x3085, 0x3087, 0x308E, 0x3095, 0x3096, // ぁぃぅぇぉっゃゅょゎゕゖ
+  0x30A1, 0x30A3, 0x30A5, 0x30A7, 0x30A9, 0x30C3, 0x30E3, 0x30E5, 0x30E7, 0x30EE, 0x30F5, 0x30F6, // ァィゥェォッャュョヮヵヶ
+]);
+
 /**
  * Check if a character is intentionally asymmetric (e.g. small kana, punctuation, quotes, brackets, marks).
  * These glyphs MUST NOT be forced to geometric center (LSB == RSB) as doing so ruins sentence layout.
@@ -235,11 +247,10 @@ export function isAsymmetricOrPunctuationGlyph(unicode: number, char?: string): 
   if (unicode === 32 || unicode === 0x3000) return true;
 
   // Small Hiragana & Katakana
-  const smallKanaUnicodes = new Set([
-    0x3041, 0x3043, 0x3045, 0x3047, 0x3049, 0x3063, 0x3083, 0x3085, 0x3087, 0x308E, 0x3095, 0x3096, // ぁぃぅぇぉっゃゅょゎゕゖ
-    0x30A1, 0x30A3, 0x30A5, 0x30A7, 0x30A9, 0x30C3, 0x30E3, 0x30E5, 0x30E7, 0x30EE, 0x30F5, 0x30F6, // ァィゥェォッャュョヮヵヶ
-  ]);
-  if (smallKanaUnicodes.has(unicode)) return true;
+  if (SMALL_KANA_UNICODES.has(unicode)) return true;
+
+  // Standalone Dakuten & Handakuten (濁点 ゛, 半濁点 ゜, 結合濁点/半濁点)
+  if (unicode >= 0x3099 && unicode <= 0x309C) return true;
 
   // Japanese & CJK Punctuation, Brackets, Quotes, Marks (U+3000..U+303F, U+FF00..U+FFEF)
   if (unicode >= 0x3000 && unicode <= 0x303F) return true;
@@ -257,6 +268,9 @@ export function isAsymmetricOrPunctuationGlyph(unicode: number, char?: string): 
 
   // General Punctuation & Currency (U+2000..U+206F, U+2070..U+209F, U+20A0..U+20CF)
   if (unicode >= 0x2000 && unicode <= 0x20CF) return true;
+
+  // Combining Diacritical Marks (U+0300..U+036F)
+  if (unicode >= 0x0300 && unicode <= 0x036F) return true;
 
   return false;
 }
@@ -875,8 +889,11 @@ export function compileFont(
     console.warn('OpenType sanity parse warning:', parseErr);
   }
 
-  const blob = new Blob([buffer], { type: 'font/ttf' });
-  const blobUrl = URL.createObjectURL(blob);
+  let blobUrl = '';
+  if (!options?.skipBlobUrl) {
+    const blob = new Blob([buffer], { type: 'font/ttf' });
+    blobUrl = URL.createObjectURL(blob);
+  }
 
   return { font, buffer, blobUrl };
 }
@@ -946,7 +963,7 @@ export async function shareOrDownloadFont(
   format: 'ttf' | 'otf' = 'ttf',
   options?: CompileFontOptions
 ): Promise<{ method: 'share' | 'download'; filename: string }> {
-  const { buffer } = compileFont(project, options);
+  const { buffer } = compileFont(project, { ...options, skipBlobUrl: true });
   const rawName = project.metadata.familyName || 'CustomFont';
   const safeName = rawName.replace(/[^a-zA-Z0-9_\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff-]/g, '_');
   const filename = `${safeName}-${project.metadata.styleName || 'Regular'}.${format}`;
@@ -1006,7 +1023,7 @@ export function downloadFont(
   options?: CompileFontOptions
 ) {
   try {
-    const { buffer } = compileFont(project, options);
+    const { buffer } = compileFont(project, { ...options, skipBlobUrl: true });
     const mimeType = format === 'otf' ? 'font/otf' : 'font/ttf';
     const blob = new Blob([buffer], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -1136,7 +1153,7 @@ export async function loadFontFromFile(
         name: g.name || (charStr ? `uni${u.toString(16).toUpperCase().padStart(4, '0')}` : `glyph${u}`),
         advanceWidth: normalizedAdvance > 0 ? normalizedAdvance : 1000,
         lsb: normalizedLsb,
-        contours: contours,
+        contours: JSON.parse(JSON.stringify(contours)),
         modified: true,
       };
     }

@@ -285,8 +285,16 @@ export function snapContourMovement(
   activeContourNodes?: { x: number; y: number }[],
   gridSettings?: GridSettings
 ): SnapMovementResult {
-  const hTargets = getHorizontalSnapTargets(metrics, otherContours, customGuides, gridSettings);
-  const vTargets = getVerticalSnapTargets(metrics, otherContours, customGuides, gridSettings);
+  const allowGuideSnap = gridSettings ? gridSettings.snapToGuides === true : true;
+  const allowGridSnap = gridSettings ? gridSettings.snapToGrid === true : false;
+
+  // If both guide snap and grid snap are disabled, return raw movement with zero snapping
+  if (!allowGuideSnap && !allowGridSnap) {
+    return { dx: rawDx, dy: rawDy, activeGuides: [] };
+  }
+
+  const hTargets = allowGuideSnap ? getHorizontalSnapTargets(metrics, otherContours, customGuides, gridSettings) : [];
+  const vTargets = allowGuideSnap ? getVerticalSnapTargets(metrics, otherContours, customGuides, gridSettings) : [];
 
   const activeGuides: SnapGuideLine[] = [];
 
@@ -502,8 +510,16 @@ export function snapSinglePoint(
   threshold: number = 10,
   gridSettings?: GridSettings
 ): SnapPointResult {
-  const hTargets = getHorizontalSnapTargets(metrics, otherContours, customGuides, gridSettings);
-  const vTargets = getVerticalSnapTargets(metrics, otherContours, customGuides, gridSettings);
+  const allowGuideSnap = gridSettings ? gridSettings.snapToGuides === true : true;
+  const allowGridSnap = gridSettings ? gridSettings.snapToGrid === true : false;
+
+  // If both guide snap and grid snap are disabled, return raw point directly with zero snapping
+  if (!allowGuideSnap && !allowGridSnap) {
+    return { point: { x: Math.round(rawPos.x), y: Math.round(rawPos.y) }, activeGuides: [] };
+  }
+
+  const hTargets = allowGuideSnap ? getHorizontalSnapTargets(metrics, otherContours, customGuides, gridSettings) : [];
+  const vTargets = allowGuideSnap ? getVerticalSnapTargets(metrics, otherContours, customGuides, gridSettings) : [];
 
   const activeGuides: SnapGuideLine[] = [];
 

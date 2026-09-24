@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   X,
   Eye,
@@ -9,9 +9,11 @@ import {
   ArrowRightLeft,
   Check,
   Palette,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { FontProject, GlyphData, GlyphOverlaySettings } from '../types';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
 
 interface GlyphCompareModalProps {
   isOpen: boolean;
@@ -82,7 +84,32 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
   theme,
   onShowToast,
 }) => {
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
+
+  // Fullscreen mode state
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Keyboard shortcut listener: Escape and F
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
+      } else if ((e.key === 'f' || e.key === 'F') && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose]);
 
   // Get recommendations for activeChar
   const recommendedChars = useMemo(() => {
@@ -126,14 +153,22 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 transition-all ${
+        isFullscreen
+          ? 'p-0 w-screen h-screen bg-black/85 flex flex-col'
+          : 'flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200'
+      }`}
       onClick={onClose}
     >
       <div
-        className={`w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border transition-colors ${
-          isLight
-            ? 'bg-white border-stone-200 text-stone-800'
-            : 'bg-[#141c16] border-[#25362b] text-emerald-100'
+        className={`flex flex-col transition-all overflow-hidden ${
+          isFullscreen
+            ? isLight
+              ? 'w-screen h-screen rounded-none border-none shadow-none bg-white text-stone-800'
+              : 'w-screen h-screen rounded-none border-none shadow-none bg-[#141c16] text-emerald-100'
+            : isLight
+            ? 'w-full max-w-2xl xl:max-w-3xl rounded-2xl shadow-2xl max-h-[92vh] border border-stone-200 bg-white text-stone-800'
+            : 'w-full max-w-2xl xl:max-w-3xl rounded-2xl shadow-2xl max-h-[92vh] border border-[#25362b] bg-[#141c16] text-emerald-100'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -150,6 +185,11 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
             <div>
               <h2 className="text-base font-bold flex items-center gap-2">
                 <span>グリフ重ね合わせ比較 (Overlay Compare)</span>
+                {isFullscreen && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-600 text-white font-medium">
+                    全画面モード
+                  </span>
+                )}
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
                     overlaySettings.enabled
@@ -165,16 +205,45 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1a251e] transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-1.5">
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1.5 px-2.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-colors ${
+                isFullscreen
+                  ? isLight
+                    ? 'bg-sky-100 text-sky-900 border-sky-300'
+                    : 'bg-sky-950 text-sky-300 border-sky-700'
+                  : isLight
+                  ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+                  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F または Esc)' : '全画面表示に拡大 (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">通常</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">全画面</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1a251e] transition-colors"
+              title="閉じる (Esc)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 sm:space-y-5">
           {/* Master Enable Switch */}
           <div
             className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
@@ -197,7 +266,7 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
             <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
-                checked={overlaySettings.enabled}
+                checked={Boolean(overlaySettings?.enabled)}
                 onChange={(e) =>
                   onChangeOverlaySettings((prev) => ({ ...prev, enabled: e.target.checked }))
                 }
@@ -426,7 +495,7 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
               <label className="text-xs font-bold flex items-center gap-1.5 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={overlaySettings.showMetrics}
+                  checked={Boolean(overlaySettings?.showMetrics)}
                   onChange={(e) =>
                     onChangeOverlaySettings((prev) => ({
                       ...prev,
@@ -455,8 +524,31 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
             isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#101712] border-[#25362b]'
           }`}
         >
-          <div className="text-xs text-stone-500">
-            選択中: 「<strong className="text-sky-600 dark:text-sky-400">{overlaySettings.referenceChar || '未設定'}</strong>」
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-stone-500">
+              選択中: 「<strong className="text-sky-600 dark:text-sky-400">{overlaySettings.referenceChar || '未設定'}</strong>」
+            </div>
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1.5 px-2.5 rounded-lg border text-xs font-medium flex items-center space-x-1.5 transition-colors hidden sm:flex ${
+                isLight
+                  ? 'border-stone-300 text-stone-600 hover:bg-stone-100'
+                  : 'border-[#25362b] text-stone-300 hover:bg-[#202f26]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F / Esc)' : '全画面表示モード (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>通常サイズに戻す</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>全画面表示</span>
+                </>
+              )}
+            </button>
           </div>
           <button
             onClick={onClose}

@@ -9,14 +9,17 @@ import {
   RotateCw,
   Sliders,
   Maximize2,
+  Minimize2,
   RefreshCw,
   Move,
   Eye,
   Sparkles,
   Info,
+  ShieldCheck,
 } from 'lucide-react';
 import { TraceSettings } from '../types';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
+import { BundledFontsModal } from './BundledFontsModal';
 
 interface TraceSettingsModalProps {
   isOpen: boolean;
@@ -42,8 +45,32 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [applyMode, setApplyMode] = useState<'char' | 'global'>('global');
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState<boolean>(false);
 
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
+
+  // Keyboard shortcut listener: Escape and F
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
+      } else if ((e.key === 'f' || e.key === 'F') && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose]);
 
   // Current active image source (either per-char or global)
   const currentImageSrc =
@@ -119,42 +146,86 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs select-none">
+    <div
+      className={`fixed inset-0 z-50 transition-all ${
+        isFullscreen
+          ? 'p-0 w-screen h-screen bg-black/85 flex flex-col'
+          : 'flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs select-none'
+      }`}
+    >
       <div
-        className={`w-full max-w-lg border rounded-md shadow-2xl flex flex-col max-h-[92vh] overflow-hidden transition-colors ${
-          isLight
-            ? 'bg-[#f7faf8] border-[#c8ded3] text-stone-800'
-            : 'bg-[#151e18] border-[#25362b] text-emerald-100'
+        className={`flex flex-col transition-all overflow-hidden ${
+          isFullscreen
+            ? isLight
+              ? 'w-screen h-screen rounded-none border-none shadow-none bg-[#f7faf8] text-stone-800'
+              : 'w-screen h-screen rounded-none border-none shadow-none bg-[#151e18] text-emerald-100'
+            : isLight
+            ? 'w-full max-w-lg xl:max-w-2xl border rounded-2xl shadow-2xl max-h-[92vh] bg-[#f7faf8] border-[#c8ded3] text-stone-800'
+            : 'w-full max-w-lg xl:max-w-2xl border rounded-2xl shadow-2xl max-h-[92vh] bg-[#151e18] border-[#25362b] text-emerald-100'
         }`}
       >
         {/* Header */}
         <div
-          className={`p-3 sm:p-3.5 border-b flex items-center justify-between ${
+          className={`p-3 sm:p-3.5 border-b flex items-center justify-between shrink-0 ${
             isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
           }`}
         >
           <div className="flex items-center space-x-2">
             <Layers className={`w-4 h-4 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
             <h2
-              className={`text-xs font-bold uppercase tracking-wider ${
+              className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${
                 isLight ? 'text-emerald-950' : 'text-emerald-200'
               }`}
             >
-              看板・レタリング写真＆下絵トレース設定
+              <span>看板・レタリング写真＆下絵トレース設定</span>
+              {isFullscreen && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-medium">
+                  全画面モード
+                </span>
+              )}
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            className={`p-1 rounded ${
-              isLight ? 'text-stone-500 hover:bg-emerald-100' : 'text-emerald-400 hover:bg-[#202d24]'
-            }`}
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center space-x-1.5">
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1 px-2 rounded-lg border text-xs font-semibold flex items-center space-x-1 transition-colors ${
+                isFullscreen
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                  : isLight
+                  ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F または Esc)' : '全画面表示に拡大 (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">通常</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">全画面</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className={`p-1 rounded-lg border transition-colors ${
+                isLight ? 'text-stone-500 border-stone-200 hover:bg-emerald-100' : 'text-emerald-400 border-[#25362b] hover:bg-[#202d24]'
+              }`}
+              title="閉じる (Esc)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3.5 text-xs">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-4 space-y-3.5 text-xs">
           {/* Toggle Enable */}
           <div
             className={`flex items-center justify-between p-2.5 rounded-md border ${
@@ -169,7 +240,7 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
             </div>
             <input
               type="checkbox"
-              checked={traceSettings.enabled}
+              checked={Boolean(traceSettings?.enabled)}
               onChange={(e) => setTraceSettings((s) => ({ ...s, enabled: e.target.checked }))}
               className="w-4 h-4 accent-emerald-700 rounded"
             />
@@ -543,9 +614,19 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
               </div>
 
               <div className="flex flex-col space-y-1">
-                <label className={isLight ? 'text-stone-600' : 'text-emerald-400'}>
-                  下絵フォント書体
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className={isLight ? 'text-stone-600 font-semibold' : 'text-emerald-400 font-semibold'}>
+                    下絵フォント書体
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsLicenseModalOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>フォントとライセンス一覧</span>
+                  </button>
+                </div>
                 <select
                   value={traceSettings.fontFamily ?? "'Noto Sans JP', sans-serif"}
                   onChange={(e) => setTraceSettings((s) => ({ ...s, fontFamily: e.target.value }))}
@@ -555,11 +636,13 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
                       : 'bg-[#16201a] border-[#2d4034] text-emerald-100 focus:border-emerald-500'
                   }`}
                 >
-                  <option value="'Noto Sans JP', sans-serif">ゴシック体 (Gothic / Sans-serif)</option>
-                  <option value="'Noto Serif JP', serif">明朝体 (Mincho / Serif)</option>
-                  <option value="sans-serif">標準 Sans-Serif</option>
-                  <option value="serif">標準 Serif</option>
-                  <option value="monospace">等幅 (Monospace)</option>
+                  <option value="'Noto Sans JP', sans-serif">ゴシック体 (Noto Sans JP / OFL)</option>
+                  <option value="'Noto Serif JP', serif">明朝体 (Noto Serif JP / OFL)</option>
+                  <option value="'Zen Maru Gothic', sans-serif">丸ゴシック (Zen Maru Gothic / OFL)</option>
+                  <option value="'Kaisei Tokumin', serif">特民明朝 (Kaisei Tokumin / OFL)</option>
+                  <option value="sans-serif">標準 Sans-Serif (システム)</option>
+                  <option value="serif">標準 Serif (システム)</option>
+                  <option value="monospace">等幅 (Monospace / JetBrains Mono)</option>
                   <option value="cursive">手書き風 (Cursive)</option>
                 </select>
               </div>
@@ -661,7 +744,7 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
 
         {/* Footer */}
         <div
-          className={`p-3 border-t flex items-center justify-between ${
+          className={`p-3 pb-[max(env(safe-area-inset-bottom),12px)] border-t flex items-center justify-between ${
             isLight ? 'bg-[#edf5f0] border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
           }`}
         >
@@ -680,6 +763,12 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
           </button>
         </div>
       </div>
+
+      <BundledFontsModal
+        isOpen={isLicenseModalOpen}
+        onClose={() => setIsLicenseModalOpen(false)}
+        theme={theme}
+      />
     </div>
   );
 };

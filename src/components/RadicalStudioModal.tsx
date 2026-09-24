@@ -31,10 +31,7 @@ import {
   Check,
   ArrowRight,
   Move,
-  Grid,
   FileCode,
-  Tag,
-  Eye,
   Shapes,
   Sliders,
   Undo2,
@@ -49,8 +46,9 @@ import {
   ChevronRight,
   ChevronDown,
   RefreshCw,
-  LayoutGrid,
+  ShieldCheck,
 } from 'lucide-react';
+import { BundledFontsModal } from './BundledFontsModal';
 import {
   CustomPart,
   PartCategory,
@@ -69,6 +67,7 @@ import {
   generateId,
   contoursToSvgPath,
   strokePointsToOutline,
+  smoothStrokeContour,
   createRectContour,
   createEllipseContour,
   createTriangleContour,
@@ -77,7 +76,13 @@ import {
   createSparkleContour,
   createStarburstContour,
   createDiamondContour,
-  generateShapeByType,
+  createHexagonContour,
+  createRightTriangleContour,
+  createSemicircleContour,
+  createRingContours,
+  createPillContour,
+  createParallelogramContour,
+  createCrescentContour,
   slantSingleContour,
   rotateSingleContour,
   scaleSingleContour,
@@ -91,18 +96,15 @@ import {
   getContoursBoundingBox,
   unionContours,
   normalizeGlyphContoursWinding,
-  SHAPE_PRESETS,
-  PEN_PRESETS,
 } from '../utils/pathUtils';
 import { parseSvgStringToContours } from '../utils/svgParser';
 import { SCREEN_BASELINE_Y } from '../utils/fontCompiler';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
 import { KANJI_RADICALS } from '../data/kanjiRadicals';
 import {
   getOrExtractRadicalContours,
   RADICAL_FONT_OPTIONS,
   FontStyleOption,
-  POPULAR_RADICALS_QUICK_PRESETS,
   INITIAL_STUDIO_RADICAL_DEFS,
 } from '../utils/radicalExtractor';
 
@@ -227,7 +229,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   theme,
   onShowToast,
 }) => {
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
 
   // Custom parts library loaded from storage
   const [parts, setParts] = useState<CustomPart[]>(() => {
@@ -299,6 +301,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   const [selectedFontStyle, setSelectedFontStyle] = useState<FontStyleOption>(RADICAL_FONT_OPTIONS[0]);
   const [isLoadingPreset, setIsLoadingPreset] = useState<boolean>(false);
   const [isImportingAll, setIsImportingAll] = useState<boolean>(false);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState<boolean>(false);
 
   // Editor Tools & Viewport
   const [toolMode, setToolMode] = useState<ToolMode>('select');
@@ -306,8 +309,6 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   const [brushStyle, setBrushStyle] = useState<BrushStyle>('brush');
   const [pressureSensitivity, setPressureSensitivity] = useState<'high' | 'normal' | 'low' | 'off'>('normal');
   const [isStraightMode, setIsStraightMode] = useState<boolean>(false);
-  const [showBrushPresetsMenu, setShowBrushPresetsMenu] = useState<boolean>(false);
-  const [showBrushWidthMenu, setShowBrushWidthMenu] = useState<boolean>(false);
   const [showPenShortcutsHelp, setShowPenShortcutsHelp] = useState<boolean>(false);
   const [zoom, setZoom] = useState<number>(0.55);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 200, y: 140 });
@@ -326,6 +327,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   const [insertMode, setInsertMode] = useState<'single' | 'batch'>('single');
   const [batchCharsInput, setBatchCharsInput] = useState<string>('');
   const [selectedBatchChars, setSelectedBatchChars] = useState<string[]>([]);
+  const [insertingPresetId, setInsertingPresetId] = useState<string | null>(null);
 
   // Active Drawing / Selection
   const [selectedContourId, setSelectedContourId] = useState<string | null>(null);
@@ -334,13 +336,14 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   const [isDraggingNode, setIsDraggingNode] = useState(false);
   const [isDraggingContour, setIsDraggingContour] = useState(false);
   const [dragStartPoint, setDragStartPoint] = useState<Point>({ x: 0, y: 0 });
+  const dragStartContoursRef = useRef<PathContour[] | null>(null);
 
   // Brush / Shape / Pen tool in-progress state & high-performance drawing refs
   const [isDrawingStroke, setIsDrawingStroke] = useState(false);
-  const [currentStrokePoints, setCurrentStrokePoints] = useState<Point[]>([]);
   const brushStrokePointsRef = useRef<StrokePoint[]>([]);
   const activeBrushPathRef = useRef<SVGPathElement>(null);
   const brushRafIdRef = useRef<number | null>(null);
+  const mouseSmoothSpeedRef = useRef<number>(0.5);
   const isPenDraggingHandleRef = useRef<boolean>(false);
   const [isPenNearFirstNode, setIsPenNearFirstNode] = useState<boolean>(false);
 
@@ -367,8 +370,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
   // Layout & Expand states for comfortable workspace
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(true);
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(true);
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
   const [rightTab, setRightTab] = useState<'transform' | 'compose'>('transform');
   const [targetChar, setTargetChar] = useState<string>(selectedChar || '休');
 
@@ -387,16 +390,58 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     [onShowToast]
   );
 
-  // Save parts to localStorage whenever they change, and notify listeners
-  useEffect(() => {
+  const lastSavedPartsJsonRef = useRef<string>('');
+
+  // Reload custom parts from storage
+  const reloadPartsFromStorage = useCallback(() => {
     try {
-      localStorage.setItem(CUSTOM_PARTS_STORAGE_KEY, JSON.stringify(parts));
+      const saved = localStorage.getItem(CUSTOM_PARTS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setParts((prev) => {
+            if (JSON.stringify(prev) === saved) return prev;
+            lastSavedPartsJsonRef.current = saved;
+            return parsed;
+          });
+          setSelectedPartId((prevId) => {
+            if (parsed.some((p) => p.id === prevId)) return prevId;
+            return parsed[0]?.id || '';
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const prevIsOpenRef = useRef(false);
+
+  // Sync parts and target char whenever modal transitions from closed to open
+  useEffect(() => {
+    if (isOpen && !prevIsOpenRef.current) {
+      reloadPartsFromStorage();
+      if (selectedChar) {
+        setWatermarkChar(selectedChar);
+        setTargetChar(selectedChar);
+      }
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, selectedChar, reloadPartsFromStorage]);
+
+  // Save parts to localStorage whenever they change while modal is open, and notify external listeners
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const json = JSON.stringify(parts);
+      if (json === lastSavedPartsJsonRef.current) return;
+      lastSavedPartsJsonRef.current = json;
+      localStorage.setItem(CUSTOM_PARTS_STORAGE_KEY, json);
       window.dispatchEvent(new Event('font_custom_parts_updated'));
-      window.dispatchEvent(new Event('storage'));
     } catch (e) {
       console.warn('Failed to save custom parts:', e);
     }
-  }, [parts]);
+  }, [parts, isOpen]);
 
   // Center editor view whenever selected part changes or on initial open
   const resetView = useCallback(() => {
@@ -675,9 +720,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       })),
     }));
 
-    const positioned = transformContoursForPlacement(cloned, insertPlacement);
-    onInsertToCurrentGlyph(positioned);
-    notify(`「${activePart.name}」を「${selectedChar}」に挿入しました`, 'success');
+    const positioned = transformContoursForPlacement(cloned, insertPlacement, activePart.category);
+    if (targetChar && targetChar !== selectedChar && onBatchInsertToGlyphs) {
+      onBatchInsertToGlyphs(positioned, [targetChar]);
+    } else {
+      onInsertToCurrentGlyph(positioned);
+    }
+    notify(`「${activePart.name}」を「${targetChar || selectedChar}」に挿入しました`, 'success');
     if (closeAfter) {
       onClose();
     }
@@ -709,7 +758,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       })),
     }));
 
-    const positioned = transformContoursForPlacement(cloned, insertPlacement);
+    const positioned = transformContoursForPlacement(cloned, insertPlacement, activePart.category);
 
     if (onBatchInsertToGlyphs) {
       onBatchInsertToGlyphs(positioned, allTargetChars);
@@ -818,6 +867,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     placement: RadicalPlacement = 'original',
     closeAfter: boolean = false
   ) => {
+    if (insertingPresetId) return;
+    setInsertingPresetId(preset.id);
     try {
       let contours = await getOrExtractRadicalContours(
         preset.char,
@@ -831,13 +882,19 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       }
 
       const positioned = transformContoursForPlacement(contours, placement, preset.category);
-      onInsertToCurrentGlyph(positioned);
-      notify(`部首「${preset.name} (${selectedFontStyle.label})」を文字「${selectedChar}」に挿入しました`, 'success');
+      if (targetChar && targetChar !== selectedChar && onBatchInsertToGlyphs) {
+        onBatchInsertToGlyphs(positioned, [targetChar]);
+      } else {
+        onInsertToCurrentGlyph(positioned);
+      }
+      notify(`部首「${preset.name} (${selectedFontStyle.label})」を文字「${targetChar || selectedChar}」に挿入しました`, 'success');
       if (closeAfter) {
         onClose();
       }
     } catch {
       notify('部首の挿入に失敗しました', 'error');
+    } finally {
+      setInsertingPresetId(null);
     }
   };
 
@@ -849,7 +906,11 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     }
     const cloned: PathContour[] = JSON.parse(JSON.stringify(activePart.contours));
     const positioned = transformContoursForPlacement(cloned, placement, activePart.category);
-    onInsertToCurrentGlyph(positioned);
+    if (targetChar && targetChar !== selectedChar && onBatchInsertToGlyphs) {
+      onBatchInsertToGlyphs(positioned, [targetChar]);
+    } else {
+      onInsertToCurrentGlyph(positioned);
+    }
     const placementNames: Record<RadicalPlacement, string> = {
       auto: '自動判別',
       original: '原寸のまま',
@@ -859,7 +920,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       ashi: '脚 (下36%)',
       center_small: '中央縮小 (60%)',
     };
-    notify(`「${activePart.name}」を【${placementNames[placement] || placement}】として「${selectedChar}」に挿入しました`, 'success');
+    notify(`「${activePart.name}」を【${placementNames[placement] || placement}】として「${targetChar || selectedChar}」に挿入しました`, 'success');
     if (closeAfter) {
       onClose();
     }
@@ -973,9 +1034,12 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     }
   };
 
-  // Auto-upgrade legacy low-quality default parts on open
+  const hasUpgradedDefaultsRef = useRef(false);
+
+  // Auto-upgrade legacy low-quality default parts on open (at most once per session)
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || hasUpgradedDefaultsRef.current) return;
+    hasUpgradedDefaultsRef.current = true;
 
     const hasLowQualityDefaults = parts.some((p) => {
       const isInitialPart = INITIAL_STUDIO_RADICAL_DEFS.some(
@@ -1087,7 +1151,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   };
 
   // Shape helper
-  const getShapeContour = (mode: ToolMode, p1: Point, p2: Point): PathContour => {
+  const getShapeContours = (mode: ToolMode, p1: Point, p2: Point): PathContour[] => {
     const minX = Math.min(p1.x, p2.x);
     const maxX = Math.max(p1.x, p2.x);
     const minY = Math.min(p1.y, p2.y);
@@ -1101,31 +1165,59 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
     switch (mode) {
       case 'rect':
-        return createRectContour(minX, minY, maxX, maxY);
+      case 'square':
+        return [createRectContour(minX, minY, maxX, maxY)];
+      case 'pill':
+        return [createPillContour(cx, cy, width, height)];
       case 'ellipse':
-        return createEllipseContour(cx, cy, rx, ry);
+      case 'circle':
+        return [createEllipseContour(cx, cy, rx, ry)];
       case 'triangle':
-        return createTriangleContour(cx, cy, width, height, 'up');
+        return [createTriangleContour(cx, cy, width, height, 'up')];
+      case 'triangle_down':
+        return [createTriangleContour(cx, cy, width, height, 'down')];
+      case 'right_triangle':
+        return [createRightTriangleContour(cx, cy, width, height)];
+      case 'semicircle':
+        return [createSemicircleContour(cx, cy, rx, ry, 'top')];
+      case 'ring':
+        return createRingContours(cx, cy, rx, ry * 0.55);
+      case 'parallelogram':
+        return [createParallelogramContour(cx, cy, width, height, 18)];
       case 'star':
-        return createStarContour(cx, cy, Math.max(rx, ry), Math.max(rx, ry) * 0.42, 5);
+        return [createStarContour(cx, cy, Math.max(rx, ry), Math.max(rx, ry) * 0.42, 5)];
       case 'heart':
-        return createHeartContour(cx, cy, width, height);
+        return [createHeartContour(cx, cy, width, height)];
       case 'sparkle':
-        return createSparkleContour(cx, cy, Math.max(rx, ry), 0.22);
+        return [createSparkleContour(cx, cy, Math.max(rx, ry), 0.22)];
       case 'starburst':
-        return createStarburstContour(cx, cy, Math.max(rx, ry), 0.45, 8);
+        return [createStarburstContour(cx, cy, Math.max(rx, ry), 0.45, 8)];
       case 'diamond':
-        return createDiamondContour(cx, cy, width, height);
+        return [createDiamondContour(cx, cy, width, height)];
+      case 'polygon':
+        return [createHexagonContour(cx, cy, Math.max(rx, ry))];
+      case 'crescent':
+        return [createCrescentContour(cx, cy, Math.max(rx, ry))];
       default:
-        return createRectContour(minX, minY, maxX, maxY);
+        return [createRectContour(minX, minY, maxX, maxY)];
     }
   };
 
   // Wheel zoom & pan on canvas
   const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
     e.preventDefault();
+    let dx = e.deltaX;
+    let dy = e.deltaY;
+    if (e.deltaMode === 1) {
+      dx *= 20;
+      dy *= 20;
+    } else if (e.deltaMode === 2) {
+      dx *= 400;
+      dy *= 400;
+    }
+
     if (e.ctrlKey || e.metaKey) {
-      const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88;
+      const zoomFactor = dy < 0 ? 1.12 : 0.88;
       const newZoom = Math.max(0.15, Math.min(3.0, zoom * zoomFactor));
       if (!svgCanvasRef.current) return;
       const rect = svgCanvasRef.current.getBoundingClientRect();
@@ -1138,8 +1230,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       setZoom(newZoom);
     } else {
       setPan((prev) => ({
-        x: prev.x - e.deltaX,
-        y: prev.y - e.deltaY,
+        x: prev.x - dx,
+        y: prev.y - dy,
       }));
     }
   };
@@ -1164,15 +1256,16 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       } else if (pressureSensitivity === 'off') {
         initialPressure = 1.0;
       }
+      mouseSmoothSpeedRef.current = 0.5;
       const firstPt: StrokePoint = {
         x: pos.x,
         y: pos.y,
         pressure: initialPressure,
         time: e.timeStamp || Date.now(),
+        pointerType: e.pointerType,
       };
       brushStrokePointsRef.current = [firstPt];
       setIsDrawingStroke(true);
-      setCurrentStrokePoints([pos]);
       if (activeBrushPathRef.current) {
         activeBrushPathRef.current.setAttribute('d', '');
       }
@@ -1271,6 +1364,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
     // Select Tool
     if (toolMode === 'select') {
+      dragStartContoursRef.current = JSON.parse(JSON.stringify(activePart.contours));
       // 1. Check Handle Hits on currently selected node first
       if (selectedNodeId && selectedContourId) {
         const targetContour = activePart.contours.find((c) => c.id === selectedContourId);
@@ -1351,7 +1445,9 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     }
 
     const pos = getCanvasCoords(e);
-    setPenMousePos(pos);
+    if (toolMode === 'pen') {
+      setPenMousePos(pos);
+    }
 
     // Live Brush Stroke Engine
     if (isDrawingStroke && toolMode === 'brush') {
@@ -1362,15 +1458,18 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       for (const evt of events) {
         const rawPos = getCanvasCoordsFromClient(evt.clientX, evt.clientY);
         let p = evt.pressure;
-        if (!p || p === 0) {
+        const isMouse = (evt.pointerType || e.pointerType) === 'mouse';
+        if (!p || p === 0 || isMouse) {
           if (pressureSensitivity === 'off') {
             p = 1.0;
           } else if (lastPt) {
             const dt = Math.max(1, (evt.timeStamp || Date.now()) - (lastPt.time || 0));
             const dist = Math.hypot(rawPos.x - lastPt.x, rawPos.y - lastPt.y);
-            const speed = dist / dt;
+            const instantSpeed = dist / dt;
+            const emaAlpha = 0.25;
+            mouseSmoothSpeedRef.current = emaAlpha * instantSpeed + (1 - emaAlpha) * mouseSmoothSpeedRef.current;
             const factor = pressureSensitivity === 'high' ? 0.7 : pressureSensitivity === 'low' ? 0.25 : 0.45;
-            p = Math.max(0.2, Math.min(1.0, 1.0 - speed * factor));
+            p = Math.max(0.2, Math.min(1.0, 1.0 - mouseSmoothSpeedRef.current * factor));
           } else {
             p = 0.5;
           }
@@ -1380,6 +1479,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           y: rawPos.y,
           pressure: p,
           time: evt.timeStamp || Date.now(),
+          pointerType: evt.pointerType || e.pointerType,
         });
       }
 
@@ -1543,6 +1643,17 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     setIsDraggingContour(false);
     setSelectedHandleType(null);
 
+    // Record undo state if a node or contour drag occurred in select mode
+    if (dragStartContoursRef.current && activePart) {
+      const startJson = JSON.stringify(dragStartContoursRef.current);
+      const currentJson = JSON.stringify(activePart.contours);
+      if (startJson !== currentJson) {
+        setUndoStack((prev) => [...prev.slice(-25), dragStartContoursRef.current!]);
+        setRedoStack([]);
+      }
+      dragStartContoursRef.current = null;
+    }
+
     // Finalize Pen dragging
     if (toolMode === 'pen') {
       isPenDraggingHandleRef.current = false;
@@ -1564,12 +1675,21 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               brushStrokePointsRef.current[brushStrokePointsRef.current.length - 1],
             ]
           : brushStrokePointsRef.current;
-        const strokeContour = strokePointsToOutline(
+        const rawContour = strokePointsToOutline(
           pts,
           brushWidth,
           brushStyle
         );
-        if (strokeContour && strokeContour.nodes.length >= 3) {
+        if (rawContour && rawContour.nodes.length >= 3) {
+          const isSharp = brushStyle === 'sharp' || brushStyle === 'sharp_round' || brushStyle === 'polygon';
+          const strokeContour = isSharp
+            ? rawContour
+            : smoothStrokeContour(rawContour, {
+                tolerance: 1.2,
+                preserveCorners: true,
+                cornerAngleDeg: 48,
+              }).contour;
+
           try {
             const unioned = unionContours([...activePart.contours, strokeContour]);
             commitPartChange(unioned.length > 0 ? unioned : [...activePart.contours, strokeContour]);
@@ -1579,7 +1699,6 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
         }
       }
       setIsDrawingStroke(false);
-      setCurrentStrokePoints([]);
       brushStrokePointsRef.current = [];
       if (activeBrushPathRef.current) {
         activeBrushPathRef.current.setAttribute('d', '');
@@ -1613,9 +1732,9 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           ? { x: shapeStartPoint.x + 120, y: shapeStartPoint.y + 120 }
           : shapeCurrentPoint;
 
-      const newShapeContour = getShapeContour(toolMode, p1, p2);
-      commitPartChange([...activePart.contours, newShapeContour]);
-      setSelectedContourId(newShapeContour.id);
+      const newShapeContours = getShapeContours(toolMode, p1, p2);
+      commitPartChange([...activePart.contours, ...newShapeContours]);
+      setSelectedContourId(newShapeContours[0]?.id || null);
       setShapeStartPoint(null);
       setShapeCurrentPoint(null);
     }
@@ -1856,7 +1975,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
   const handleFitToPlacement = (place: RadicalPlacement) => {
     if (!activePart) return;
-    const positioned = transformContoursForPlacement(activePart.contours, place);
+    const positioned = transformContoursForPlacement(activePart.contours, place, activePart.category);
     commitPartChange(positioned);
     notify(`配置を「${place}」基準に自動フィットしました`, 'info');
   };
@@ -1966,10 +2085,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   // SVG Paths for render
   const mainSvgPath = activePart ? contoursToSvgPath(normalizeGlyphContoursWinding(activePart.contours)) : '';
   const penSvgPath = activePenContour ? contoursToSvgPath([activePenContour]) : '';
-  const brushSvgPath =
-    isDrawingStroke && currentStrokePoints.length > 2
-      ? contoursToSvgPath([strokePointsToOutline(currentStrokePoints, brushWidth, brushStyle)])
-      : '';
+  const brushSvgPath = '';
 
   if (!isOpen) return null;
 
@@ -2284,7 +2400,17 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                 ) : (
                   <div className="space-y-1.5">
                     <div className="text-[11px] text-stone-500 dark:text-stone-400 flex items-center justify-between">
-                      <span className="font-semibold">フォントスタイル選択</span>
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-semibold">フォントスタイル選択</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsLicenseModalOpen(true)}
+                          className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                        >
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>OFL</span>
+                        </button>
+                      </div>
                       <button
                         onClick={handleImportDefaultRadicals}
                         disabled={isImportingAll}
@@ -2359,7 +2485,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               </div>
 
               {/* Main List Area */}
-              <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 space-y-1.5">
                 {leftSidebarTab === 'presets' ? (
                   /* ================= RADICAL PRESETS VIEW ================= */
                   filteredPresets.length === 0 ? (
@@ -3075,7 +3201,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     <input
                       type="text"
                       maxLength={1}
-                      value={watermarkChar}
+                      value={watermarkChar || ''}
                       onChange={(e) => setWatermarkChar(e.target.value.slice(-1) || selectedChar)}
                       className={`w-6 h-6 text-center text-xs font-bold rounded border outline-hidden transition-colors ${
                         isLight
@@ -3701,13 +3827,15 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   {/* Active Shape in-progress */}
                   {shapeStartPoint && shapeCurrentPoint && (
                     <path
-                      d={contoursToSvgPath([
-                        getShapeContour(toolMode, shapeStartPoint, shapeCurrentPoint),
-                      ])}
+                      d={contoursToSvgPath(
+                        getShapeContours(toolMode, shapeStartPoint, shapeCurrentPoint)
+                      )}
                       fill="#f59e0b"
                       fillOpacity={0.35}
                       stroke="#f59e0b"
                       strokeWidth={2}
+                      fillRule="evenodd"
+                      pointerEvents="none"
                     />
                   )}
 
@@ -3906,7 +4034,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                         : 'text-stone-500 hover:text-stone-900 dark:text-stone-400'
                     }`}
                   >
-                    🈴 漢字合成・挿入
+                    漢字合成・挿入
                   </button>
                 </div>
 
@@ -3921,7 +4049,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               </div>
 
               {activePart ? (
-                <div className="flex-1 overflow-y-auto p-3.5 space-y-4 min-h-0">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 space-y-4">
                   {/* TAB 1: TRANSFORM & SETTINGS */}
                   {rightTab === 'transform' && (
                     <>
@@ -4366,7 +4494,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                             />
                           </svg>
                         </div>
-                        <p className="text-[10px] text-stone-500 leading-tight text-center">
+                        <p className="text-[10.5px] text-stone-500 leading-relaxed text-center break-words">
                           選択中の配置設定（{insertPlacement}）に従って自動変形・配置された姿をプレビューしています
                         </p>
                       </div>
@@ -4719,6 +4847,12 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           </div>
         </div>
       )}
+
+      <BundledFontsModal
+        isOpen={isLicenseModalOpen}
+        onClose={() => setIsLicenseModalOpen(false)}
+        theme={theme}
+      />
     </div>
   );
 };

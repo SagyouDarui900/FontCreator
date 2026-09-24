@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   X,
   Sparkles,
@@ -13,7 +13,9 @@ import {
   RefreshCw,
   BookOpen,
   Plus,
+  ShieldCheck,
 } from 'lucide-react';
+import { BundledFontsModal } from './BundledFontsModal';
 import { KANJI_RADICALS } from '../data/kanjiRadicals';
 import { PathContour, CustomPart, RadicalPlacement, GlyphData } from '../types';
 import {
@@ -35,7 +37,7 @@ import {
   FontStyleOption,
   RadicalFontPreset,
 } from '../utils/radicalExtractor';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme, getThemeClasses } from '../utils/theme';
 
 const CUSTOM_PARTS_STORAGE_KEY = 'font_editor_custom_parts_v1';
 
@@ -69,6 +71,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [shapeCategoryFilter, setShapeCategoryFilter] = useState<string>('all');
   const [extractingKangxiNum, setExtractingKangxiNum] = useState<number | null>(null);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState<boolean>(false);
 
   // Font Extraction Tool State
   const [extractChar, setExtractChar] = useState<string>('氵');
@@ -149,19 +152,29 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
   const [showSaveInput, setShowSaveInput] = useState<boolean>(false);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
+  const themeClasses = getThemeClasses(theme);
 
   const showNotice = (msg: string) => {
     setStatusNotice(msg);
     setTimeout(() => setStatusNotice(null), 2500);
   };
 
-  // Reload custom parts
+  const lastSavedDrawerJsonRef = useRef<string>('');
+
+  // Reload custom parts with content comparison to prevent re-render loops
   const reloadCustomParts = useCallback(() => {
     try {
       const saved = localStorage.getItem(CUSTOM_PARTS_STORAGE_KEY);
       if (saved) {
-        setCustomParts(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setCustomParts((prev) => {
+            if (JSON.stringify(prev) === saved) return prev;
+            lastSavedDrawerJsonRef.current = saved;
+            return parsed;
+          });
+        }
       }
     } catch {
       // ignore
@@ -184,10 +197,13 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
     };
   }, [reloadCustomParts]);
 
-  // Sync custom parts to localStorage
+  // Sync custom parts to localStorage only when content actually changes
   useEffect(() => {
     try {
-      localStorage.setItem(CUSTOM_PARTS_STORAGE_KEY, JSON.stringify(customParts));
+      const json = JSON.stringify(customParts);
+      if (json === lastSavedDrawerJsonRef.current) return;
+      lastSavedDrawerJsonRef.current = json;
+      localStorage.setItem(CUSTOM_PARTS_STORAGE_KEY, json);
     } catch {
       // ignore
     }
@@ -405,9 +421,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
       />
 
       <div
-        className={`fixed inset-y-0 right-0 w-full sm:w-[430px] sm:max-w-md border-l shadow-2xl z-50 flex flex-col select-none transition-colors animate-in slide-in-from-right duration-200 ${
-          isLight ? 'bg-[#f7faf8] border-[#c8ded3] text-stone-800' : 'bg-[#151e18] border-[#25362b] text-emerald-100'
-        }`}
+        className={`fixed inset-y-0 right-0 w-full sm:w-[430px] sm:max-w-md border-l shadow-2xl z-50 flex flex-col select-none transition-colors animate-in slide-in-from-right duration-200 ${themeClasses.sidebarBg}`}
       >
         {/* Header */}
         <div
@@ -438,7 +452,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
 
         {/* Status Toast */}
         {statusNotice && (
-          <div className="bg-emerald-800 text-white text-[11px] font-bold py-1.5 px-3 text-center shadow-md animate-in fade-in">
+          <div className="bg-emerald-800 text-white text-[11px] font-bold py-1.5 px-3 text-center border-b border-emerald-700 animate-in fade-in">
             {statusNotice}
           </div>
         )}
@@ -484,9 +498,14 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
               <Type className="w-3.5 h-3.5 text-emerald-600" />
               <span>部首書体スタイル (プレビュー＆抽出):</span>
             </span>
-            <span className="text-[10px] text-emerald-800 dark:text-emerald-400 font-medium">
-              {selectedFontStyle.subLabel}
-            </span>
+            <button
+              type="button"
+              onClick={() => setIsLicenseModalOpen(true)}
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
+            >
+              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+              <span>OFL 1.1 ライセンス一覧</span>
+            </button>
           </div>
           <div className="grid grid-cols-3 gap-1.5 text-xs">
             {RADICAL_FONT_OPTIONS.map((opt) => (
@@ -609,7 +628,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
             </div>
 
             {/* Grid of Typographic Radicals */}
-            <div className="flex-1 overflow-y-auto p-2.5 grid grid-cols-3 gap-2 content-start">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2.5 pb-28 sm:pb-8 grid grid-cols-3 gap-2 content-start">
               {filteredRadicals.map((radical) => {
                 return (
                   <button
@@ -669,7 +688,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
             TAB 2: FONT EXTRACTOR (実用フォントからの高精度抽出)
            ======================================================== */}
         {activeTab === 'extract' && (
-          <div className="flex-1 flex flex-col min-h-0 p-3 space-y-3 overflow-y-auto">
+          <div className="flex-1 flex flex-col min-h-0 p-3 pb-28 sm:pb-8 space-y-3 overflow-y-auto">
             <div
               className={`p-2.5 rounded-lg border text-xs space-y-1.5 ${
                 isLight ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-[#142218] border-[#223627] text-emerald-200'
@@ -935,7 +954,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 pb-28 sm:pb-8 space-y-1">
               {filteredKangxi.map((item) => (
                 <div
                   key={item.number}
@@ -1062,7 +1081,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
             </div>
 
             {/* Grid */}
-            <div className="flex-1 overflow-y-auto p-2.5 grid grid-cols-3 gap-2 content-start">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2.5 pb-28 sm:pb-8 grid grid-cols-3 gap-2 content-start">
               {SHAPE_PRESETS.filter(
                 (p) => shapeCategoryFilter === 'all' || p.category === shapeCategoryFilter
               ).map((preset) => {
@@ -1118,7 +1137,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                 <p className="text-[10px]">文字を作図するとここに合成候補として現れます。</p>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto grid grid-cols-4 gap-2 content-start pr-1">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-4 gap-2 content-start pr-1 pb-28 sm:pb-8">
                 {availableGlyphs.map((glyph) => {
                   const svgPath = contoursToSvgPath(glyph.contours);
                   return (
@@ -1268,7 +1287,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                 </p>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 content-start pr-1">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-2 gap-2 content-start pr-1 pb-28 sm:pb-8">
                 {customParts.map((part) => {
                   const hasContours = part.contours && part.contours.length > 0;
                   const svgPath = hasContours ? contoursToSvgPath(part.contours) : '';
@@ -1363,6 +1382,12 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
           </div>
         )}
       </div>
+
+      <BundledFontsModal
+        isOpen={isLicenseModalOpen}
+        onClose={() => setIsLicenseModalOpen(false)}
+        theme={theme}
+      />
     </>
   );
 };

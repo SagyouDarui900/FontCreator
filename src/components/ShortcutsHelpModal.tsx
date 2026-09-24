@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Keyboard,
   X,
@@ -7,6 +7,7 @@ import {
   PenTool,
   Move,
   Maximize2,
+  Minimize2,
   Undo2,
   BookOpen,
   Sparkles,
@@ -23,14 +24,21 @@ import {
   ExternalLink,
   Laptop,
   Tablet,
+  Grid,
+  Sliders,
+  Database,
+  Hand,
+  Book,
 } from 'lucide-react';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
+import { BeginnerTutorialTab } from './help/BeginnerTutorialTab';
+import { GlossaryTab } from './help/GlossaryTab';
 
 interface ShortcutsHelpModalProps {
   isOpen: boolean;
   onClose: () => void;
   theme: ThemeMode;
-  initialTab?: 'tutorial' | 'features' | 'shortcuts' | 'faq';
+  initialTab?: 'tutorial' | 'glossary' | 'features' | 'shortcuts' | 'faq';
 }
 
 interface ShortcutItem {
@@ -53,6 +61,11 @@ const SHORTCUTS: ShortcutItem[] = [
   { keys: ['H'], description: '手のひらツール（キャンバス移動）に切り替え', category: 'tools' },
 
   // 描画・編集操作
+  { keys: ['Ctrl / ⌘', '+', 'C'], description: '選択した輪郭パスをクリップボードにコピー', category: 'drawing', badge: '便利' },
+  { keys: ['Ctrl / ⌘', '+', 'X'], description: '選択した輪郭パスをクリップボードに切り取り', category: 'drawing' },
+  { keys: ['Ctrl / ⌘', '+', 'V'], description: 'クリップボードの輪郭パスを現在の文字に貼り付け', category: 'drawing', badge: '便利' },
+  { keys: ['Ctrl / ⌘', '+', 'D'], description: '選択した輪郭パスをその場で複製', category: 'drawing' },
+  { keys: ['↑', '↓', '←', '→'], description: '選択したパスやノードを矢印キーで微動（Shiftで10px単位）', category: 'drawing' },
   { keys: ['['], description: 'ブラシ / 消しゴムの太さを細く (-2px)', category: 'drawing' },
   { keys: [']'], description: 'ブラシ / 消しゴムの太さを太く (+2px)', category: 'drawing' },
   { keys: ['Shift', '+', '['], description: 'ブラシサイズを大幅に縮小 (-10px)', category: 'drawing' },
@@ -65,6 +78,14 @@ const SHORTCUTS: ShortcutItem[] = [
   { keys: ['Alt', '+', 'S'], description: 'パスの単純化（頂点数を減らし滑らかに最適化）', category: 'drawing', badge: '最適化' },
   { keys: ['Shift', '+', 'Alt', '+', 'S'], description: 'スマート自動字幅・左右余白バランス調律', category: 'drawing', badge: '自動調律' },
 
+  // モーダル・ダイアログの即時呼び出し
+  { keys: ['Ctrl / ⌘', '+', 'E', 'または', 'Alt + E'], description: 'フォント書き出しモーダル（TTF / WOFF / SVG）を開く', category: 'tools', badge: '書き出し' },
+  { keys: ['Alt', '+', 'T'], description: '試し打ち・文章プレビュー画面を開く', category: 'tools', badge: 'プレビュー' },
+  { keys: ['Alt', '+', 'Q'], description: 'フォント品質検査・自動診断画面を開く', category: 'tools', badge: '品質診断' },
+  { keys: ['Alt', '+', 'I'], description: 'フォント情報・基本メトリクス設定を開く', category: 'tools' },
+  { keys: ['Alt', '+', 'K'], description: 'カーニング（文字間ペア調律）画面を開く', category: 'tools' },
+  { keys: ['Alt', '+', 'M'], description: 'ストレージ管理・バックアップ復元画面を開く', category: 'tools' },
+
   // 表示・ズーム・レイアウト
   { keys: ['Space', '+', 'ドラッグ'], description: '一時的に手のひらツールになりキャンバスをパン移動', category: 'view', badge: '必須' },
   { keys: ['0'], description: 'キャンバス全体を画面に最適フィット', category: 'view' },
@@ -73,15 +94,25 @@ const SHORTCUTS: ShortcutItem[] = [
   { keys: ['+'], description: 'ズームイン (拡大)', category: 'view' },
   { keys: ['-'], description: 'ズームアウト (縮小)', category: 'view' },
   { keys: ['Z', 'または', 'Shift + Z'], description: '全面作図・集中モード (サイドバーの収納/展開)', category: 'view', badge: '集中' },
+  { keys: ['F'], description: 'フォント品質・プレビュー・ヒートマップの全画面切替', category: 'view', badge: '全画面' },
   { keys: ['\\'], description: '文字一覧サイドバーの開閉', category: 'view' },
   { keys: ['G'], description: '方眼グリッドの表示 / 非表示切り替え', category: 'view' },
   { keys: ['Alt', '+', '+'], description: '方眼グリッドのマス目サイズを拡大 (+5px)', category: 'view' },
   { keys: ['Alt', '+', '-'], description: '方眼グリッドのマス目サイズを縮小 (-5px)', category: 'view' },
 
+  // 各専用モーダル内の効率ショートカット
+  { keys: ['R'], description: '【品質診断】フォントの品質を再スキャン / 【ストレージ】再読込', category: 'view' },
+  { keys: ['H'], description: '【品質診断】過密アンカー文字の輪郭密度ヒートマップ診断を即起動', category: 'view', badge: 'ヒートマップ' },
+  { keys: ['/'], description: '【品質診断】文字・Unicode検索バーにフォーカス', category: 'view' },
+  { keys: ['1 ~ 7'], description: '【品質診断】検査カテゴリ（重複・交差・過密・極値等）を瞬時に切替', category: 'view' },
+  { keys: ['Enter'], description: '【ヒートマップ診断】表示中文字の全過密輪郭を一括安全単純化', category: 'drawing', badge: '一括単純化' },
+  { keys: ['1 / 2 / 3'], description: '【ヒートマップ診断】単純化強度（軽度 2px / 標準 3.5px / 強力 5px）を切替', category: 'drawing' },
+  { keys: ['P'], description: '【ヒートマップ診断】アンカー密集度ドットの表示 / 非表示切替', category: 'drawing' },
+
   // 文字送り・ナビゲーション
   { keys: ['Alt', '+', '→', '/', 'PageDown'], description: '次の文字へ進む（五十音順・漢字順）', category: 'nav', badge: '連続作字' },
   { keys: ['Alt', '+', '←', '/', 'PageUp'], description: '前の文字へ戻る', category: 'nav' },
-  { keys: ['Alt', '+', 'N'], description: '次の「未作成の文字」へスキップ', category: 'nav', badge: '爆速作字' },
+  { keys: ['Alt', '+', 'N'], description: '次の「未作成の文字」へスキップ', category: 'nav', badge: '効率化' },
   { keys: ['Alt', '+', 'P'], description: '前の「未作成の文字」へスキップ', category: 'nav' },
 
   // 編集・プロジェクト保存
@@ -102,7 +133,7 @@ const SHORTCUT_CATEGORIES = [
   { id: 'edit', label: '履歴・保存', icon: Undo2 },
 ];
 
-type MainTab = 'tutorial' | 'features' | 'shortcuts' | 'faq';
+type MainTab = 'tutorial' | 'glossary' | 'features' | 'shortcuts' | 'faq';
 
 export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
   isOpen,
@@ -113,8 +144,31 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
   const [activeTab, setActiveTab] = useState<MainTab>(initialTab);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
+
+  // Keyboard shortcut listener: Escape and F
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
+      } else if ((e.key === 'f' || e.key === 'F') && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose]);
 
   const filteredShortcuts = useMemo(() => {
     return SHORTCUTS.filter((item) => {
@@ -134,12 +188,22 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/65 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      className={`fixed inset-0 z-50 transition-all ${
+        isFullscreen
+          ? 'p-0 w-screen h-screen bg-black/85 flex flex-col'
+          : 'flex items-center justify-center p-2 sm:p-4 bg-black/65 backdrop-blur-xs animate-in fade-in duration-150'
+      }`}
+    >
       <div
-        className={`w-full max-w-3xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[92vh] transition-colors ${
-          isLight
-            ? 'bg-white border-stone-200 text-stone-900 shadow-xl'
-            : 'bg-[#141e17] border-[#25362b] text-emerald-100 shadow-xl'
+        className={`flex flex-col transition-all overflow-hidden ${
+          isFullscreen
+            ? isLight
+              ? 'w-screen h-screen rounded-none border-none shadow-none bg-white text-stone-900'
+              : 'w-screen h-screen rounded-none border-none shadow-none bg-[#141e17] text-emerald-100'
+            : isLight
+            ? 'w-full max-w-3xl xl:max-w-4xl rounded-2xl border max-h-[92vh] bg-white border-stone-200 text-stone-900 shadow-xl'
+            : 'w-full max-w-3xl xl:max-w-4xl rounded-2xl border max-h-[92vh] bg-[#141e17] border-[#25362b] text-emerald-100 shadow-xl'
         }`}
       >
         {/* Modal Top Header */}
@@ -162,21 +226,54 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-normal bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                   v2.0
                 </span>
+                {isFullscreen && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-medium">
+                    全画面モード
+                  </span>
+                )}
               </h2>
               <p className="text-xs opacity-75">フォントの作り方・便利機能・ショートカットキーの総合マニュアル</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className={`p-1.5 rounded-lg transition-colors ${
-              isLight
-                ? 'text-stone-400 hover:bg-stone-200 hover:text-stone-700'
-                : 'text-stone-400 hover:bg-[#202d24] hover:text-emerald-200'
-            }`}
-            title="閉じる (Esc)"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-1.5">
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1.5 px-2.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-colors ${
+                isFullscreen
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                  : isLight
+                  ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+                  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F または Esc)' : '全画面表示に拡大 (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">通常</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">全画面</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className={`p-1.5 rounded-lg transition-colors ${
+                isLight
+                  ? 'text-stone-400 hover:bg-stone-200 hover:text-stone-700'
+                  : 'text-stone-400 hover:bg-[#202d24] hover:text-emerald-200'
+              }`}
+              title="閉じる (Esc)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}
@@ -196,7 +293,21 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
             }`}
           >
             <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>🔰 はじめてのフォント作り</span>
+            <span>初心者入門ガイド</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('glossary')}
+            className={`py-3 px-3 border-b-2 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
+              activeTab === 'glossary'
+                ? isLight
+                  ? 'border-emerald-600 text-emerald-800'
+                  : 'border-emerald-400 text-emerald-200'
+                : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
+            }`}
+          >
+            <Book className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span>用語・概念辞典</span>
           </button>
 
           <button
@@ -210,7 +321,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
             }`}
           >
             <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>✍️ 制作機能・自動化のコツ</span>
+            <span>制作機能・自動化</span>
           </button>
 
           <button
@@ -224,7 +335,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
             }`}
           >
             <Keyboard className="w-4 h-4 text-indigo-500" />
-            <span>⌨️ ショートカットキー集</span>
+            <span>ショートカット一覧</span>
           </button>
 
           <button
@@ -238,190 +349,26 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
             }`}
           >
             <HelpCircle className="w-4 h-4 text-sky-500" />
-            <span>❓ よくある質問・インストール</span>
+            <span>よくあるご質問・導入</span>
           </button>
         </div>
 
         {/* Tab Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-6">
           {/* TAB 1: チュートリアル */}
           {activeTab === 'tutorial' && (
-            <div className="space-y-6">
-              {/* Introduction Card */}
-              <div
-                className={`p-4 rounded-2xl border flex items-start space-x-3.5 ${
-                  isLight
-                    ? 'bg-gradient-to-r from-emerald-50 to-teal-50/50 border-emerald-200 text-emerald-950'
-                    : 'bg-gradient-to-r from-emerald-950/40 to-teal-950/20 border-emerald-800/60 text-emerald-100'
-                }`}
-              >
-                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs font-bold text-sm">
-                  FC
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold mb-1">
-                    ようこそ！オリジナルフォント作成の世界へ
-                  </h3>
-                  <p className="text-xs leading-relaxed opacity-90">
-                    FontCreatorは、iPadのApple Pencilやペンタブレット・マウスで手軽に日本語フォント（ひらがな・カタカナ・漢字・英数）を作成し、パソコンやスマホで使える正式な<strong>TTF / OTFフォントファイル</strong>として出力できるWebアプリです。
-                  </p>
-                </div>
-              </div>
-
-              {/* 5-Step Workflow */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-400 dark:text-emerald-500 flex items-center space-x-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>5分でわかる！フォント作りの基本ステップ</span>
-                </h4>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Step 1 */}
-                  <div
-                    className={`p-3.5 rounded-xl border flex flex-col justify-between ${
-                      isLight ? 'bg-stone-50/70 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
-                    }`}
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-extrabold flex items-center justify-center">
-                          1
-                        </span>
-                        <h5 className="text-xs font-bold">文字一覧から文字を選ぶ</h5>
-                      </div>
-                      <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                        左側の「文字一覧」サイドバーから作りたい文字（まずは「あ」など）をクリックして選択します。
-                      </p>
-                    </div>
-                    <div className="mt-2 text-[11px] font-mono opacity-70 text-emerald-700 dark:text-emerald-400">
-                      💡 ショートカット: Alt+→ で次の文字へ連続作字
-                    </div>
-                  </div>
-
-                  {/* Step 2 */}
-                  <div
-                    className={`p-3.5 rounded-xl border flex flex-col justify-between ${
-                      isLight ? 'bg-stone-50/70 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
-                    }`}
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-extrabold flex items-center justify-center">
-                          2
-                        </span>
-                        <h5 className="text-xs font-bold">筆またはペンで描く</h5>
-                      </div>
-                      <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                        <strong>筆ツール [B]</strong> で手書き風ストロークを描くか、<strong>ペンツール [P]</strong> でアンカーポイントを打って滑らかなベジェ曲線を作図します。
-                      </p>
-                    </div>
-                    <div className="mt-2 text-[11px] font-mono opacity-70 text-emerald-700 dark:text-emerald-400">
-                      💡 太さ調整: [ キー で細く / ] キー で太く
-                    </div>
-                  </div>
-
-                  {/* Step 3 */}
-                  <div
-                    className={`p-3.5 rounded-xl border flex flex-col justify-between ${
-                      isLight ? 'bg-stone-50/70 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
-                    }`}
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-extrabold flex items-center justify-center">
-                          3
-                        </span>
-                        <h5 className="text-xs font-bold">自動合成や部首パーツで時短</h5>
-                      </div>
-                      <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                        「か」を書けば「が」を<strong>濁点自動合成</strong>でワンクリック作成。「さんずい」などの部首パーツを組み合わせて漢字も効率よく作れます。
-                      </p>
-                    </div>
-                    <div className="mt-2 text-[11px] font-mono opacity-70 text-emerald-700 dark:text-emerald-400">
-                      💡 「機能」メニュー ➔ 濁点・小書き自動合成
-                    </div>
-                  </div>
-
-                  {/* Step 4 */}
-                  <div
-                    className={`p-3.5 rounded-xl border flex flex-col justify-between ${
-                      isLight ? 'bg-stone-50/70 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
-                    }`}
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-extrabold flex items-center justify-center">
-                          4
-                        </span>
-                        <h5 className="text-xs font-bold">試し打ちで文章をチェック</h5>
-                      </div>
-                      <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                        ヘッダーの「<strong>試し打ち</strong>」ボタンを押すと、入力した文章をリアルタイムでフォント表示して文字間の並びやバランスを確認できます。
-                      </p>
-                    </div>
-                    <div className="mt-2 text-[11px] font-mono opacity-70 text-emerald-700 dark:text-emerald-400">
-                      💡 未作成文字は代替フォントで自然に補完表示
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 5 */}
-                <div
-                  className={`p-3.5 rounded-xl border flex items-center justify-between ${
-                    isLight
-                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-                      : 'bg-emerald-950/40 border-emerald-800/60 text-emerald-100'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <span className="w-6 h-6 rounded-full bg-emerald-700 text-white text-xs font-extrabold flex items-center justify-center">
-                      5
-                    </span>
-                    <div>
-                      <h5 className="text-xs font-extrabold">「フォント出力」でTTF/OTFをダウンロード！</h5>
-                      <p className="text-xs opacity-80">
-                        右上の「フォント出力」ボタンから、完成したフォントをPCやiPadにすぐ使えるファイルとして保存できます。
-                      </p>
-                    </div>
-                  </div>
-                  <Download className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 hidden sm:block" />
-                </div>
-              </div>
-
-              {/* Device Tips */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <div
-                  className={`p-3.5 rounded-xl border space-y-1.5 ${
-                    isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2 font-bold text-xs text-stone-800 dark:text-emerald-200">
-                    <Tablet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>iPad / タブレットで使う場合</span>
-                  </div>
-                  <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                    Apple Pencilでの筆圧感知描画に対応。ツールバーは画面下部に配置され、片手でもスムーズに切り替えできます。
-                  </p>
-                </div>
-
-                <div
-                  className={`p-3.5 rounded-xl border space-y-1.5 ${
-                    isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2 font-bold text-xs text-stone-800 dark:text-emerald-200">
-                    <Laptop className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <span>PC / マウス・ペンタブで使う場合</span>
-                  </div>
-                  <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                    スペースキードラッグでのキャンバス移動や、ショートカットキー（B, P, V, Ctrl+Z）を併用すると圧倒的な速度で作字できます。
-                  </p>
-                </div>
-              </div>
-            </div>
+            <BeginnerTutorialTab
+              isLight={isLight}
+              onOpenGlossary={() => setActiveTab('glossary')}
+            />
           )}
 
-          {/* TAB 2: 機能解説・制作のコツ */}
+          {/* TAB 2: 専門用語図解辞典 */}
+          {activeTab === 'glossary' && (
+            <GlossaryTab isLight={isLight} />
+          )}
+
+          {/* TAB 3: 機能解説・制作のコツ */}
           {activeTab === 'features' && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -520,10 +467,78 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                     <div className="p-1.5 rounded-lg bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
                       <ShieldCheck className="w-4 h-4" />
                     </div>
-                    <h4 className="text-xs font-bold">フォント品質チェック & 最適化</h4>
+                    <h4 className="text-xs font-bold">フォント品質チェック & 最適化（全画面対応）</h4>
                   </div>
                   <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                    TrueType/OpenType規格に適合しているかを自動検査。極点ノードの自動挿入や輪郭の向き（ワインディングルール）、重複頂点の削除をワンクリックで実行できます。
+                    TrueType/OpenType規格に適合しているかを自動検査。極点ノードの自動挿入や輪郭の向き、線幅均一化、重複頂点・過剰ノード削除を一括修正可能。「F」キーまたは全画面ボタンで広い画面いっぱいに字形を一覧点検できます。
+                  </p>
+                </div>
+
+                {/* Feature 7 */}
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2 ${
+                    isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                      <Grid className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-bold">10種類の作図基準ガイド & 凡例カード</h4>
+                  </div>
+                  <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+                    十文字格・米字格・九宮格・田字格・同心円格・黄金比・3x3ブロック・六角グリッド・欧文4線など、美文字やフォント設計の伝統的グリッドをワンタッチ切替。キャンバス右上の「ガイド凡例」で各基準線の役割や余白の目安をいつでも参照できます。
+                  </p>
+                </div>
+
+                {/* Feature 8 */}
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2 ${
+                    isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">
+                      <Hand className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-bold">パームリジェクション & タッチジェスチャー</h4>
+                  </div>
+                  <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+                    Apple Pencilやスタイラスペン描画時に手が画面に触れても誤動作しないパームリジェクションを搭載。さらに「2本指タップで取り消し (Undo)」「3本指タップでやり直し (Redo)」「2本指ピンチでズーム」など直感的な操作に対応しています。
+                  </p>
+                </div>
+
+                {/* Feature 9 */}
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2 ${
+                    isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <div className="p-1.5 rounded-lg bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300">
+                      <Sliders className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-bold">複数ウェイト自動補間 (ファミリー展開)</h4>
+                  </div>
+                  <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+                    作成したRegularフォントから、Thin（極細）・Light（細字）・Regular・Bold（太字）・Heavy（極太）の全5ウェイトを一括自動生成。一連のフォントファミリーとしてZIP形式でまとめて書き出せます。
+                  </p>
+                </div>
+
+                {/* Feature 10 */}
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2 ${
+                    isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <div className="p-1.5 rounded-lg bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-bold">安心のストレージ管理 & スナップショット復元</h4>
+                  </div>
+                  <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+                    自動保存に加えて、世代バックアップ（スナップショット履歴）から過去の状態へいつでも復元可能。ストレージの消費量内訳の確認や、単一文字のJSONバックアップ書き出しにも対応しています。
                   </p>
                 </div>
               </div>
@@ -698,8 +713,54 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                   <span>Q. 途中で作業を中断・保存したい場合は？</span>
                 </h4>
                 <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed pl-5">
-                  ブラウザのローカルストレージに自動保存されますが、端末の変更や万一のキャッシュ削除に備えて、「機能」メニュー内の「<strong>セーブ保存 (.json)</strong>」からプロジェクトファイルを保存しておくことをおすすめします。いつでも「セーブ読込」から続きを再開できます。
+                  ブラウザのローカルストレージおよびIndexedDBに二重自動保存されますが、端末の変更や万一のキャッシュ削除に備えて、「機能」メニュー内の「<strong>セーブ保存 (.fontproj.json)</strong>」からプロジェクトファイルを保存しておくことをおすすめします。いつでも「セーブ読込」から続きを再開できます。
                 </p>
+              </div>
+
+              {/* FAQ 5 */}
+              <div
+                className={`p-4 rounded-xl border space-y-1.5 ${
+                  isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
+                }`}
+              >
+                <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
+                  <HelpCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Q. iPadやApple Pencilで描く時の筆圧感知や快適化のコツは？</span>
+                </h4>
+                <div className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed pl-5 space-y-1.5">
+                  <p>
+                    <strong>リアルタイム筆圧表示:</strong> Apple Pencilで画面に触れると、筆ツールバーの筆圧項目横に緑色の「筆圧: ○○%」バッジがリアルタイム表示されます。
+                  </p>
+                  <p>
+                    <strong>筆圧感度の調整:</strong> 筆圧バーの「感度: 高 / 標準 / 低」から筆圧の利き具合を切り替えられます。万年筆・Gペン・毛筆・和風墨筆スタイルを選ぶと、筆圧による線の強弱が特に豊かに表現されます。
+                  </p>
+                  <p>
+                    <strong>タッチジェスチャー:</strong> キャンバス上を<strong>2本指タップで1手戻す (Undo)</strong>、<strong>3本指タップでやり直す (Redo)</strong>、<strong>2本指ピンチで拡大・縮小・移動</strong>がスムーズに行えます。
+                  </p>
+                  <p>
+                    <strong>パームリジェクション:</strong> 画面上部の設定メニューから「パームリジェクション」を「自動」または「スタイラス専用」に設定すると、画面に置いた手のひらによる誤反応を完全に遮断できます。
+                  </p>
+                </div>
+              </div>
+
+              {/* FAQ 6 */}
+              <div
+                className={`p-4 rounded-xl border space-y-1.5 ${
+                  isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18241d] border-[#25362b]'
+                }`}
+              >
+                <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
+                  <HelpCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Q. 画数が多い漢字（20〜30画超）で描画が重くなるのを防ぐには？</span>
+                </h4>
+                <div className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed pl-5 space-y-1">
+                  <p>
+                    最新バージョンでは<strong>局所サブセットブーリアン結合（Localized Subset Union）</strong>と<strong>幾何キャッシュ</strong>が導入され、画数が増えても描画遅延が極小化されています。
+                  </p>
+                  <p>
+                    さらに描画後にキーボードの <strong>Alt + S（パス単純化）</strong> を押すと、微細な不要ノードを削減してデータ量を軽量化し、フォントファイルサイズをコンパクトに保てます。
+                  </p>
+                </div>
               </div>
             </div>
           )}

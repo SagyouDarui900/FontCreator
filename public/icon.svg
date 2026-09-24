@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#bgGrad)"/>
+  <path d="M 143 112 L 384 112 L 384 163 L 194 163 L 194 235 L 332 235 L 332 281 L 194 281 L 194 399 L 143 399 Z" fill="#f8fafc"/>
+  <path d="M 194 281 Q 280 320 368 399 L 318 399 Q 248 335 194 300 Z" fill="url(#accentGrad)"/>
+  <!-- Vector control points -->
+  <circle cx="143" cy="112" r="10" fill="#10b981"/>
+  <circle cx="384" cy="112" r="10" fill="#10b981"/>
+  <circle cx="384" cy="163" r="10" fill="#10b981"/>
+  <circle cx="332" cy="235" r="10" fill="#10b981"/>
+  <circle cx="332" cy="281" r="10" fill="#10b981"/>
+  <circle cx="368" cy="399" r="10" fill="#10b981"/>
+</svg>

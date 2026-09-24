@@ -1,17 +1,97 @@
 import React from 'react';
+import { ThemeMode } from '../../utils/theme';
 
 interface JapaneseGuidesLayerProps {
   guideType?: 'none' | 'cross' | 'tian' | 'jiugong' | 'mi';
   showBodyFrame?: boolean;
   showKanaFrame?: boolean;
   isLight: boolean;
+  theme?: ThemeMode;
   activeChar?: string;
 }
 
 export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.memo(
-  ({ guideType, showBodyFrame, showKanaFrame, isLight, activeChar = '' }) => {
+  ({ guideType, showBodyFrame, showKanaFrame, isLight, theme = 'light', activeChar = '' }) => {
     const isKana = /[ぁ-んァ-ヶー]/.test(activeChar);
     const isKanji = /[\u4e00-\u9faf\u3400-\u4dbf]/.test(activeChar);
+
+    const primaryColor =
+      theme === 'sepia'
+        ? '#a16207'
+        : theme === 'warm'
+        ? '#ea580c'
+        : theme === 'nord'
+        ? '#88c0d0'
+        : theme === 'monochrome'
+        ? '#18181b'
+        : isLight
+        ? '#059669'
+        : '#10b981';
+
+    const secondaryColor =
+      theme === 'sepia'
+        ? '#b45309'
+        : theme === 'warm'
+        ? '#d97706'
+        : theme === 'nord'
+        ? '#81a1c1'
+        : theme === 'monochrome'
+        ? '#52525b'
+        : isLight
+        ? '#0284c7'
+        : '#38bdf8';
+
+    const kanjiFrameColor =
+      theme === 'sepia'
+        ? '#8c531b'
+        : theme === 'warm'
+        ? '#c2410c'
+        : theme === 'nord'
+        ? '#88c0d0'
+        : theme === 'monochrome'
+        ? '#18181b'
+        : isLight
+        ? '#059669'
+        : '#34d399';
+
+    const kanaFrameColor =
+      theme === 'sepia'
+        ? '#b45309'
+        : theme === 'warm'
+        ? '#ea580c'
+        : theme === 'nord'
+        ? '#a3be8c'
+        : theme === 'monochrome'
+        ? '#71717a'
+        : isLight
+        ? '#d97706'
+        : '#f59e0b';
+
+    const kanjiBadgeBg =
+      theme === 'sepia'
+        ? '#f4ede2'
+        : theme === 'warm'
+        ? '#fbf3e8'
+        : theme === 'nord'
+        ? '#242933'
+        : theme === 'monochrome'
+        ? '#f4f4f5'
+        : isLight
+        ? '#ecfdf5'
+        : '#064e3b';
+
+    const kanaBadgeBg =
+      theme === 'sepia'
+        ? '#faf5eb'
+        : theme === 'warm'
+        ? '#fffdf7'
+        : theme === 'nord'
+        ? '#2e3440'
+        : theme === 'monochrome'
+        ? '#ffffff'
+        : isLight
+        ? '#fffbeb'
+        : '#78350f';
 
     return (
       <g className="japanese-guides-layer pointer-events-none select-none">
@@ -23,7 +103,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={0}
               x2={500}
               y2={1000}
-              stroke={isLight ? '#059669' : '#10b981'}
+              stroke={primaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.6}
@@ -33,17 +113,17 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={500}
               x2={1000}
               y2={500}
-              stroke={isLight ? '#059669' : '#10b981'}
+              stroke={primaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.6}
             />
             {/* Center origin badge */}
-            <circle cx={500} cy={500} r={3.5} fill={isLight ? '#059669' : '#10b981'} opacity={0.7} />
+            <circle cx={500} cy={500} r={3.5} fill={primaryColor} opacity={0.7} />
             <text
               x={508}
               y={516}
-              fill={isLight ? '#059669' : '#10b981'}
+              fill={primaryColor}
               fontSize={10}
               fontWeight="bold"
               fontFamily="sans-serif"
@@ -62,7 +142,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={0}
               x2={500}
               y2={1000}
-              stroke={isLight ? '#059669' : '#10b981'}
+              stroke={primaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.7}
@@ -72,12 +152,12 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={500}
               x2={1000}
               y2={500}
-              stroke={isLight ? '#059669' : '#10b981'}
+              stroke={primaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.7}
             />
-            <circle cx={500} cy={500} r={3.5} fill={isLight ? '#059669' : '#10b981'} opacity={0.7} />
+            <circle cx={500} cy={500} r={3.5} fill={primaryColor} opacity={0.7} />
           </g>
         )}
 
@@ -89,7 +169,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={0}
               x2={333.3}
               y2={1000}
-              stroke={isLight ? '#0284c7' : '#38bdf8'}
+              stroke={secondaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.6}
@@ -99,7 +179,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={0}
               x2={666.7}
               y2={1000}
-              stroke={isLight ? '#0284c7' : '#38bdf8'}
+              stroke={secondaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.6}
@@ -109,7 +189,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={333.3}
               x2={1000}
               y2={333.3}
-              stroke={isLight ? '#0284c7' : '#38bdf8'}
+              stroke={secondaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.6}
@@ -119,7 +199,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={666.7}
               x2={1000}
               y2={666.7}
-              stroke={isLight ? '#0284c7' : '#38bdf8'}
+              stroke={secondaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.6}
@@ -135,7 +215,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={0}
               x2={500}
               y2={1000}
-              stroke={isLight ? '#d97706' : '#fbbf24'}
+              stroke={secondaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.6}
@@ -145,7 +225,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={500}
               x2={1000}
               y2={500}
-              stroke={isLight ? '#d97706' : '#fbbf24'}
+              stroke={secondaryColor}
               strokeDasharray="6 4"
               strokeWidth={1.5}
               opacity={0.6}
@@ -155,7 +235,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={0}
               x2={1000}
               y2={1000}
-              stroke={isLight ? '#d97706' : '#fbbf24'}
+              stroke={secondaryColor}
               strokeDasharray="4 4"
               strokeWidth={1.2}
               opacity={0.45}
@@ -165,7 +245,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               y1={0}
               x2={0}
               y2={1000}
-              stroke={isLight ? '#d97706' : '#fbbf24'}
+              stroke={secondaryColor}
               strokeDasharray="4 4"
               strokeWidth={1.2}
               opacity={0.45}
@@ -182,7 +262,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               width={850}
               height={850}
               fill="none"
-              stroke={isLight ? '#059669' : '#34d399'}
+              stroke={kanjiFrameColor}
               strokeDasharray={isKanji ? '6 4' : '5 5'}
               strokeWidth={isKanji ? 2.0 : 1.2}
             />
@@ -193,19 +273,19 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               width={160}
               height={18}
               rx={3}
-              fill={isLight ? '#ecfdf5' : '#064e3b'}
-              stroke={isLight ? '#059669' : '#34d399'}
+              fill={kanjiBadgeBg}
+              stroke={kanjiFrameColor}
               strokeWidth={1}
             />
             <text
               x={82}
               y={69}
-              fill={isLight ? '#047857' : '#6ee7b7'}
+              fill={kanjiFrameColor}
               fontSize={10}
               fontWeight="bold"
               fontFamily="sans-serif"
             >
-              漢字字面枠 85% {isKanji ? '★推奨' : ''}
+              漢字字面枠 85% {isKanji ? '(推奨)' : ''}
             </text>
           </g>
         )}
@@ -219,7 +299,7 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               width={780}
               height={780}
               fill="none"
-              stroke={isLight ? '#d97706' : '#f59e0b'}
+              stroke={kanaFrameColor}
               strokeDasharray={isKana ? '6 4' : '4 4'}
               strokeWidth={isKana ? 2.0 : 1.2}
             />
@@ -230,19 +310,19 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               width={168}
               height={18}
               rx={3}
-              fill={isLight ? '#fffbeb' : '#78350f'}
-              stroke={isLight ? '#d97706' : '#f59e0b'}
+              fill={kanaBadgeBg}
+              stroke={kanaFrameColor}
               strokeWidth={1}
             />
             <text
               x={117}
               y={104}
-              fill={isLight ? '#b45309' : '#fcd34d'}
+              fill={kanaFrameColor}
               fontSize={10}
               fontWeight="bold"
               fontFamily="sans-serif"
             >
-              仮名字面枠 78% {isKana ? '★推奨' : ''}
+              仮名字面枠 78% {isKana ? '(推奨)' : ''}
             </text>
           </g>
         )}

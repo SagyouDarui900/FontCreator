@@ -7,6 +7,8 @@ interface CanvasRulersLayerProps {
   hoverPos: Point | null;
 }
 
+const RULER_TICKS = [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+
 export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
   ({ showRulers, isLight, hoverPos }) => {
     if (!showRulers) return null;
@@ -35,7 +37,7 @@ export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
         />
 
         {/* Top Ruler Ticks & Numbers (0 to 1000) */}
-        {Array.from({ length: 11 }, (_, i) => i * 100).map((x) => (
+        {RULER_TICKS.map((x) => (
           <g key={`top-tick-${x}`}>
             <line
               x1={x}
@@ -68,7 +70,7 @@ export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
         ))}
 
         {/* Left Ruler Ticks & Numbers (0 to 1000) */}
-        {Array.from({ length: 11 }, (_, i) => i * 100).map((y) => (
+        {RULER_TICKS.map((y) => (
           <g key={`left-tick-${y}`}>
             <line
               x1={-18}

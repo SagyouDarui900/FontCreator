@@ -1,6 +1,6 @@
 import React from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
 
 export interface ToastMessage {
   id: string;
@@ -16,10 +16,10 @@ interface ToastProps {
 
 export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss, theme }) => {
   if (toasts.length === 0) return null;
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
 
   return (
-    <div className="fixed bottom-14 sm:bottom-4 right-4 z-50 flex flex-col space-y-2 max-w-sm pointer-events-none">
+    <div className="fixed bottom-20 sm:bottom-4 right-3 sm:right-4 z-50 flex flex-col space-y-2 max-w-sm pointer-events-none pb-[max(env(safe-area-inset-bottom),0px)]">
       {toasts.map((toast) => {
         const isSuccess = toast.type === 'success' || !toast.type;
         const isError = toast.type === 'error';

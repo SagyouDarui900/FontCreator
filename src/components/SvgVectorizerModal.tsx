@@ -13,12 +13,14 @@ import {
   RotateCw,
   Plus,
   Info,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { PathContour } from '../types';
 import { parseSvgStringToContours } from '../utils/svgParser';
 import { vectorizeImage, VectorizeOptions } from '../utils/imageVectorizer';
 import { contoursToSvgPath } from '../utils/pathUtils';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
 
 interface SvgVectorizerModalProps {
   isOpen: boolean;
@@ -38,7 +40,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
   onShowToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'vectorizer' | 'svg_import'>('vectorizer');
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
 
   // SVG Direct Import states
   const svgFileInputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +64,31 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
   const [brightness, setBrightness] = useState<number>(0);
   const [invert, setInvert] = useState<boolean>(false);
   const [minArea, setMinArea] = useState<number>(8);
+
+  // Fullscreen mode state
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Keyboard shortcut listener: Escape and F
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
+      } else if ((e.key === 'f' || e.key === 'F') && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose]);
 
   // Debounced auto-vectorization
   const runVectorize = useCallback(async () => {
@@ -181,12 +208,22 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs select-none">
+    <div
+      className={`fixed inset-0 z-50 transition-all ${
+        isFullscreen
+          ? 'p-0 w-screen h-screen bg-black/85 flex flex-col'
+          : 'flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs select-none'
+      }`}
+    >
       <div
-        className={`w-full max-w-2xl border rounded-lg shadow-2xl flex flex-col max-h-[92vh] overflow-hidden transition-colors ${
-          isLight
-            ? 'bg-[#f7faf8] border-[#c8ded3] text-stone-800'
-            : 'bg-[#151e18] border-[#25362b] text-emerald-100'
+        className={`flex flex-col transition-all overflow-hidden ${
+          isFullscreen
+            ? isLight
+              ? 'w-screen h-screen rounded-none border-none shadow-none bg-[#f7faf8] text-stone-800'
+              : 'w-screen h-screen rounded-none border-none shadow-none bg-[#151e18] text-emerald-100'
+            : isLight
+            ? 'w-full max-w-2xl xl:max-w-4xl border rounded-2xl shadow-2xl max-h-[92vh] bg-[#f7faf8] border-[#c8ded3] text-stone-800'
+            : 'w-full max-w-2xl xl:max-w-4xl border rounded-2xl shadow-2xl max-h-[92vh] bg-[#151e18] border-[#25362b] text-emerald-100'
         }`}
       >
         {/* Header */}
@@ -198,21 +235,55 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
           <div className="flex items-center space-x-2">
             <Sparkles className={`w-4 h-4 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
             <h2
-              className={`text-xs font-bold uppercase tracking-wider ${
+              className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${
                 isLight ? 'text-emerald-950' : 'text-emerald-200'
               }`}
             >
-              SVGインポート & 画像ベクター化スタジオ
+              <span>SVGインポート & 画像ベクター化スタジオ</span>
+              {isFullscreen && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-medium">
+                  全画面モード
+                </span>
+              )}
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            className={`p-1 rounded ${
-              isLight ? 'text-stone-500 hover:bg-emerald-100' : 'text-emerald-400 hover:bg-[#202d24]'
-            }`}
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center space-x-1.5">
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1 px-2 rounded-lg border text-xs font-semibold flex items-center space-x-1 transition-colors ${
+                isFullscreen
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                  : isLight
+                  ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F または Esc)' : '全画面表示に拡大 (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">通常</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">全画面</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className={`p-1 rounded-lg border transition-colors ${
+                isLight ? 'text-stone-500 border-stone-200 hover:bg-emerald-100' : 'text-emerald-400 border-[#25362b] hover:bg-[#202d24]'
+              }`}
+              title="閉じる (Esc)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Selection */}
@@ -223,7 +294,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
         >
           <button
             onClick={() => setActiveTab('vectorizer')}
-            className={`py-2 px-3 rounded flex items-center justify-center space-x-2 transition-all ${
+            className={`py-2 px-2 sm:px-3 rounded flex items-center justify-center space-x-1.5 sm:space-x-2 transition-all ${
               activeTab === 'vectorizer'
                 ? isLight
                   ? 'bg-white text-emerald-950 shadow-xs font-bold'
@@ -231,13 +302,13 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                 : 'text-stone-600 dark:text-stone-400 hover:text-emerald-800'
             }`}
           >
-            <ImageIcon className="w-4 h-4 text-emerald-600" />
-            <span>【オマケ】手書き画像・写真 → SVGベクター変換</span>
+            <ImageIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="truncate">手書き画像 → SVG変換</span>
           </button>
 
           <button
             onClick={() => setActiveTab('svg_import')}
-            className={`py-2 px-3 rounded flex items-center justify-center space-x-2 transition-all ${
+            className={`py-2 px-2 sm:px-3 rounded flex items-center justify-center space-x-1.5 sm:space-x-2 transition-all ${
               activeTab === 'svg_import'
                 ? isLight
                   ? 'bg-white text-emerald-950 shadow-xs font-bold'
@@ -245,14 +316,14 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                 : 'text-stone-600 dark:text-stone-400 hover:text-emerald-800'
             }`}
           >
-            <FileCode className="w-4 h-4 text-emerald-600" />
-            <span>既存SVGファイル / コード読込</span>
+            <FileCode className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="truncate">SVGファイル / コード読込</span>
           </button>
         </div>
 
         {/* CONTENT 1: IMAGE VECTORIZER */}
         {activeTab === 'vectorizer' && (
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-4 space-y-4 text-xs">
             {/* Upload Toolbar */}
             <div className="flex flex-wrap gap-2 items-center">
               <input
@@ -547,9 +618,9 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
 
         {/* CONTENT 2: DIRECT SVG IMPORT */}
         {activeTab === 'svg_import' && (
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-            {/* SVG file upload */}
-            <div className="flex items-center space-x-2">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-4 space-y-4 text-xs">
+            {/* SVG file upload toolbar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <input
                 ref={svgFileInputRef}
                 type="file"
@@ -561,31 +632,33 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                   e.target.value = '';
                 }}
               />
-              <button
-                onClick={() => svgFileInputRef.current?.click()}
-                className={`py-2 px-3 rounded-md border flex items-center space-x-1.5 font-bold ${
-                  isLight
-                    ? 'bg-emerald-800 border-emerald-900 text-white hover:bg-emerald-900 shadow-xs'
-                    : 'bg-emerald-700 border-emerald-600 text-white hover:bg-emerald-600 shadow-xs'
-                }`}
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>SVGファイルを選択</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => svgFileInputRef.current?.click()}
+                  className={`py-2 px-3 rounded-md border flex items-center space-x-1.5 font-bold ${
+                    isLight
+                      ? 'bg-emerald-800 border-emerald-900 text-white hover:bg-emerald-900'
+                      : 'bg-emerald-700 border-emerald-600 text-white hover:bg-emerald-600'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>SVGファイルを選択</span>
+                </button>
 
-              <button
-                onClick={handlePasteClipboard}
-                className={`py-2 px-3 rounded-md border flex items-center space-x-1.5 ${
-                  isLight
-                    ? 'bg-white border-stone-300 hover:bg-emerald-50'
-                    : 'bg-[#1a261f] border-[#25362b] hover:bg-[#223127]'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                <span>クリップボード貼り付け</span>
-              </button>
+                <button
+                  onClick={handlePasteClipboard}
+                  className={`py-2 px-3 rounded-md border flex items-center space-x-1.5 ${
+                    isLight
+                      ? 'bg-white border-stone-300 hover:bg-emerald-50'
+                      : 'bg-[#1a261f] border-[#25362b] hover:bg-[#223127]'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>クリップボード貼り付け</span>
+                </button>
+              </div>
 
-              <label className="flex items-center space-x-1.5 ml-auto text-[11px]">
+              <label className="flex items-center space-x-1.5 text-[11px] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={fitToEm}
@@ -593,7 +666,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                     setFitToEm(e.target.checked);
                     if (svgText) handleSvgTextChange(svgText);
                   }}
-                  className="w-4 h-4 accent-emerald-700"
+                  className="w-4 h-4 accent-emerald-700 rounded"
                 />
                 <span>1000×1000 EM枠に自動フィット</span>
               </label>
@@ -642,7 +715,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                 </div>
 
                 {/* Apply Buttons */}
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     onClick={() => {
                       onApplyContours(svgParsedContours, false);

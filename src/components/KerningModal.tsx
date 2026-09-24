@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Plus,
@@ -11,6 +11,7 @@ import {
   Eye,
   Info,
   Maximize2,
+  Minimize2,
   AlignHorizontalDistributeCenter,
   MoveHorizontal,
 } from 'lucide-react';
@@ -22,6 +23,8 @@ import {
 } from '../utils/metricsHelper';
 import { contoursToSvgPath, normalizeGlyphContoursWinding, getContoursBoundingBox } from '../utils/pathUtils';
 
+import { ThemeMode, isLightTheme } from '../utils/theme';
+
 interface KerningModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -30,7 +33,7 @@ interface KerningModalProps {
   onUpdateProject?: (updater: (prev: FontProject) => FontProject) => void;
   showToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   onShowToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
-  theme: 'light' | 'dark';
+  theme: ThemeMode;
 }
 
 export const KerningModal: React.FC<KerningModalProps> = ({
@@ -43,7 +46,7 @@ export const KerningModal: React.FC<KerningModalProps> = ({
   onShowToast,
   theme,
 }) => {
-  const isLight = theme === 'light';
+  const isLight = isLightTheme(theme);
   const [activeTab, setActiveTab] = useState<'kerning' | 'sidebearing'>('kerning');
 
   // Unified updater function supporting both prop styles
@@ -69,6 +72,31 @@ export const KerningModal: React.FC<KerningModalProps> = ({
   const [customRight, setCustomRight] = useState<string>('');
   const [customValue, setCustomValue] = useState<number>(-100);
   const [sampleText, setSampleText] = useState<string>('「こんにちは」AVANT-GARDE 110番');
+
+  // Fullscreen mode state
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Keyboard shortcut listener: Escape and F
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
+      } else if ((e.key === 'f' || e.key === 'F') && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose]);
 
   const kerningPairs = project.kerning || {};
 
@@ -211,10 +239,22 @@ export const KerningModal: React.FC<KerningModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      className={`fixed inset-0 z-50 transition-all ${
+        isFullscreen
+          ? 'p-0 w-screen h-screen bg-black/85 flex flex-col'
+          : 'flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150'
+      }`}
+    >
       <div
-        className={`w-full max-w-4xl max-h-[90vh] flex flex-col rounded-xl border shadow-2xl overflow-hidden ${
-          isLight ? 'bg-white border-stone-200 text-stone-900' : 'bg-[#151e18] border-[#293d30] text-emerald-100'
+        className={`flex flex-col transition-all overflow-hidden ${
+          isFullscreen
+            ? isLight
+              ? 'w-screen h-screen rounded-none border-none shadow-none bg-white text-stone-900'
+              : 'w-screen h-screen rounded-none border-none shadow-none bg-[#151e18] text-emerald-100'
+            : isLight
+            ? 'w-full max-w-4xl xl:max-w-5xl max-h-[92vh] rounded-2xl border border-stone-200 shadow-2xl bg-white text-stone-900'
+            : 'w-full max-w-4xl xl:max-w-5xl max-h-[92vh] rounded-2xl border border-[#293d30] shadow-2xl bg-[#151e18] text-emerald-100'
         }`}
       >
         {/* Modal Header */}
@@ -230,26 +270,63 @@ export const KerningModal: React.FC<KerningModalProps> = ({
             <div>
               <h2 className="text-base font-bold flex items-center gap-2">
                 <span>カーニング & サイドベアリング調整スタジオ</span>
-                <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-medium">
-                  組版最適化
-                </span>
+                {isFullscreen ? (
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                    全画面モード
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-medium">
+                    組版最適化
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-stone-500 dark:text-emerald-400/80">
                 文字間のすきま（ペアカーニング）と左右余白（サイドベアリング）を一括調整します
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-1.5">
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1.5 px-2.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-colors ${
+                isFullscreen
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                  : isLight
+                  ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+                  : 'bg-[#101813] border-[#293d30] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F または Esc)' : '全画面表示に拡大 (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">通常</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">全画面</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className={`p-1.5 rounded-lg border transition-colors ${
+                isLight ? 'text-stone-400 border-stone-200 hover:text-stone-600 hover:bg-stone-100' : 'text-emerald-400 border-[#293d30] hover:text-stone-200 hover:bg-[#202d24]'
+              }`}
+              title="閉じる (Esc)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
         <div
-          className={`flex border-b px-5 pt-2 gap-2 text-xs font-bold shrink-0 ${
+          className={`flex border-b px-3 sm:px-5 pt-2 gap-2 text-xs font-bold shrink-0 overflow-x-auto no-scrollbar whitespace-nowrap ${
             isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#131b15] border-[#223126]'
           }`}
         >
@@ -283,7 +360,7 @@ export const KerningModal: React.FC<KerningModalProps> = ({
         </div>
 
         {/* Modal Content */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5">
           {activeTab === 'kerning' ? (
             /* ========================================================= */
             /* TAB 1: PAIR KERNING                                       */
@@ -899,7 +976,11 @@ export const KerningModal: React.FC<KerningModalProps> = ({
                 {/* Batch Execute Button */}
                 <button
                   onClick={handleExecuteSidebearingBatch}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-sm shadow-md hover:shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-2 transition-all active:scale-[0.99] ${
+                    isLight
+                      ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  }`}
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>選択カテゴリのサイドベアリングを一括調整</span>

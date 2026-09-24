@@ -14,9 +14,13 @@ import {
   Sparkles,
   Info,
   ExternalLink,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { FontMetadata, FontProject } from '../types';
-import { ThemeMode } from '../utils/theme';
+import { ThemeMode, isLightTheme } from '../utils/theme';
+import { exportProjectJsonFile } from '../utils/storageManager';
+import { BundledFontsModal } from './BundledFontsModal';
 
 interface FontInfoModalProps {
   isOpen: boolean;
@@ -102,7 +106,31 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
     }
   }, [isOpen, project.metadata]);
   const [isDownloaded, setIsDownloaded] = useState(false);
-  const isLight = theme === 'light';
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isBundledFontsModalOpen, setIsBundledFontsModalOpen] = useState(false);
+  const isLight = isLightTheme(theme);
+
+  // Keyboard shortcut listener: Escape and F
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
+      } else if ((e.key === 'f' || e.key === 'F') && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose]);
 
   if (!isOpen) return null;
 
@@ -140,27 +168,17 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
         updatedAt: Date.now(),
       };
 
-      const jsonString = JSON.stringify(exportProject, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
+      const res = exportProjectJsonFile(exportProject);
 
-      const downloadAnchor = document.createElement('a');
-      const safeName = (formData.familyName || project.metadata.familyName || 'FontProject')
-        .trim()
-        .replace(/[^a-zA-Z0-9_\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff-]/g, '_');
-      const timeStamp = new Date().toISOString().slice(0, 10);
-      downloadAnchor.href = url;
-      downloadAnchor.download = `${safeName}_${timeStamp}.fontproj.json`;
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      document.body.removeChild(downloadAnchor);
-      URL.revokeObjectURL(url);
+      if (res.success) {
+        setIsDownloaded(true);
+        setTimeout(() => setIsDownloaded(false), 3000);
 
-      setIsDownloaded(true);
-      setTimeout(() => setIsDownloaded(false), 3000);
-
-      if (onShowToast) {
-        onShowToast(`フォント「${safeName}」のJSONバックアップを保存しました`, 'success');
+        if (onShowToast) {
+          onShowToast(`バックアップ『${res.filename}』を保存しました`, 'success');
+        }
+      } else if (onShowToast) {
+        onShowToast('JSONバックアップの出力に失敗しました', 'error');
       }
     } catch (err) {
       console.error('Failed to export project JSON:', err);
@@ -184,50 +202,94 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none">
+    <div
+      className={`fixed inset-0 z-50 transition-all ${
+        isFullscreen
+          ? 'p-0 w-screen h-screen bg-black/85 flex flex-col'
+          : 'flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs select-none'
+      }`}
+    >
       <div
-        className={`w-full max-w-xl border rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden transition-colors ${
-          isLight
-            ? 'bg-[#f7faf8] border-[#c8ded3] text-stone-800'
-            : 'bg-[#151e18] border-[#25362b] text-emerald-100'
+        className={`flex flex-col transition-all overflow-hidden ${
+          isFullscreen
+            ? isLight
+              ? 'w-screen h-screen rounded-none border-none shadow-none bg-[#f7faf8] text-stone-800'
+              : 'w-screen h-screen rounded-none border-none shadow-none bg-[#151e18] text-emerald-100'
+            : isLight
+            ? 'w-full max-w-xl xl:max-w-2xl border rounded-2xl shadow-2xl max-h-[90vh] bg-[#f7faf8] border-[#c8ded3] text-stone-800'
+            : 'w-full max-w-xl xl:max-w-2xl border rounded-2xl shadow-2xl max-h-[90vh] bg-[#151e18] border-[#25362b] text-emerald-100'
         }`}
       >
         {/* Header */}
         <div
-          className={`p-3.5 border-b flex items-center justify-between ${
+          className={`p-3.5 border-b flex items-center justify-between shrink-0 ${
             isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
           }`}
         >
           <div className="flex items-center space-x-2">
             <Settings className={`w-4 h-4 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
             <h2
-              className={`text-xs font-bold uppercase tracking-wider ${
+              className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${
                 isLight ? 'text-emerald-950' : 'text-emerald-200'
               }`}
             >
-              フォント情報・ライセンス設定 (Font Info & License)
+              <span>フォント情報・ライセンス設定</span>
+              {isFullscreen && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-medium">
+                  全画面モード
+                </span>
+              )}
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            className={`p-1 rounded ${
-              isLight ? 'text-stone-500 hover:bg-emerald-100' : 'text-emerald-400 hover:bg-[#202d24]'
-            }`}
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center space-x-1.5">
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`p-1 px-2 rounded-lg border text-xs font-semibold flex items-center space-x-1 transition-colors ${
+                isFullscreen
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                  : isLight
+                  ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#18231c]'
+              }`}
+              title={isFullscreen ? '通常表示に戻す (F または Esc)' : '全画面表示に拡大 (F)'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">通常</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">全画面</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className={`p-1 rounded-lg border transition-colors ${
+                isLight ? 'text-stone-500 border-stone-200 hover:bg-emerald-100' : 'text-emerald-400 border-[#25362b] hover:bg-[#202d24]'
+              }`}
+              title="閉じる (Esc)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}
         <div
-          className={`flex border-b text-xs font-bold ${
+          className={`flex border-b text-xs font-bold overflow-x-auto shrink-0 ${
             isLight ? 'bg-stone-50 border-[#d8e6df]' : 'bg-[#111913] border-[#25362b]'
           }`}
         >
           <button
             type="button"
             onClick={() => setActiveTab('info')}
-            className={`flex-1 py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+            className={`flex-1 min-w-[120px] py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
               activeTab === 'info'
                 ? isLight
                   ? 'border-emerald-700 text-emerald-900 bg-white font-bold'
@@ -235,13 +297,13 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                 : 'border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-300'
             }`}
           >
-            <Settings className="w-3.5 h-3.5" />
-            <span>基本情報 & メトリクス</span>
+            <Settings className="w-3.5 h-3.5 shrink-0" />
+            <span className="whitespace-nowrap">基本情報 & メトリクス</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('license')}
-            className={`flex-1 py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+            className={`flex-1 min-w-[120px] py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
               activeTab === 'license'
                 ? isLight
                   ? 'border-emerald-700 text-emerald-900 bg-white font-bold'
@@ -249,13 +311,13 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                 : 'border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-300'
             }`}
           >
-            <Scale className="w-3.5 h-3.5 text-amber-500" />
-            <span>ライセンス・著作権</span>
+            <Scale className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="whitespace-nowrap">ライセンス・著作権</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('guide')}
-            className={`flex-1 py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+            className={`flex-1 min-w-[120px] py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
               activeTab === 'guide'
                 ? isLight
                   ? 'border-emerald-700 text-emerald-900 bg-white font-bold'
@@ -263,13 +325,13 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                 : 'border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-300'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>商用利用・権利安心ガイド</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            <span className="whitespace-nowrap">商用利用・権利ガイド</span>
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4 text-xs">
           {/* TAB 1: BASIC INFO & METRICS */}
           {activeTab === 'info' && (
             <div className="space-y-3.5 animate-fadeIn">
@@ -392,14 +454,14 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                   EMメトリクス (単位: FUnit)
                 </span>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                   <div className="flex flex-col space-y-1">
-                    <label className={isLight ? 'text-stone-600' : 'text-emerald-400'}>UPM (Units Per Em)</label>
+                    <label className={`text-xs font-medium ${isLight ? 'text-stone-600' : 'text-emerald-400'}`}>UPM (Units Per Em)</label>
                     <input
                       type="number"
                       value={formData.unitsPerEm ?? 1000}
                       onChange={(e) => setFormData({ ...formData, unitsPerEm: Number(e.target.value) || 1000 })}
-                      className={`border rounded p-2 font-mono focus:outline-none ${
+                      className={`border rounded p-2 text-sm font-mono focus:outline-none ${
                         isLight
                           ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700'
                           : 'bg-[#101813] border-[#2d4034] text-emerald-100 focus:border-emerald-500'
@@ -408,12 +470,12 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                   </div>
 
                   <div className="flex flex-col space-y-1">
-                    <label className={isLight ? 'text-stone-600' : 'text-emerald-400'}>アセンダ (Ascender)</label>
+                    <label className={`text-xs font-medium ${isLight ? 'text-stone-600' : 'text-emerald-400'}`}>アセンダ (Ascender)</label>
                     <input
                       type="number"
                       value={formData.ascender ?? 800}
                       onChange={(e) => setFormData({ ...formData, ascender: Number(e.target.value) || 800 })}
-                      className={`border rounded p-2 font-mono focus:outline-none ${
+                      className={`border rounded p-2 text-sm font-mono focus:outline-none ${
                         isLight
                           ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700'
                           : 'bg-[#101813] border-[#2d4034] text-emerald-100 focus:border-emerald-500'
@@ -422,12 +484,12 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                   </div>
 
                   <div className="flex flex-col space-y-1">
-                    <label className={isLight ? 'text-stone-600' : 'text-emerald-400'}>ディセンダ (Descender)</label>
+                    <label className={`text-xs font-medium ${isLight ? 'text-stone-600' : 'text-emerald-400'}`}>ディセンダ (Descender)</label>
                     <input
                       type="number"
                       value={formData.descender ?? -200}
                       onChange={(e) => setFormData({ ...formData, descender: Number(e.target.value) || -200 })}
-                      className={`border rounded p-2 font-mono focus:outline-none ${
+                      className={`border rounded p-2 text-sm font-mono focus:outline-none ${
                         isLight
                           ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700'
                           : 'bg-[#101813] border-[#2d4034] text-emerald-100 focus:border-emerald-500'
@@ -480,7 +542,7 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                           .fontproj.json
                         </span>
                       </h4>
-                      <p className="text-[10.5px] opacity-75 leading-tight mt-0.5">
+                      <p className="text-[10.5px] opacity-75 leading-relaxed mt-0.5 break-words">
                         全文字のベクター輪郭、メトリクス設定、部首パーツ定義を完全な構造化JSONでローカル保存します。
                       </p>
                     </div>
@@ -561,9 +623,23 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                           {p.badge}
                         </span>
                       </div>
-                      <p className="text-[10px] opacity-75 line-clamp-2 leading-tight">{p.desc}</p>
+                      <p className="text-[10.5px] opacity-75 line-clamp-2 leading-relaxed break-words">{p.desc}</p>
                     </button>
                   ))}
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-amber-200/60 dark:border-amber-900/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-[11px] opacity-85">
+                    アプリ内蔵の下絵・部首用フォントの権利・利用条件を確認
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsBundledFontsModalOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 dark:text-amber-300 hover:underline cursor-pointer"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>内蔵フォント一覧 &amp; ライセンス (OFL 1.1)</span>
+                  </button>
                 </div>
               </div>
 
@@ -723,6 +799,12 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
           </div>
         </form>
       </div>
+
+      <BundledFontsModal
+        isOpen={isBundledFontsModalOpen}
+        onClose={() => setIsBundledFontsModalOpen(false)}
+        theme={theme}
+      />
     </div>
   );
 };
