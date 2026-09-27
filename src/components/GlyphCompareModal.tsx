@@ -281,7 +281,7 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-bold flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>「{activeChar || ''}」におすすめの比較文字</span>
+                <span>「{activeChar || ''}」の比較対象文字</span>
               </label>
               <span className="text-[10px] text-stone-400">ワンクリックで切替</span>
             </div>

@@ -58,7 +58,7 @@ import {
   loadProjectFromIndexedDB,
 } from './utils/storageManager';
 import { KANA_PAIRS } from './data/unicodeTables';
-import { Grid, Paintbrush, Sliders, Eye, Undo2, Redo2, ChevronRight } from 'lucide-react';
+import { Grid, Paintbrush, Sliders, Eye, Undo2, Redo2, ChevronRight, Sparkles } from 'lucide-react';
 
 const LOCAL_STORAGE_KEY = LOCAL_STORAGE_PROJECT_KEY;
 const THEME_STORAGE_KEY = 'font_editor_theme_mode';
@@ -329,7 +329,7 @@ export default function App() {
       opacity: 0.18,
       fontSize: 780,
     }));
-    showToast('手書きフォント最適化設定（毛筆38px・高感度筆圧・十文字字面枠・手振れ補正）を適用しました', 'success');
+    showToast('手書きフォント推奨プリセット（毛筆38px・高感度筆圧・十文字字面枠・手振れ補正）を適用しました', 'success');
   }, [showToast]);
 
   // Trace Guidelines Settings (Default enabled with subtle Noto Sans JP guide for comfortable handwriting tracing)
@@ -1190,6 +1190,11 @@ export default function App() {
           setIsRadicalStudioOpen(false);
           setIsPenPresetsModalOpen(false);
           setIsShortcutsModalOpen(false);
+          setIsPixelStudioOpen(false);
+          setIsExportModalOpen(false);
+          setIsStorageManagerOpen(false);
+          setIsOpenTypeFeaturesModalOpen(false);
+          setIsGridFittingModalOpen(false);
           return;
         }
         window.dispatchEvent(new CustomEvent('font_editor_deselect_all'));
@@ -1518,7 +1523,7 @@ export default function App() {
         </div>
 
         {/* Central Vector Canvas (Bézier, Stylus, Touch, Guides) */}
-        <div className="flex-1 flex flex-col min-h-0 min-w-0 relative z-0 flex-grow flex-shrink grow shrink overflow-hidden">
+        <div className={`flex-1 flex flex-col min-h-0 min-w-0 relative z-0 flex-grow flex-shrink grow shrink overflow-hidden ${isAnyModalOpen ? 'pointer-events-none select-none' : ''}`}>
           <GlyphCanvas
             contours={currentGlyph.contours || []}
             onChangeContours={handleUpdateContours}
@@ -1666,8 +1671,17 @@ export default function App() {
         </button>
 
         <button
+          onClick={handleOpenRadicalStudioFromDrawer}
+          className="flex flex-col items-center py-1 px-2 rounded-md hover:bg-emerald-50 dark:hover:bg-[#1a251e] transition-colors"
+          title="部首・作字パーツ工房"
+        >
+          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-[10px] mt-0.5">部首工房</span>
+        </button>
+
+        <button
           onClick={() => setIsTestModalOpen(true)}
-          className="flex flex-col items-center py-1 px-2.5 rounded-md hover:bg-emerald-50 dark:hover:bg-[#1a251e] transition-colors"
+          className="flex flex-col items-center py-1 px-2 rounded-md hover:bg-emerald-50 dark:hover:bg-[#1a251e] transition-colors"
         >
           <Eye className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span className="text-[10px] mt-0.5">組版テスト</span>
@@ -1699,6 +1713,12 @@ export default function App() {
         onClose={() => setIsTestModalOpen(false)}
         project={project}
         setProject={setProject}
+        onSelectGlyphForEdit={(unicode) => {
+          const g = project.glyphs?.[unicode];
+          const char = g?.char || String.fromCodePoint(unicode);
+          handleSelectGlyph(unicode, char);
+          setIsTestModalOpen(false);
+        }}
         theme={theme}
         onShowToast={showToast}
       />

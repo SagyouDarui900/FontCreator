@@ -70,7 +70,7 @@ export const BundledFontsModal: React.FC<BundledFontsModalProps> = ({
               <h2 className="text-sm font-bold flex items-center gap-1.5">
                 <span>下絵・部首用フォントのライセンス一覧</span>
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-normal bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
-                  SIL OFL 1.1 完全準拠
+                  SIL OFL 1.1 準拠
                 </span>
               </h2>
               <p className="text-[11px] text-stone-500 dark:text-stone-400">

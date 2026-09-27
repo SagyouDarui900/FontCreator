@@ -65,6 +65,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   // Dynamic preview font URL for live preview
   const [previewFontUrl, setPreviewFontUrl] = useState<string | null>(null);
   const [previewFontFamily, setPreviewFontFamily] = useState<string>('ExportPreviewFont');
+  const [previewText, setPreviewText] = useState<string>('あいう 色は匂へど 漢字 123 ABC');
+  const [previewFontSize, setPreviewFontSize] = useState<number>(28);
 
   const isLight = isLightTheme(theme);
 
@@ -101,42 +103,82 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     balanceSideBearings,
   };
 
-  // Compile font for live preview in modal
+  // Compile font for live preview in modal with debouncing and lightweight subset
   useEffect(() => {
     if (!isOpen) return;
     let activeUrl: string | null = null;
-    try {
-      const { blobUrl } = compileFont(project, compileOptions);
-      activeUrl = blobUrl;
-      const fontName = `ExportPreviewFont_${Date.now()}`;
-      setPreviewFontFamily(fontName);
-      setPreviewFontUrl(blobUrl);
+    let isCancelled = false;
 
-      const styleId = 'export-modal-preview-font-face';
-      let styleTag = document.getElementById(styleId) as HTMLStyleElement;
-      if (!styleTag) {
-        styleTag = document.createElement('style');
-        styleTag.id = styleId;
-        document.head.appendChild(styleTag);
-      }
-      styleTag.textContent = `
-        @font-face {
-          font-family: '${fontName}';
-          src: url('${blobUrl}') format('truetype');
-          font-weight: normal;
-          font-style: normal;
+    const timer = setTimeout(() => {
+      try {
+        // Build lightweight subset project for fast live preview based on user's custom previewText
+        const sampleText = previewText && previewText.trim().length > 0
+          ? previewText
+          : 'あいう 色は匂へど 漢字 123 ABC';
+
+        const previewGlyphs: Record<number, any> = {};
+        for (let i = 0; i < sampleText.length; i++) {
+          const code = sampleText.codePointAt(i);
+          if (code && project.glyphs && project.glyphs[code]) {
+            previewGlyphs[code] = project.glyphs[code];
+          }
         }
-      `;
-    } catch (err) {
-      console.warn('Live preview font compilation failed:', err);
-    }
+        // If none of sample characters exist in project, take at most 16 available glyphs
+        if (Object.keys(previewGlyphs).length === 0 && project.glyphs) {
+          const entries = Object.entries(project.glyphs).slice(0, 16);
+          for (const [code, g] of entries) {
+            previewGlyphs[Number(code)] = g;
+          }
+        }
+
+        const previewSubsetProject: FontProject = {
+          ...project,
+          glyphs: previewGlyphs,
+        };
+
+        // For live preview, disable heavy raster boolean union to keep UI silky smooth and responsive
+        const { blobUrl } = compileFont(previewSubsetProject, {
+          ...compileOptions,
+          mergeOverlaps: false,
+        });
+        if (isCancelled) {
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+
+        activeUrl = blobUrl;
+        const fontName = `ExportPreviewFont_${Date.now()}`;
+        setPreviewFontFamily(fontName);
+        setPreviewFontUrl(blobUrl);
+
+        const styleId = 'export-modal-preview-font-face';
+        let styleTag = document.getElementById(styleId) as HTMLStyleElement;
+        if (!styleTag) {
+          styleTag = document.createElement('style');
+          styleTag.id = styleId;
+          document.head.appendChild(styleTag);
+        }
+        styleTag.textContent = `
+          @font-face {
+            font-family: '${fontName}';
+            src: url('${blobUrl}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+          }
+        `;
+      } catch (err) {
+        console.warn('Live preview font compilation failed:', err);
+      }
+    }, 180);
 
     return () => {
+      isCancelled = true;
+      clearTimeout(timer);
       if (activeUrl) {
         URL.revokeObjectURL(activeUrl);
       }
     };
-  }, [isOpen, project, effectiveScale, mergeOverlaps, balanceSideBearings]);
+  }, [isOpen, project, effectiveScale, mergeOverlaps, balanceSideBearings, previewText]);
 
   if (!isOpen) return null;
 
@@ -219,24 +261,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18231c] border-[#233327]'
           }`}
         >
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-2.5 min-w-0">
             <div
-              className={`p-2 rounded-xl ${
+              className={`p-2 rounded-xl shrink-0 ${
                 isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-900/60 text-emerald-300'
               }`}
             >
               <Download className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold tracking-tight flex items-center gap-2">
-                <span>フォントファイルを出力 (TTF / OTF)</span>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold tracking-tight flex items-center gap-2 truncate">
+                <span className="truncate">フォントファイルを出力 (TTF / OTF)</span>
                 {isFullscreen && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-medium">
-                    全画面モード
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-medium shrink-0">
+                    全画面
                   </span>
                 )}
               </h2>
-              <p className="text-xs opacity-70">
+              <p className="text-xs opacity-70 truncate">
                 {safeFamilyName} {styleName} ({glyphCount}文字 収録)
               </p>
             </div>
@@ -357,11 +399,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               キャンバス上の下絵（手本フォント）や字面枠に合わせて描いた場合は、<strong>「原寸のまま (100%)」</strong>を選ぶとキャンバスの見た目と全く同じ位置・サイズで正確に出力されます。キャンバス上で小さめに描いた文字を市販フォント同等の大粒サイズに自動拡大したい場合は「和文拡大 (135%)」をお選びください。
             </p>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setSizePreset('raw')}
-                className={`p-2 rounded-lg border text-center transition-all ${
+                className={`p-2.5 rounded-lg border text-center transition-all ${
                   sizePreset === 'raw'
                     ? isLight
                       ? 'border-emerald-600 bg-emerald-100/70 text-emerald-950 font-bold ring-1 ring-emerald-500'
@@ -371,14 +413,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     : 'border-[#283b2e] hover:bg-[#202d24] text-emerald-300'
                 }`}
               >
-                <div className="text-xs">原寸 (100%)</div>
-                <div className="text-[10px] opacity-75 font-normal mt-0.5">下絵・枠通り【推奨】</div>
+                <div className="text-xs font-bold">原寸 (100%)</div>
+                <div className="text-[10px] opacity-75 font-normal mt-0.5 truncate">下絵・枠通り【推奨】</div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSizePreset('standard_jp')}
-                className={`p-2 rounded-lg border text-center transition-all ${
+                className={`p-2.5 rounded-lg border text-center transition-all ${
                   sizePreset === 'standard_jp'
                     ? isLight
                       ? 'border-emerald-600 bg-emerald-100/70 text-emerald-950 font-bold ring-1 ring-emerald-500'
@@ -388,14 +430,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     : 'border-[#283b2e] hover:bg-[#202d24] text-emerald-300'
                 }`}
               >
-                <div className="text-xs">和文拡大 (135%)</div>
-                <div className="text-[10px] opacity-75 font-normal mt-0.5">動画・AviUtl等</div>
+                <div className="text-xs font-bold">和文拡大 (135%)</div>
+                <div className="text-[10px] opacity-75 font-normal mt-0.5 truncate">動画・AviUtl等</div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSizePreset('custom')}
-                className={`p-2 rounded-lg border text-center transition-all ${
+                className={`p-2.5 rounded-lg border text-center transition-all ${
                   sizePreset === 'custom'
                     ? isLight
                       ? 'border-emerald-600 bg-emerald-100/70 text-emerald-950 font-bold ring-1 ring-emerald-500'
@@ -405,7 +447,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     : 'border-[#283b2e] hover:bg-[#202d24] text-emerald-300'
                 }`}
               >
-                <div className="text-xs">カスタム倍率</div>
+                <div className="text-xs font-bold">カスタム倍率</div>
                 <div className="text-[10px] opacity-75 font-normal mt-0.5">{Math.round(customScale * 100)}%</div>
               </button>
             </div>
@@ -441,7 +483,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 </span>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
-                100% ベクター完全保持
+                ベクターデータ保持
               </span>
             </div>
             <p className="text-[11px] opacity-80 leading-relaxed">
@@ -480,44 +522,131 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
           </div>
 
-          {/* Live Render & Size Preview in Modal */}
+          {/* Live Render & Size Preview in Modal with Custom Text Input & Presets */}
           <div
-            className={`p-3 rounded-xl border space-y-2 ${
-              isLight ? 'bg-stone-100/80 border-stone-200' : 'bg-[#121b15] border-[#223025]'
+            className={`p-3.5 rounded-xl border space-y-3 ${
+              isLight ? 'bg-stone-100/90 border-stone-200' : 'bg-[#121b15] border-[#223025]'
             }`}
           >
-            <div className="flex items-center justify-between text-[11px] font-bold opacity-80">
-              <div className="flex items-center space-x-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center space-x-1.5 text-xs font-bold text-emerald-950 dark:text-emerald-200">
                 <Video className="w-3.5 h-3.5 text-emerald-600" />
-                <span>シミュレーター</span>
+                <span>レンダリング・シミュレーター (自由入力)</span>
               </div>
-              <span className="text-[10px] font-normal opacity-70">
-                フォントサイズ: 40px相当
-              </span>
+              
+              <div className="flex items-center space-x-2 text-[11px]">
+                <span className="text-stone-500 dark:text-stone-400">文字サイズ:</span>
+                <input
+                  type="range"
+                  min={16}
+                  max={48}
+                  value={previewFontSize}
+                  onChange={(e) => setPreviewFontSize(Number(e.target.value))}
+                  className="w-20 sm:w-24 accent-emerald-600 h-1.5"
+                />
+                <span className="font-mono text-stone-700 dark:text-stone-300 w-8">{previewFontSize}px</span>
+              </div>
             </div>
 
+            {/* Custom Input Field with Type Icon */}
+            <div className="flex items-center space-x-1.5">
+              <div className="relative flex-1">
+                <Type className="w-4 h-4 text-emerald-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={previewText}
+                  onChange={(e) => setPreviewText(e.target.value)}
+                  placeholder="プレビューしたい文字列を自由に入力..."
+                  className={`w-full pl-8.5 pr-8 py-1.5 text-xs rounded-lg border transition-all ${
+                    isLight
+                      ? 'bg-white border-stone-300 text-stone-900 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600'
+                      : 'bg-[#0f1712] border-[#25382b] text-emerald-100 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
+                  }`}
+                />
+                {previewText && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewText('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+                    title="クリア"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Sample Presets Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[10.5px] font-semibold text-stone-500 dark:text-stone-400 shrink-0 mr-1">
+                定番プリセット:
+              </span>
+              {[
+                { label: 'いろは歌', text: 'いろはにほへと ちりぬるを わかよたれそ つねならむ' },
+                { label: '五十音', text: 'あいうえお かきくけこ さしすせそ たちつてと' },
+                { label: '漢字熟語', text: '青空 森林 宇宙 旅情 永遠 感謝 夢想 飛翔' },
+                { label: '英数記号', text: 'The quick brown fox jumps over the lazy dog. 0123456789' },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setPreviewText(preset.text)}
+                  className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium transition-all ${
+                    previewText === preset.text
+                      ? 'bg-emerald-700 text-white font-bold shadow-xs'
+                      : 'bg-white dark:bg-[#18261e] border border-stone-200 dark:border-[#283d30] text-stone-700 dark:text-emerald-200 hover:bg-emerald-50 dark:hover:bg-[#203328]'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+
+              {/* Insert All Project Characters */}
+              {project.glyphs && Object.keys(project.glyphs).length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allChars = Object.values(project.glyphs)
+                      .map((g: any) => g.char || String.fromCodePoint(g.unicode))
+                      .join('');
+                    setPreviewText(allChars);
+                  }}
+                  className="px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-emerald-100/80 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900 transition-colors"
+                  title="プロジェクト内の作成済みグリフをすべて入力欄に挿入します"
+                >
+                  作成済み文字 ({Object.keys(project.glyphs).length}字)
+                </button>
+              )}
+            </div>
+
+            {/* Rendered Live Font Display Box */}
             <div
-              className={`p-3 rounded-lg border flex items-center justify-center min-h-[64px] overflow-hidden ${
-                isLight ? 'bg-white border-stone-200' : 'bg-black/40 border-[#25362b]'
+              className={`p-4 rounded-xl border flex items-center justify-center min-h-[76px] overflow-x-auto transition-all ${
+                isLight ? 'bg-white border-stone-200 shadow-inner' : 'bg-black/40 border-[#25362b] shadow-inner'
               }`}
             >
-              <div
-                style={{
-                  fontFamily: `'${previewFontFamily}', sans-serif`,
-                  fontSize: '40px',
-                  lineHeight: '1.2',
-                }}
-                className="tracking-normal select-none text-stone-900 dark:text-emerald-100 transition-all text-center"
-              >
-                あいう 色は匂へど 漢字 123
-              </div>
+              {previewText && previewText.trim().length > 0 ? (
+                <div
+                  style={{
+                    fontFamily: `'${previewFontFamily}', sans-serif`,
+                    fontSize: `${previewFontSize}px`,
+                  }}
+                  className="tracking-normal select-none text-stone-900 dark:text-emerald-100 transition-all text-center whitespace-nowrap px-2"
+                >
+                  {previewText}
+                </div>
+              ) : (
+                <span className="text-xs text-stone-400 italic">
+                  （上の入力欄にテストしたい文字を入力してください）
+                </span>
+              )}
             </div>
           </div>
 
           {/* Quality Check Recommendation Banner */}
           {onOpenQualityModal && (
             <div
-              className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
+              className={`p-3 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
                 isLight
                   ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
                   : 'bg-emerald-950/40 border-emerald-800/60 text-emerald-100'
@@ -538,7 +667,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   onClose();
                   onOpenQualityModal();
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold border shrink-0 transition-colors ${
+                className={`w-full sm:w-auto px-3 py-1.5 rounded-lg text-xs font-bold border shrink-0 transition-colors text-center ${
                   isLight
                     ? 'bg-white border-emerald-300 text-emerald-800 hover:bg-emerald-50 shadow-xs'
                     : 'bg-[#1a271f] border-emerald-700 text-emerald-200 hover:bg-[#23342a]'
@@ -606,7 +735,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </strong>
           </div>
 
-          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
             {onRequestNewProject && (
               <button
                 type="button"

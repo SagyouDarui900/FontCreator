@@ -134,7 +134,7 @@ export const StorageManagerModal: React.FC<StorageManagerModalProps> = ({
   const handleExportJson = () => {
     const res = exportProjectJsonFile(project);
     if (res.success) {
-      onShowToast(`完全バックアップ『${res.filename}』をダウンロードしました`, 'success');
+      onShowToast(`バックアップ『${res.filename}』をダウンロードしました`, 'success');
       refreshStorageData();
     } else {
       onShowToast('バックアップファイルの書き出しに失敗しました', 'error');
@@ -755,16 +755,16 @@ export const StorageManagerModal: React.FC<StorageManagerModalProps> = ({
             >
               <div className="font-bold flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>制作データを安全に永久保存するためのベストプラクティス</span>
+                <span>制作データのバックアップ手順</span>
               </div>
               <ul className="list-disc list-inside space-y-1.5 text-[11px] opacity-90 pl-1">
                 <li>
                   <strong>「今すぐJSON保存 (.fontproj.json)」の定期実行:</strong>{' '}
-                  PCやiPadのファイルストレージ・Googleドライブ・iCloud等に完全なセーブデータとして保管できます。
+                  PCやiPadのファイルストレージ・Googleドライブ・iCloud等にセーブデータとして保管できます。
                 </li>
                 <li>
                   <strong>スナップショットの適宜作成:</strong>{' '}
-                  大きな変更を加える前や、部首合成・一括正規化の前後にスナップショットを作成しておくと安心です。
+                  大きな変更を加える前や、部首合成・一括正規化の前後にスナップショットを作成してバックアップできます。
                 </li>
                 <li>
                   <strong>容量が逼迫した時の対処法:</strong>{' '}

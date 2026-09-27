@@ -736,9 +736,9 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
             <div className="space-y-1">
               <span className="text-[10px] text-stone-500 font-bold block">よく使う部首クイック選択:</span>
               <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
-                {POPULAR_RADICALS_QUICK_PRESETS.map((p) => (
+                {POPULAR_RADICALS_QUICK_PRESETS.map((p, idx) => (
                   <button
-                    key={p.char}
+                    key={`${p.char}_${p.name}_${idx}`}
                     onClick={() => {
                       setExtractChar(p.char);
                       performExtraction(p.char, extractRegion);
@@ -848,7 +848,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                 ) : extractedContours.length > 0 ? (
                   <svg viewBox="0 0 1000 1000" className="w-full h-full">
                     <path
-                      d={contoursToSvgPath(extractedContours)}
+                      d={contoursToSvgPath(transformContoursForPlacement(extractedContours, placement, extractRegion !== 'full' ? extractRegion : categoryFilter !== 'all' ? categoryFilter : 'other'))}
                       fill={isLight ? '#111827' : '#ecfdf5'}
                       fillRule="evenodd"
                     />
@@ -1187,7 +1187,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                 }`}
               >
                 <Shapes className="w-4 h-4" />
-                <span>部首パーツ工房で本格設計 &gt;</span>
+                <span>部首パーツ工房を開く &gt;</span>
               </button>
             )}
 

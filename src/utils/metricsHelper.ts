@@ -36,7 +36,7 @@ export const KERNING_PRESET_GROUPS: KerningPresetGroup[] = [
   {
     id: 'latin_standard',
     name: '英数字定番ペア (AV, To, WA, etc.)',
-    description: '斜め線やT字などの字間衝突・すきまを美しく最適化します',
+    description: '斜め線やT字などの字間衝突やすきまを調整します',
     pairs: [
       { left: 'A', right: 'V', defaultVal: -110 },
       { left: 'V', right: 'A', defaultVal: -110 },

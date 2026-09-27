@@ -534,7 +534,7 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
                       : 'bg-emerald-700 text-white shadow-xs'
                     : 'text-stone-600 dark:text-stone-400 hover:text-stone-900'
                 }`}
-                title="標準（3.5px）: バランス良くノードを半減させ、美しい曲線に整えます"
+                title="標準（3.5px）: ノード数を削減し曲線を整えます"
               >
                 標準 (3.5)
               </button>

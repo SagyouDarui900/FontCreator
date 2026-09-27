@@ -376,7 +376,7 @@ export const KerningModal: React.FC<KerningModalProps> = ({
                 >
                   <span className="text-xs font-bold flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>おすすめカーニング一括プリセット</span>
+                    <span>標準カーニング一括プリセット</span>
                   </span>
                   <div className="flex flex-col gap-1.5 mt-1">
                     {KERNING_PRESET_GROUPS.map((group) => (

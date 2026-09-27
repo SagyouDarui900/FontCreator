@@ -405,7 +405,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                 >
                   <div className="flex items-center space-x-1.5 font-bold text-emerald-700 dark:text-emerald-400 text-xs">
                     <Info className="w-4 h-4 shrink-0" />
-                    <span>フォント作成・ベクター変換におすすめの画像規格（推奨サイズ）</span>
+                    <span>フォント作成・ベクター変換の推奨画像規格</span>
                   </div>
                   <ul className="space-y-1.5 text-stone-600 dark:text-stone-300 pl-0.5 leading-relaxed">
                     <li className="flex items-start space-x-1.5">
@@ -413,7 +413,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                       <span>
                         <strong className="text-stone-800 dark:text-emerald-300">1000 × 1000 px</strong> 〜 <strong className="text-stone-800 dark:text-emerald-300">2048 × 2048 px</strong> （正方形 1:1 比率）
                         <span className="block text-[10px] text-stone-500 dark:text-stone-400 mt-0.5">
-                          ※FontForge等の標準EM正方形枠（UnitsPerEm 1000/1024）と1:1で対応し、最も綺麗なベジェ曲線にトレースされます（最低512px角以上）。
+                          ※FontForge等の標準EM正方形枠（UnitsPerEm 1000/1024）と1:1で対応し、高精度のベジェ曲線にトレースされます（最低512px角以上）。
                         </span>
                       </span>
                     </li>

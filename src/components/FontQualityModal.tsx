@@ -445,7 +445,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
     const score = report?.score ?? 100;
     if (score >= 90) {
       return {
-        label: '極めて良好',
+        label: '優良',
         subtitle: 'すべての品質基準を満たしており、フォント出力準備が整っています',
         colorText: isLight ? 'text-emerald-800' : 'text-emerald-400',
         colorBg: isLight ? 'bg-emerald-50/80 border-emerald-200' : 'bg-emerald-950/40 border-emerald-800/60',
@@ -1331,17 +1331,17 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                     {
                       id: 'mild',
                       label: 'マイルド（形状変化 0%）',
-                      desc: '直線上の共線ノードと重複点のみを精密に除去。文字形状は完全に100%同一',
+                      desc: '直線上の共線ノードと重複点のみを除去し、文字形状を保持します。',
                     },
                     {
                       id: 'normal',
                       label: '標準（推奨・形状保持 99.8%）',
-                      desc: '直線上の冗長ノード除去 ＋ 緩やかな曲線の微小な手ブレを滑らかに整流',
+                      desc: '直線上の冗長ノード除去および曲線の手ブレを整流',
                     },
                     {
                       id: 'strong',
                       label: '強力（形状保持 99.0%）',
-                      desc: '密集した過剰ノードをしっかり間引いてスリム化。扱いやすいパスに軽量化',
+                      desc: '密集したノードを間引き、パスを軽量化します。',
                     },
                   ].map((lvl) => (
                     <button
@@ -1574,8 +1574,8 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                   {[
                     {
                       val: true,
-                      label: '完全水平・垂直スナップ（推奨）',
-                      desc: '極点ノードの制御ハンドルを完全な水平/垂直に揃えます。フォント工学の標準規格',
+                      label: '水平・垂直スナップ（推奨）',
+                      desc: '極点ノードの制御ハンドルを水平または垂直に揃えます。フォント規格準拠',
                     },
                     {
                       val: false,

@@ -886,8 +886,8 @@ export function checkFontQuality(
                 glyphName: g1.name || `uni${g1.unicode.toString(16).toUpperCase()}`,
                 type: 'duplicate_shape',
                 severity: 'warning',
-                title: '字形の完全重複を検出',
-                description: `文字「${g1.char}」(U+${g1.unicode.toString(16).toUpperCase()}) と文字「${g2.char}」(U+${g2.unicode.toString(16).toUpperCase()}) の輪郭形状が完全に一致しています。複製後の未編集や誤登録の可能性があります。`,
+                title: '字形の重複を検出',
+                description: `文字「${g1.char}」(U+${g1.unicode.toString(16).toUpperCase()}) と文字「${g2.char}」(U+${g2.unicode.toString(16).toUpperCase()}) の輪郭形状が一致しています。重複登録や未編集のグリフでないか確認してください。`,
                 recommendation: `別の文字からコピーされたままの場合は、文字「${g1.char}」または「${g2.char}」のグリフ固有の形状に編集してください。`,
                 details: {
                   duplicateWithUnicode: g2.unicode,
@@ -1027,7 +1027,7 @@ export function checkFontQuality(
           type: 'baseline_deviation',
           severity: 'warning',
           title: '仮想ボディ上端（アセンダ）はみ出し',
-          description: `輪郭の上端 (Y=${Math.round(bbox.minY)}) が em-box 上限 (Y=0) を突き抜けています。複数行組版で行間クリッピングが発生する可能性があります。`,
+          description: `輪郭の上端 (Y=${Math.round(bbox.minY)}) が em-box 上限 (Y=0) を超えています。複数行組版で行間クリッピングが発生します。`,
           recommendation: 'メトリクスパネルで高さを縮小するか、ベースラインへ収まるよう下へ移動してください。',
           details: {
             currentBaselineY: Math.round(bbox.maxY),
@@ -1075,7 +1075,7 @@ export function checkFontQuality(
             type: 'baseline_deviation',
             severity: 'warning',
             title: '文字がベースラインから浮いています',
-            description: `文字「${char}」の下端が Y=${Math.round(bbox.maxY)} と極端に高い位置にあり、他の漢字・かなと並べた際に不自然に浮き上がって見えます（標準目安: 780〜840）。`,
+            description: `文字「${char}」の下端が Y=${Math.round(bbox.maxY)} の位置にあり、基準下端（標準目安: 780〜840）より上方に配置されています。`,
             recommendation: '「自動整列」でベースライン基準位置に移動するか、キャンバスで配置を調整してください。',
             details: {
               currentBaselineY: Math.round(bbox.maxY),
@@ -1188,15 +1188,15 @@ export function checkFontQuality(
           let severity: QualitySeverity = 'info';
 
           if (strokeAnalysis.isExcessivelyThin) {
-            title = '線幅の極端なかすれ（細線）を検出';
-            desc = `文字「${char}」の最小線幅が ${strokeAnalysis.minWidth}px と極端に細く（中央値: ${strokeAnalysis.medianWidth}px）、印刷やディスプレイ表示時にかすれて線が欠落する恐れがあります。`;
+            title = '線幅のかすれ（細線）を検出';
+            desc = `文字「${char}」の最小線幅が ${strokeAnalysis.minWidth}px です（中央値: ${strokeAnalysis.medianWidth}px）。印刷や画面表示時にかすれや線の欠落が発生します。`;
             severity = 'warning';
           } else if (strokeAnalysis.isExcessivelyThick) {
-            title = '線幅の極端な太まり（線の潰れ）を検出';
-            desc = `文字「${char}」の最大線幅が ${strokeAnalysis.maxWidth}px と極端に太く（中央値: ${strokeAnalysis.medianWidth}px）、交差部や画数が密集する部分が黒く潰れて見える可能性があります。`;
+            title = '線幅の太まり（線の潰れ）を検出';
+            desc = `文字「${char}」の最大線幅が ${strokeAnalysis.maxWidth}px です（中央値: ${strokeAnalysis.medianWidth}px）。交差部や画数の密集部が黒く潰れます。`;
             severity = 'warning';
           } else {
-            desc += '文字内での線の太さの差が大きく、ストロークの均一性に改善の余地があります。';
+            desc += '文字内での線の太さの差が大きく、線幅が不均一です。';
           }
 
           issues.push({
@@ -1208,7 +1208,7 @@ export function checkFontQuality(
             severity,
             title,
             description: desc,
-            recommendation: '「ストローク均一化」を実行して、極端に細い箇所を補強し太い箇所をバランス良く自動調整します。',
+            recommendation: '「ストローク均一化」を実行して、細い箇所の補強と太い箇所の線幅調整を行います。',
             details: {
               minStrokeWidth: strokeAnalysis.minWidth,
               maxStrokeWidth: strokeAnalysis.maxWidth,

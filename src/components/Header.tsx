@@ -28,6 +28,7 @@ import {
   X,
   ShieldCheck,
   Paintbrush,
+  PenTool,
   Keyboard,
   BookOpen,
   HelpCircle,
@@ -586,6 +587,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 </span>
               </button>
 
+
+
               {/* Handwriting Quick Preset Banner */}
               {onApplyHandwritingPreset && (
                 <button
@@ -605,7 +608,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                     </div>
                     <div>
                       <div className="text-xs font-bold flex items-center space-x-1.5">
-                        <span>手書きフォント最適化設定を適用</span>
+                        <span>手書きフォント推奨プリセットを適用</span>
                         <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-600 text-white font-mono font-normal">
                           ワンクリック
                         </span>

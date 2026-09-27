@@ -496,7 +496,7 @@ export const PenPresetsModal: React.FC<PenPresetsModalProps> = ({
                 )}
               </div>
               <p className="text-xs opacity-70">
-                ペンの筆圧特性（ソフト〜ハード）をグラフ制御し、個人の手の癖に最適化
+                ペンの筆圧特性（ソフト〜ハード）をカーブグラフで調整
               </p>
             </div>
           </div>

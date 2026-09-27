@@ -40,7 +40,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
               はじめてのフォント作りガイド（未経験者向け）
             </h3>
             <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-600 text-white">
-              完全無料
+              無料
             </span>
           </div>
           <p className="text-xs leading-relaxed opacity-90">
@@ -75,7 +75,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
             <span>未作成文字の自動補完</span>
           </div>
           <p className="text-[11px] text-stone-600 dark:text-stone-300 leading-snug">
-            まだ作成していない文字がテキスト入力された場合でも、OSの標準フォントが自動で代替表示されるため、気軽に作り始めることができます。
+            未作成の文字が入力された場合でも、OSの標準フォントが自動で代替表示（フォールバック）されます。
           </p>
         </div>
 
@@ -116,7 +116,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
                 <h5 className="text-xs font-extrabold">① 手書き入力コース</h5>
               </div>
               <span className="text-[9.5px] px-1.5 py-0.2 rounded font-mono font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 inline-block">
-                おすすめ
+                推奨
               </span>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
                 <strong>筆ツール [B]</strong> を選択し、タブレットやマウスで直接文字を書き込みます。手ブレ補正機能により、滑らかなベクター輪郭へ自動変換されます。
@@ -242,10 +242,10 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
                 <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-extrabold flex items-center justify-center">
                   3
                 </span>
-                <h5 className="text-xs font-bold">自動調律・自動合成の活用</h5>
+                <h5 className="text-xs font-bold">自動設定・自動合成の活用</h5>
               </div>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                <strong>Shift + Alt + S</strong> を押すと文字の左右余白（サイドベアリング）が自動調律されます。「か」を作成しておけば「が」を濁点自動合成機能で瞬時に生成可能です。
+                <strong>Shift + Alt + S</strong> を押すと文字の左右余白（サイドベアリング）が自動設定されます。「か」を作成しておけば「が」を濁点自動合成機能で生成可能です。
               </p>
             </div>
             <div className="mt-2 text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
@@ -324,13 +324,13 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
           <div>
             <strong>Q. 文字同士がくっついて読みにくい時は？</strong>
             <p className="text-stone-700 dark:text-stone-300 opacity-90 pl-3 mt-0.5">
-              左右の余白（サイドベアリング）が不足している状態です。キーボードの <strong>Shift + Alt + S</strong> を押すか、右サイドバーの「字幅調律」を実行することで、最適な余白に自動調整されます。
+              左右の余白（サイドベアリング）が不足している状態です。キーボードの <strong>Shift + Alt + S</strong> を押すか、右サイドバーの「字幅自動設定」を実行することで、余白が自動調整されます。
             </p>
           </div>
           <div>
             <strong>Q. 手書きした線がガタガタになってしまう時は？</strong>
             <p className="text-stone-700 dark:text-stone-300 opacity-90 pl-3 mt-0.5">
-              筆ツールの「手ブレ補正」を50〜75%程度に設定して描画するか、描画後に <strong>Alt + S（パス単純化）</strong> を実行することで、余分なアンカーポイントを削減して滑らかな曲線に最適化できます。
+              筆ツールの「手ブレ補正」を50〜75%程度に設定して描画するか、描画後に <strong>Alt + S（パス単純化）</strong> を実行することで、余分なアンカーポイントを削減して滑らかな曲線に補正できます。
             </p>
           </div>
         </div>

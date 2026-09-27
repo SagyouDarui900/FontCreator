@@ -342,7 +342,7 @@ export function runProjectDiagnostics(
         reason = `ノード数が ${metrics.nodeCount} 点のみで、独立した面やストロークが形成されていません。`;
         recommendation = 'ノードを追加して文字の形状を形成するか、テスト用の点を削除してください。';
       } else {
-        reason = `字形の面積が極小 (${metrics.bboxWidth}x${metrics.bboxHeight}px) で、微小な点やゴミの可能性があります。`;
+        reason = `字形の面積が極小 (${metrics.bboxWidth}x${metrics.bboxHeight}px) です。微小な点や不要なパスが含まれていないか確認してください。`;
         recommendation = '微小な残骸ノードを削除するか、正しい文字サイズで作図してください。';
       }
       draftCount++;
@@ -389,9 +389,9 @@ export function runProjectDiagnostics(
         statusLabel = '著しく低い字形複雑度';
         severity = 'error';
         reason = categoryType === 'kanji'
-          ? `漢字「${char}」ですが、輪郭数が ${metrics.contourCount} 個・総ノード数が ${metrics.nodeCount} 個（スコア: ${metrics.complexityScore}）と極端に単純です。仮置きの図形や制作途中の可能性があります。`
-          : `文字「${char}」の字形複雑度が著しく低く、総ノード数 ${metrics.nodeCount} 個（スコア: ${metrics.complexityScore}）しかありません。`;
-        recommendation = '必要な画線やパーツが欠落していないか確認し、完全な文字形状に仕上げてください。';
+          ? `漢字「${char}」の輪郭数が ${metrics.contourCount} 個・総ノード数が ${metrics.nodeCount} 個（スコア: ${metrics.complexityScore}）です。仮置きの図形または制作途中ではないか確認してください。`
+          : `文字「${char}」の字形複雑度が低く、総ノード数 ${metrics.nodeCount} 個（スコア: ${metrics.complexityScore}）です。`;
+        recommendation = '必要な画線やパーツが欠落していないか確認し、文字形状を完成させてください。';
         criticallyLowComplexityCount++;
       } else if (isLow) {
         status = 'low_complexity';

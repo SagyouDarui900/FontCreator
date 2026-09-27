@@ -132,7 +132,7 @@ export type DakutenStyle = 'standard' | 'brush' | 'round' | 'square';
 export type HandakutenStyle = 'standard' | 'brush' | 'solid';
 
 /**
- * 美しい標準濁点「゛」の2本ストローク輪郭を生成 (スタイル対応)
+ * 標準濁点「゛」の2本ストローク輪郭を生成 (スタイル対応)
  */
 export function createDakutenContours(
   customOffsetX = 0,
@@ -215,7 +215,7 @@ export function createDakutenContours(
 }
 
 /**
- * 美しい標準半濁点「゜」の輪郭を生成 (スタイル対応)
+ * 標準半濁点「゜」の輪郭を生成 (スタイル対応)
  */
 export function createHandakutenContours(
   customOffsetX = 0,

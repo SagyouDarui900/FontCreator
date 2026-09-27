@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
             <h1 className="text-xl font-bold text-stone-800 mb-2">画面の読み込みでエラーが発生しました</h1>
             <p className="text-xs text-stone-500 mb-4 leading-relaxed">
-              作業データの一時的な不整合またはブラウザの表示更新中に問題が生じた可能性があります。再読み込みをお試しください。
+              作業データの一時的な不整合またはブラウザの表示更新中に問題が生じました。再読み込みをお試しください。
             </p>
             {this.state.error && (
               <div className="w-full max-h-28 overflow-y-auto bg-stone-50 p-2.5 rounded-lg text-left text-[11px] font-mono text-stone-600 border border-stone-200 mb-5 break-all">

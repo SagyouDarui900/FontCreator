@@ -39,9 +39,9 @@ export const BUNDLED_FONTS_INFO: BundledFontInfo[] = [
     licenseUrl: 'https://openfontlicense.org/',
     commercialUse: '可能 (商用利用可)',
     derivativeWorks: '可能 (トレース・改変・派生フォント作成可)',
-    description: '伝統的な筆遣い・ウロコを持つ明朝体。漢字の基本骨格・筆画の参考として最適です。',
+    description: '筆遣いとウロコを持つ明朝体。漢字の基本骨格・筆画の参考として利用できます。',
     licenseNotes:
-      'SIL OFL 1.1 のもとで配布されており、本アプリ内での輪郭抽出、下絵トレース、ベクター変換、およびそれらを元に作成した派生フォントの商用販売・無料配布は完全に許可されています。',
+      'SIL OFL 1.1 のもとで配布されており、本アプリ内での輪郭抽出、下絵トレース、ベクター変換、およびそれらを元に作成した派生フォントの商用販売・無料配布が許可されています。',
   },
   {
     id: 'noto-sans-jp',
@@ -71,7 +71,7 @@ export const BUNDLED_FONTS_INFO: BundledFontInfo[] = [
     licenseUrl: 'https://openfontlicense.org/',
     commercialUse: '可能 (商用利用可)',
     derivativeWorks: '可能 (トレース・改変・派生フォント作成可)',
-    description: '角が丸くやさしい筆触を持つ高品質な日本語丸ゴシック。ポップ・親しみやすいフォントの部首制作に適しています。',
+    description: '角丸の筆画を持つ日本語丸ゴシック。丸ゴシック系フォントの部首制作に適しています。',
     licenseNotes:
       '大平善道氏により制作され、Google Fontsを通じてSIL OFL 1.1で提供されています。商用・非商用問わず自由にパーツの抽出・利用が認められています。',
   },
@@ -87,7 +87,7 @@ export const BUNDLED_FONTS_INFO: BundledFontInfo[] = [
     licenseUrl: 'https://openfontlicense.org/',
     commercialUse: '可能 (商用利用可)',
     derivativeWorks: '可能 (トレース・改変・派生フォント作成可)',
-    description: '活字の味わいと鋭いウロコ・明朝筆触を持つクラシック明朝体。',
+    description: '活字の骨格と鋭いウロコ・明朝筆触を持つ明朝体。',
     licenseNotes:
       'Google FontsにてSIL OFL 1.1として公開されており、下絵としての表示・トレース作図・派生フォント作成が法的に問題ありません。',
   },
@@ -105,6 +105,6 @@ export const BUNDLED_FONTS_INFO: BundledFontInfo[] = [
     derivativeWorks: '可能 (トレース・改変・派生フォント作成可)',
     description: '等幅で読みやすい開発者向けプログラミングフォント。',
     licenseNotes:
-      'SIL OFL 1.1ライセンスのオープンソースフォントです。エディタ内の数値・コード表示UIに安心して組み込まれています。',
+      'SIL OFL 1.1ライセンスのオープンソースフォントです。エディタ内の数値・コード表示UIに組み込まれています。',
   },
 ];

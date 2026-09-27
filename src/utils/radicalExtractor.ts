@@ -83,8 +83,8 @@ export async function extractRadicalFromFont(
     fontFamily = DEFAULT_RADICAL_FONT_FAMILY,
     fontWeight = DEFAULT_RADICAL_FONT_WEIGHT,
     region = 'full',
-    smoothing = 1.2,
-    fitMargin = 70,
+    smoothing = 0.8,
+    fitMargin = 80,
   } = options;
 
   if (!char || char.trim().length === 0) {
@@ -102,7 +102,7 @@ export async function extractRadicalFromFont(
   }
 
   // High-resolution canvas for crisp typography capture
-  const canvasSize = 700;
+  const canvasSize = 1024;
   const canvas = document.createElement('canvas');
   canvas.width = canvasSize;
   canvas.height = canvasSize;
@@ -115,9 +115,10 @@ export async function extractRadicalFromFont(
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvasSize, canvasSize);
 
-  // Render character
+  // Render character with antialiasing
+  ctx.imageSmoothingEnabled = true;
   ctx.fillStyle = '#000000';
-  const fontSize = 520;
+  const fontSize = 780;
   ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -144,13 +145,13 @@ export async function extractRadicalFromFont(
 
   // Detect if Mincho (serif) to preserve delicate horizontal strokes & serifs
   const isMincho = fontFamily.includes('Serif') || fontFamily.includes('serif');
-  const threshold = isMincho ? 155 : 140;
+  const threshold = isMincho ? 150 : 138;
 
   // Vectorize using smoothed marching squares + cubic fitting
   const result = await vectorizeImage(canvas, {
     threshold,
-    smoothing: isMincho ? 1.1 : smoothing,
-    minArea: 8,
+    smoothing: Math.min(smoothing, 0.85),
+    minArea: 6,
     fitMargin,
   });
 
@@ -158,53 +159,28 @@ export async function extractRadicalFromFont(
     return [];
   }
 
-  // Normalize and center contours into the standard 1000x1000 EM box
+  // Normalize and center contours into the standard 1000x1000 EM box with strict aspect ratio preservation
   const bbox = getContoursBoundingBox(result.contours);
   if (bbox.width <= 0 || bbox.height <= 0) {
     return result.contours;
   }
 
-  // Check target dimensions based on region
-  let targetX = 80;
-  let targetY = 160;
-  let targetW = 840;
-  let targetH = 680;
+  // Target standard kanji glyph box (800x740 inside 1000x1000)
+  const targetX = 100;
+  const targetY = 130;
+  const targetW = 800;
+  const targetH = 740;
 
-  if (region === 'hen') {
-    targetX = 90;
-    targetY = 150;
-    targetW = 380;
-    targetH = 680;
-  } else if (region === 'tsukuri') {
-    targetX = 480;
-    targetY = 150;
-    targetW = 440;
-    targetH = 680;
-  } else if (region === 'kanmuri') {
-    targetX = 120;
-    targetY = 140;
-    targetW = 760;
-    targetH = 300;
-  } else if (region === 'ashi') {
-    targetX = 120;
-    targetY = 560;
-    targetW = 760;
-    targetH = 320;
-  }
-
-  // Scale to target box proportionally to prevent warping
-  const scaleX = targetW / bbox.width;
-  const scaleY = targetH / bbox.height;
-  const scale = Math.min(scaleX, scaleY);
-
+  // Scale to target box strictly proportionally to guarantee zero aspect ratio distortion
+  const scale = Math.min(targetW / bbox.width, targetH / bbox.height);
   const scaledW = bbox.width * scale;
   const scaledH = bbox.height * scale;
   const offsetX = targetX + (targetW - scaledW) / 2 - bbox.minX * scale;
   const offsetY = targetY + (targetH - scaledH) / 2 - bbox.minY * scale;
 
   return transformContours(result.contours, (p) => ({
-    x: Math.round(p.x * scale + offsetX),
-    y: Math.round(p.y * scale + offsetY),
+    x: Math.round((p.x * scale + offsetX) * 10) / 10,
+    y: Math.round((p.y * scale + offsetY) * 10) / 10,
   }));
 }
 
@@ -314,117 +290,20 @@ export const POPULAR_RADICALS_QUICK_PRESETS: {
   { char: '尸', name: 'しかばね', category: 'tare', description: '身体・住まいに関係する漢字 (屋, 展, 屈, 局)' },
 ];
 
+import { KANGXI_214_RADICALS, KangxiRadicalFullEntry } from '../data/kangxi214Radicals';
+
 /**
- * 214 Kangxi Traditional Radicals Catalog (康熙部首)
+ * Complete 214 Kangxi Traditional Radicals Catalog (康熙字典部首 全214部首)
  */
-export const KANGXI_RADICALS_CATALOG: KangxiRadicalItem[] = [
-  { number: 1, char: '一', name: 'いち', reading: 'イチ', strokes: 1, category: 'basic', exampleChars: '三丈不' },
-  { number: 2, char: '丨', name: 'ぼう', reading: 'ボウ', strokes: 1, category: 'basic', exampleChars: '中申' },
-  { number: 3, char: '丶', name: 'てん', reading: 'テン', strokes: 1, category: 'basic', exampleChars: '丸主' },
-  { number: 4, char: '丿', name: 'の', reading: 'ヘツ', strokes: 1, category: 'basic', exampleChars: '久乏乗' },
-  { number: 5, char: '乙', name: 'おつ', reading: 'オツ', strokes: 1, category: 'basic', exampleChars: '九乞乱' },
-  { number: 6, char: '亅', name: 'はねぼう', reading: 'ケツ', strokes: 1, category: 'basic', exampleChars: '了予事' },
-  { number: 7, char: '二', name: 'に', reading: 'ニ', strokes: 2, category: 'basic', exampleChars: '互五井' },
-  { number: 8, char: '亠', name: 'なべぶた', reading: 'トウ', strokes: 2, category: 'kanmuri', exampleChars: '亡交京' },
-  { number: 9, char: '人', name: 'ひと・にんべん', reading: 'ジン', strokes: 2, category: 'hen', exampleChars: '休作仕' },
-  { number: 10, char: '儿', name: 'ひとあし', reading: 'ジン', strokes: 2, category: 'ashi', exampleChars: '兄先免' },
-  { number: 11, char: '入', name: 'いる', reading: 'ニュウ', strokes: 2, category: 'basic', exampleChars: '全内' },
-  { number: 12, char: '八', name: 'はち', reading: 'ハチ', strokes: 2, category: 'basic', exampleChars: '公共兵' },
-  { number: 13, char: '冂', name: 'けいがまえ', reading: 'ケイ', strokes: 2, category: 'kamae', exampleChars: '円冊再' },
-  { number: 14, char: '冖', name: 'わかんむり', reading: 'ベキ', strokes: 2, category: 'kanmuri', exampleChars: '冠冗写' },
-  { number: 15, char: '冫', name: 'にすい', reading: 'ヒョウ', strokes: 2, category: 'hen', exampleChars: '冷凍冬' },
-  { number: 16, char: '几', name: 'きにょう', reading: 'キ', strokes: 2, category: 'nyo', exampleChars: '凡処凱' },
-  { number: 17, char: '凵', name: 'かんにょう', reading: 'カン', strokes: 2, category: 'kamae', exampleChars: '凶凹凸' },
-  { number: 18, char: '刀', name: 'かたな・りっとう', reading: 'トウ', strokes: 2, category: 'tsukuri', exampleChars: '切刻列' },
-  { number: 19, char: '力', name: 'ちから', reading: 'リョク', strokes: 2, category: 'tsukuri', exampleChars: '加功動' },
-  { number: 20, char: '勹', name: 'つつみがまえ', reading: 'ホウ', strokes: 2, category: 'kamae', exampleChars: '包匂句' },
-  { number: 21, char: '匕', name: 'さじのひ', reading: 'ヒ', strokes: 2, category: 'basic', exampleChars: '化北匙' },
-  { number: 22, char: '匚', name: 'はこがまえ', reading: 'ホウ', strokes: 2, category: 'kamae', exampleChars: '医匠匹' },
-  { number: 24, char: '十', name: 'じゅう', reading: 'ジュウ', strokes: 2, category: 'basic', exampleChars: '半卒協' },
-  { number: 25, char: '卜', name: 'ぼく', reading: 'ボク', strokes: 2, category: 'basic', exampleChars: '占卦' },
-  { number: 26, char: '卩', name: 'ふしづくり', reading: 'セツ', strokes: 2, category: 'tsukuri', exampleChars: '印却卵' },
-  { number: 27, char: '厂', name: 'がんだれ', reading: 'カン', strokes: 2, category: 'tare', exampleChars: '厄厚原' },
-  { number: 28, char: '厶', name: 'む', reading: 'シ', strokes: 2, category: 'basic', exampleChars: '去参台' },
-  { number: 29, char: '又', name: 'また', reading: 'ユウ', strokes: 2, category: 'tsukuri', exampleChars: '友反双' },
-  { number: 30, char: '口', name: 'くち', reading: 'コウ', strokes: 3, category: 'hen', exampleChars: '古右品' },
-  { number: 31, char: '囗', name: 'くにがまえ', reading: 'イ', strokes: 3, category: 'kamae', exampleChars: '四団国' },
-  { number: 32, char: '土', name: 'つち', reading: 'ド', strokes: 3, category: 'hen', exampleChars: '地坂場' },
-  { number: 33, char: '士', name: 'さむらい', reading: 'シ', strokes: 3, category: 'basic', exampleChars: '壮声売' },
-  { number: 36, char: '夕', name: 'ゆうべ', reading: 'セキ', strokes: 3, category: 'hen', exampleChars: '外名夜' },
-  { number: 37, char: '大', name: 'だい', reading: 'ダイ', strokes: 3, category: 'kanmuri', exampleChars: '天太央' },
-  { number: 38, char: '女', name: 'おんな', reading: 'ジョ', strokes: 3, category: 'hen', exampleChars: '好如妙' },
-  { number: 39, char: '子', name: 'こ', reading: 'シ', strokes: 3, category: 'hen', exampleChars: '孔学孝' },
-  { number: 40, char: '宀', name: 'うかんむり', reading: 'ベン', strokes: 3, category: 'kanmuri', exampleChars: '安宇守' },
-  { number: 41, char: '寸', name: 'すん', reading: 'スン', strokes: 3, category: 'tsukuri', exampleChars: '寺対寿' },
-  { number: 42, char: '小', name: 'しょう', reading: 'ショウ', strokes: 3, category: 'kanmuri', exampleChars: '少尖尚' },
-  { number: 44, char: '尸', name: 'しかばね', reading: 'シ', strokes: 3, category: 'tare', exampleChars: '尺尾居' },
-  { number: 46, char: '山', name: 'やま', reading: 'サン', strokes: 3, category: 'hen', exampleChars: '岩岸島' },
-  { number: 47, char: '川', name: 'かわ', reading: 'セン', strokes: 3, category: 'basic', exampleChars: '州巡順' },
-  { number: 48, char: '工', name: 'こう', reading: 'コウ', strokes: 3, category: 'basic', exampleChars: '左巧巨' },
-  { number: 49, char: '己', name: 'おのれ', reading: 'コ', strokes: 3, category: 'basic', exampleChars: '巻改忌' },
-  { number: 50, char: '巾', name: 'はば', reading: 'キン', strokes: 3, category: 'hen', exampleChars: '市布帳' },
-  { number: 51, char: '干', name: 'かん', reading: 'カン', strokes: 3, category: 'basic', exampleChars: '平年幸' },
-  { number: 53, char: '广', name: 'まだれ', reading: 'ゲン', strokes: 3, category: 'tare', exampleChars: '庁席度' },
-  { number: 54, char: '廴', name: 'えんにょう', reading: 'イン', strokes: 3, category: 'nyo', exampleChars: '延廷建' },
-  { number: 57, char: '弓', name: 'ゆみ', reading: 'キュウ', strokes: 3, category: 'hen', exampleChars: '引弱張' },
-  { number: 60, char: '彳', name: 'ぎょうにんべん', reading: 'テキ', strokes: 3, category: 'hen', exampleChars: '役彼待' },
-  { number: 61, char: '心', name: 'こころ・りっしんべん', reading: 'シン', strokes: 4, category: 'ashi', exampleChars: '思快情' },
-  { number: 62, char: '戈', name: 'ほこづくり', reading: 'カ', strokes: 4, category: 'tsukuri', exampleChars: '成戦我' },
-  { number: 63, char: '戸', name: 'と', reading: 'コ', strokes: 4, category: 'tare', exampleChars: '房所扇' },
-  { number: 64, char: '手', name: 'て・てへん', reading: 'シュ', strokes: 4, category: 'hen', exampleChars: '打指持' },
-  { number: 65, char: '支', name: 'しにょう', reading: 'シ', strokes: 4, category: 'tsukuri', exampleChars: '枝鼓' },
-  { number: 66, char: '攴', name: 'ぼく・のぶん', reading: 'ホク', strokes: 4, category: 'tsukuri', exampleChars: '改教敬' },
-  { number: 67, char: '文', name: 'ぶん', reading: 'ブン', strokes: 4, category: 'basic', exampleChars: '斉斑' },
-  { number: 69, char: '斤', name: 'おの', reading: 'キン', strokes: 4, category: 'tsukuri', exampleChars: '斬新断' },
-  { number: 70, char: '方', name: 'ほう', reading: 'ホウ', strokes: 4, category: 'hen', exampleChars: '旅旋族' },
-  { number: 72, char: '日', name: 'ひ・ひへん', reading: 'ニチ', strokes: 4, category: 'hen', exampleChars: '明時晴' },
-  { number: 73, char: '曰', name: 'ひらび', reading: 'エツ', strokes: 4, category: 'basic', exampleChars: '書最替' },
-  { number: 74, char: '月', name: 'つき・にくづき', reading: 'ゲツ', strokes: 4, category: 'hen', exampleChars: '有服望' },
-  { number: 75, char: '木', name: 'き・きへん', reading: 'ボク', strokes: 4, category: 'hen', exampleChars: '林本校' },
-  { number: 76, char: '欠', name: 'あくび', reading: 'ケツ', strokes: 4, category: 'tsukuri', exampleChars: '次欧歌' },
-  { number: 77, char: '止', name: 'とめる', reading: 'シ', strokes: 4, category: 'hen', exampleChars: '正歩歴' },
-  { number: 78, char: '歹', name: 'がつへん', reading: 'タイ', strokes: 4, category: 'hen', exampleChars: '死残列' },
-  { number: 85, char: '水', name: 'みず・さんずい', reading: 'スイ', strokes: 4, category: 'hen', exampleChars: '江海河' },
-  { number: 86, char: '火', name: 'ひ・れっか', reading: 'カ', strokes: 4, category: 'ashi', exampleChars: '灯焼熱' },
-  { number: 93, char: '牛', name: 'うし', reading: 'ギュウ', strokes: 4, category: 'hen', exampleChars: '物特牧' },
-  { number: 94, char: '犬', name: 'いぬ・けものへん', reading: 'ケン', strokes: 4, category: 'hen', exampleChars: '犯状猫' },
-  { number: 96, char: '玉', name: 'たま・たまへん', reading: 'ギョク', strokes: 5, category: 'hen', exampleChars: '王理現' },
-  { number: 102, char: '田', name: 'た', reading: 'デン', strokes: 5, category: 'hen', exampleChars: '町画界' },
-  { number: 104, char: '疒', name: 'やまいだれ', reading: 'ダク', strokes: 5, category: 'tare', exampleChars: '病症療' },
-  { number: 109, char: '目', name: 'め・めへん', reading: 'モク', strokes: 5, category: 'hen', exampleChars: '相見省' },
-  { number: 111, char: '矢', name: 'や', reading: 'シ', strokes: 5, category: 'hen', exampleChars: '知短矯' },
-  { number: 112, char: '石', name: 'いし', reading: 'セキ', strokes: 5, category: 'hen', exampleChars: '砂破研' },
-  { number: 113, char: '示', name: 'しめす・しめすへん', reading: 'シ', strokes: 5, category: 'hen', exampleChars: '祝神票' },
-  { number: 115, char: '禾', name: 'のぎへん', reading: 'カ', strokes: 5, category: 'hen', exampleChars: '私利科' },
-  { number: 116, char: '穴', name: 'あなかんむり', reading: 'ケツ', strokes: 5, category: 'kanmuri', exampleChars: '空窓究' },
-  { number: 118, char: '竹', name: 'たけ・たけかんむり', reading: 'チク', strokes: 6, category: 'kanmuri', exampleChars: '笑筆箱' },
-  { number: 119, char: '米', name: 'こめ', reading: 'ベイ', strokes: 6, category: 'hen', exampleChars: '粉精糖' },
-  { number: 120, char: '糸', name: 'いと・いとへん', reading: 'シ', strokes: 6, category: 'hen', exampleChars: '約級純' },
-  { number: 128, char: '耳', name: 'みみ', reading: 'ジ', strokes: 6, category: 'hen', exampleChars: '聞職聖' },
-  { number: 130, char: '肉', name: 'にく', reading: 'ニク', strokes: 6, category: 'hen', exampleChars: '肌肺脂' },
-  { number: 140, char: '艸', name: 'くさかんむり', reading: 'ソウ', strokes: 6, category: 'kanmuri', exampleChars: '花茶薬' },
-  { number: 142, char: '虫', name: 'むし', reading: 'チュウ', strokes: 6, category: 'hen', exampleChars: '蚊蛍蝉' },
-  { number: 144, char: '行', name: 'ぎょう・ゆきがまえ', reading: 'コウ', strokes: 6, category: 'kamae', exampleChars: '街術衛' },
-  { number: 145, char: '衣', name: 'ころも・ころもへん', reading: 'イ', strokes: 6, category: 'hen', exampleChars: '表被初' },
-  { number: 147, char: '見', name: 'みる', reading: 'ケン', strokes: 7, category: 'tsukuri', exampleChars: '規視覚' },
-  { number: 149, char: '言', name: 'ことば・ごんべん', reading: 'ゲン', strokes: 7, category: 'hen', exampleChars: '話語読' },
-  { number: 154, char: '貝', name: 'かい・かいへん', reading: 'バイ', strokes: 7, category: 'hen', exampleChars: '財貯資' },
-  { number: 157, char: '足', name: 'あし・あしへん', reading: 'ソク', strokes: 7, category: 'hen', exampleChars: '路跳躍' },
-  { number: 159, char: '車', name: 'くるま', reading: 'シャ', strokes: 7, category: 'hen', exampleChars: '軍輪載' },
-  { number: 162, char: '辵', name: 'しんにょう', reading: 'チャク', strokes: 7, category: 'nyo', exampleChars: '近通過' },
-  { number: 163, char: '邑', name: 'おおざと', reading: 'ユウ', strokes: 7, category: 'tsukuri', exampleChars: '部都郭' },
-  { number: 167, char: '金', name: 'かね・かねへん', reading: 'キン', strokes: 8, category: 'hen', exampleChars: '銀鋼鏡' },
-  { number: 168, char: '長', name: 'ながい', reading: 'チョウ', strokes: 8, category: 'basic', exampleChars: '套肆' },
-  { number: 169, char: '門', name: 'もん・もんがまえ', reading: 'モン', strokes: 8, category: 'kamae', exampleChars: '開間閣' },
-  { number: 170, char: '阜', name: 'こざとへん', reading: 'フ', strokes: 8, category: 'hen', exampleChars: '防院陰' },
-  { number: 172, char: '隹', name: 'ふるとり', reading: 'スイ', strokes: 8, category: 'tsukuri', exampleChars: '雄雅難' },
-  { number: 173, char: '雨', name: 'あめ・あめかんむり', reading: 'ウ', strokes: 8, category: 'kanmuri', exampleChars: '電雪露' },
-  { number: 181, char: '頁', name: 'おおがい', reading: 'ケツ', strokes: 9, category: 'tsukuri', exampleChars: '頂頭顧' },
-  { number: 184, char: '食', name: 'しょく・しょくへん', reading: 'ショク', strokes: 9, category: 'hen', exampleChars: '飯館館' },
-  { number: 187, char: '馬', name: 'うま', reading: 'バ', strokes: 10, category: 'hen', exampleChars: '駅駆騒' },
-  { number: 195, char: '魚', name: 'うお・さかなへん', reading: 'ギョ', strokes: 11, category: 'hen', exampleChars: '鮮鯨鯛' },
-  { number: 196, char: '鳥', name: 'とり', reading: 'チョウ', strokes: 11, category: 'tsukuri', exampleChars: '鳴鳩鴨' },
-];
+export const KANGXI_RADICALS_CATALOG: KangxiRadicalItem[] = KANGXI_214_RADICALS.map((k) => ({
+  number: k.number,
+  char: k.displayChar || k.char,
+  name: k.name,
+  reading: k.reading,
+  strokes: k.strokes,
+  category: k.category,
+  exampleChars: k.kanjiList.slice(0, 4).join(''),
+}));
 
 /**
  * Standard default radical definitions for Radical Studio

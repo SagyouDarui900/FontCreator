@@ -57,6 +57,7 @@ import {
 } from 'lucide-react';
 import { FontProject, GlyphData, PathContour, BezierNode, Point, PixelGlyphData } from '../types';
 import { UNICODE_CATEGORIES, getCategoryCharList } from '../data/unicodeTables';
+import { shareOrDownloadFont } from '../utils/fontCompiler';
 
 export type PixelGridPreset = '4x4' | '5x7' | '8x8' | '12x12' | '16x16' | '24x24' | '32x32' | '64x64' | '128x128' | 'custom';
 export type PixelDrawTool = 'pencil' | 'eraser' | 'bucket' | 'line' | 'rect' | 'rect_filled' | 'circle' | 'circle_filled';
@@ -746,6 +747,23 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
     }
   }, [history, historyIdx, autoSaveGlyph, currentUnicode]);
 
+  const handleShift = useCallback(
+    (dx: number, dy: number) => {
+      const next = new Uint8Array(gridWidth * gridHeight);
+      for (let y = 0; y < gridHeight; y++) {
+        for (let x = 0; x < gridWidth; x++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
+            next[ny * gridWidth + nx] = grid[y * gridWidth + x];
+          }
+        }
+      }
+      pushHistory(next);
+    },
+    [gridWidth, gridHeight, grid, pushHistory]
+  );
+
   // Dedicated Keyboard Shortcuts for Pixel Font Studio (Isolated from main canvas)
   useEffect(() => {
     if (!isOpen) return;
@@ -818,15 +836,30 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
           e.preventDefault();
           e.stopPropagation();
           setTool('move');
-        } else if (key === '[') {
-          e.preventDefault();
-          e.stopPropagation();
-          setBrushSize((prev) => Math.max(1, prev - 1));
-        } else if (key === ']') {
-          e.preventDefault();
-          e.stopPropagation();
-          setBrushSize((prev) => Math.min(8, prev + 1));
         }
+      }
+
+      // Arrow keys shift (1px move)
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === 'ArrowUp') handleShift(0, -1);
+        else if (e.key === 'ArrowDown') handleShift(0, 1);
+        else if (e.key === 'ArrowLeft') handleShift(-1, 0);
+        else if (e.key === 'ArrowRight') handleShift(1, 0);
+        return;
+      }
+
+      // Stop Space, Delete, Backspace, Ctrl+A/C/V from reaching background canvas
+      if (
+        e.code === 'Space' ||
+        e.key === ' ' ||
+        e.key === 'Delete' ||
+        e.key === 'Backspace' ||
+        ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v', 'x', 'd'].includes(e.key.toLowerCase())) ||
+        (!e.ctrlKey && !e.metaKey && !e.altKey && ['g', 's', 'f', 'z', 't', 'q'].includes(e.key.toLowerCase()))
+      ) {
+        e.stopPropagation();
       }
     };
 
@@ -834,7 +867,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
     return () => {
       window.removeEventListener('keydown', handleStudioKeyDown, true);
     };
-  }, [isOpen, handleUndo, handleRedo, onClose]);
+  }, [isOpen, handleUndo, handleRedo, onClose, handleShift]);
 
   // Handle Preset Resolution Changes
   const handlePresetSelect = (p: PixelGridPreset) => {
@@ -906,20 +939,6 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
     for (let y = 0; y < gridHeight; y++) {
       for (let x = 0; x < gridWidth; x++) {
         next[x * gridWidth + (gridHeight - 1 - y)] = grid[y * gridWidth + x];
-      }
-    }
-    pushHistory(next);
-  };
-
-  const handleShift = (dx: number, dy: number) => {
-    const next = new Uint8Array(gridWidth * gridHeight);
-    for (let y = 0; y < gridHeight; y++) {
-      for (let x = 0; x < gridWidth; x++) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-          next[ny * gridWidth + nx] = grid[y * gridWidth + x];
-        }
       }
     }
     pushHistory(next);
@@ -1111,6 +1130,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     e.preventDefault();
+    e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
     const pt = getGridCoordFromEvent(e);
@@ -1134,6 +1154,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.stopPropagation();
     const pt = getGridCoordFromEvent(e);
     setHoverPos(pt);
 
@@ -1181,6 +1202,14 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.stopPropagation();
+    try {
+      if ((e.target as HTMLElement)?.hasPointerCapture?.(e.pointerId)) {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      // safe fallback
+    }
     if (!isDrawing) return;
     setIsDrawing(false);
 
@@ -1369,6 +1398,106 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
     brushStamp,
     mobileTab,
   ]);
+
+  // Export directly as OpenType Font (.otf) or TrueType Font (.ttf)
+  const handleExportFontFile = async (format: 'otf' | 'ttf' = 'otf') => {
+    // 1. Ensure current glyph is flushed into project state
+    autoSaveGlyph(grid, currentUnicode);
+
+    // 2. Build complete project glyph map ensuring valid contours for all pixel glyphs
+    const updatedGlyphs: Record<number, GlyphData> = { ...project.glyphs };
+
+    const isCurrentActive = grid.some((p) => p === 1);
+    if (isCurrentActive) {
+      const currentContours = pixelGridToContours(
+        grid,
+        gridWidth,
+        gridHeight,
+        project.metadata.unitsPerEm || 1000,
+        project.metadata.ascender || 800,
+        project.metadata.descender || -200,
+        currentGlyph.advanceWidth || 1000,
+        dotShape,
+        mergeContours
+      );
+      updatedGlyphs[currentUnicode] = {
+        ...currentGlyph,
+        unicode: currentUnicode,
+        char: currentGlyph.char || (currentUnicode ? String.fromCodePoint(currentUnicode) : ''),
+        contours: currentContours,
+        pixelData: {
+          width: gridWidth,
+          height: gridHeight,
+          data: Array.from(grid),
+          shape: dotShape,
+        },
+        modified: true,
+      };
+    }
+
+    const hasAnyGlyphs = Object.values(updatedGlyphs).some(
+      (g) => (g.pixelData && g.pixelData.data && g.pixelData.data.some((d) => d === 1)) || (g.contours && g.contours.length > 0)
+    );
+
+    if (!hasAnyGlyphs) {
+      onShowToast('作成済みのドット文字がありません。先に文字を描画してください。', 'warning');
+      return;
+    }
+
+    // Ensure all glyphs with pixelData have vector contours for compilation
+    for (const [uStr, g] of Object.entries(updatedGlyphs)) {
+      const u = parseInt(uStr, 10);
+      if (g.pixelData && g.pixelData.data && (!g.contours || g.contours.length === 0)) {
+        const gGrid = new Uint8Array(g.pixelData.data);
+        if (gGrid.some((d) => d === 1)) {
+          const c = pixelGridToContours(
+            gGrid,
+            g.pixelData.width || gridWidth,
+            g.pixelData.height || gridHeight,
+            project.metadata.unitsPerEm || 1000,
+            project.metadata.ascender || 800,
+            project.metadata.descender || -200,
+            g.advanceWidth || 1000,
+            g.pixelData.shape || dotShape,
+            mergeContours
+          );
+          updatedGlyphs[u] = { ...g, contours: c };
+        }
+      }
+    }
+
+    const projectToExport: FontProject = {
+      ...project,
+      glyphs: updatedGlyphs,
+      pixelFontSettings: {
+        isPixelFontProject: true,
+        defaultWidth: gridWidth,
+        defaultHeight: gridHeight,
+        dotShape,
+        mergeContours,
+      },
+      updatedAt: Date.now(),
+    };
+
+    try {
+      const result = await shareOrDownloadFont(projectToExport, format, {
+        scaleFactor: 1.0,
+        balanceSideBearings: false,
+        mergeOverlaps: false,
+        normalizeWinding: true,
+      });
+
+      const formatUpper = format.toUpperCase();
+      const msg =
+        result.method === 'share'
+          ? `「${project.metadata.familyName || 'PixelFont'}」の ${formatUpper} 共有シートを開きました`
+          : `「${project.metadata.familyName || 'PixelFont'}」を ${formatUpper} 形式 (.${format}) で直接出力しました！`;
+      onShowToast(msg, 'success');
+    } catch (err: any) {
+      console.error('Failed to export OTF/TTF font:', err);
+      onShowToast(`フォントの書き出しに失敗しました: ${err?.message || '不明なエラー'}`, 'error');
+    }
+  };
 
   // Export Single PNG
   const handleExportSinglePng = () => {
@@ -1637,7 +1766,14 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-2 bg-black/85 backdrop-blur-md animate-in fade-in duration-150 pointer-events-auto"
       onPointerDown={(e) => e.stopPropagation()}
+      onPointerMove={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onMouseMove={(e) => e.stopPropagation()}
+      onMouseUp={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
       onWheel={(e) => e.stopPropagation()}
     >
       {/* Studio Workstation Container */}
@@ -1696,6 +1832,16 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
 
           {/* Quick Actions, View Toggles & Window Controls */}
           <div className="flex items-center space-x-1.5 sm:space-x-2">
+            {/* Direct OTF Font Export Button */}
+            <button
+              onClick={() => handleExportFontFile('otf')}
+              className="px-2.5 py-1 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white flex items-center space-x-1.5 shadow-xs border border-emerald-400 active:scale-95 transition-all"
+              title="作成したピクセルフォントを直接OTF形式でダウンロード (.otf)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>OTF出力</span>
+            </button>
+
             {/* Toggle Glyph List Sidebar */}
             <button
               onClick={() => setShowGlyphDrawer(!showGlyphDrawer)}
@@ -2989,10 +3135,44 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                   Unity, Godot, Unreal, Phaser や Arduino/ESP32 マイコン用の各種形式で出力します。
                 </p>
 
-                {/* 1. Spritesheet */}
+                {/* 1. Direct OTF Font Export */}
+                <button
+                  onClick={() => handleExportFontFile('otf')}
+                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-between active:scale-95 shadow-xs border border-emerald-400 min-h-[44px]"
+                  title="作成したピクセルフォントを直接OTF形式でダウンロード (.otf)"
+                >
+                  <span className="flex items-center space-x-2">
+                    <Download className="w-4 h-4" />
+                    <span>OTFフォント書き出し (.otf)</span>
+                  </span>
+                  <span className="text-[10px] font-mono uppercase bg-emerald-700/80 px-1.5 py-0.5 rounded-xs">OTF</span>
+                </button>
+
+                {/* 2. Direct TTF Font Export */}
+                <button
+                  onClick={() => handleExportFontFile('ttf')}
+                  className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
+                    isLight
+                      ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
+                      : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
+                  }`}
+                  title="作成したピクセルフォントをTTF形式でダウンロード (.ttf)"
+                >
+                  <span className="flex items-center space-x-2">
+                    <Download className="w-4 h-4" />
+                    <span>TTFフォント書き出し (.ttf)</span>
+                  </span>
+                  <span className="text-[10px] font-mono uppercase opacity-75">TTF</span>
+                </button>
+
+                {/* 3. Spritesheet */}
                 <button
                   onClick={handleExportSpritesheet}
-                  className="w-full py-2.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-between active:scale-95 shadow-xs border border-emerald-500 min-h-[44px]"
+                  className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
+                    isLight
+                      ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
+                      : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
+                  }`}
                 >
                   <span className="flex items-center space-x-2">
                     <LayoutGrid className="w-4 h-4" />
@@ -3001,7 +3181,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                   <Download className="w-4 h-4" />
                 </button>
 
-                {/* 2. C/C++ Header */}
+                {/* 4. C/C++ Header */}
                 <button
                   onClick={handleExportCHeader}
                   className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
@@ -3017,7 +3197,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                   <FileCode className="w-4 h-4" />
                 </button>
 
-                {/* 3. Single PNG */}
+                {/* 5. Single PNG */}
                 <button
                   onClick={handleExportSinglePng}
                   className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
@@ -3097,10 +3277,44 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                   Unity, Godot, Unreal, Phaser, Pygame やマイコン(Arduino/ESP32)用の各種フォーマットへ一括出力します。
                 </p>
 
-                {/* 1. Spritesheet */}
+                {/* 1. Direct OTF Font Export */}
+                <button
+                  onClick={() => handleExportFontFile('otf')}
+                  className="w-full py-2 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-between transition-all active:scale-95 shadow-xs border border-emerald-400"
+                  title="作成したピクセルフォントを直接OTF形式でダウンロード (.otf)"
+                >
+                  <span className="flex items-center space-x-1.5">
+                    <Download className="w-3.5 h-3.5" />
+                    <span>OTFフォント書き出し</span>
+                  </span>
+                  <span className="text-[10px] font-mono uppercase bg-emerald-700/80 px-1 py-0.2 rounded-xs">.otf</span>
+                </button>
+
+                {/* 2. Direct TTF Font Export */}
+                <button
+                  onClick={() => handleExportFontFile('ttf')}
+                  className={`w-full py-1.5 px-2.5 border text-xs font-bold flex items-center justify-between transition-colors ${
+                    isLight
+                      ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-700'
+                      : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
+                  }`}
+                  title="作成したピクセルフォントをTTF形式でダウンロード (.ttf)"
+                >
+                  <span className="flex items-center space-x-1.5">
+                    <Download className="w-3.5 h-3.5" />
+                    <span>TTFフォント書き出し</span>
+                  </span>
+                  <span className="text-[10px] font-mono uppercase opacity-75">.ttf</span>
+                </button>
+
+                {/* 3. Spritesheet */}
                 <button
                   onClick={handleExportSpritesheet}
-                  className="w-full py-1.5 px-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-between transition-all active:scale-95 shadow-xs border border-emerald-500"
+                  className={`w-full py-1.5 px-2.5 border text-xs font-bold flex items-center justify-between transition-colors ${
+                    isLight
+                      ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-700'
+                      : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
+                  }`}
                   title="全文字のスプライトシート(PNG)と座標定義(JSON)を出力"
                 >
                   <span className="flex items-center space-x-1.5">
@@ -3110,7 +3324,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                   <Download className="w-3.5 h-3.5" />
                 </button>
 
-                {/* 2. C / C++ Array Header */}
+                {/* 4. C / C++ Array Header */}
                 <button
                   onClick={handleExportCHeader}
                   className={`w-full py-1.5 px-2.5 border text-xs font-bold flex items-center justify-between transition-colors ${

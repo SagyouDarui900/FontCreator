@@ -77,7 +77,15 @@ export const MetricsGuidesLayer: React.FC<MetricsGuidesLayerProps> = React.memo(
           strokeDasharray="4 2"
           opacity={0.8}
         />
-        <text x={advanceWidth - 110} y={-20} fill="#059669" fontWeight="bold">Advance: {advanceWidth}</text>
+        <text
+          x={advanceWidth > lsb + 160 ? advanceWidth - 6 : advanceWidth + 6}
+          textAnchor={advanceWidth > lsb + 160 ? 'end' : 'start'}
+          y={-20}
+          fill="#059669"
+          fontWeight="bold"
+        >
+          Advance: {advanceWidth}
+        </text>
       </g>
     );
   }

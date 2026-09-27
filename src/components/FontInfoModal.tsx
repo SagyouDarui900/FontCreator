@@ -46,7 +46,7 @@ const LICENSE_PRESETS = [
   {
     id: 'commercial_free',
     name: '商用フリー・ロイヤリティフリー (Free for Commercial)',
-    badge: '商用利用完全自由',
+    badge: '商用利用自由',
     desc: '個人・法人・同人・商業出版・ゲーム・映像問わずクレジット表記不要で自由利用可能。',
     license:
       '本フォントは商用・非商用問わず無償で自由に利用（印刷物・同人誌・ゲーム・アプリ・映像・Web等への組み込み）が可能です。ロイヤリティフリー。',
@@ -55,8 +55,8 @@ const LICENSE_PRESETS = [
   {
     id: 'cc0',
     name: 'CC0 1.0 全世界 パブリック・ドメイン',
-    badge: '著作権完全放棄',
-    desc: '権利を放棄し完全な共有財産（パブリックドメイン）として誰でも無制限に利用可能。',
+    badge: '著作権放棄',
+    desc: '権利を放棄し共有財産（パブリックドメイン）として誰でも無制限に利用可能。',
     license:
       'To the extent possible under law, the author has waived all copyright and related rights to this work under Creative Commons CC0 1.0 Universal.',
     licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/',
@@ -65,7 +65,7 @@ const LICENSE_PRESETS = [
     id: 'mit',
     name: 'MIT License',
     badge: '汎用オープンソース',
-    desc: 'ソフトウェアやフォントに広く使われる極めて簡潔で自由度の高いライセンス。',
+    desc: 'ソフトウェアやフォントに広く使われる自由度の高いオープンソースライセンス。',
     license:
       'Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated font files to use, copy, modify, merge, publish, distribute without restriction.',
     licenseUrl: 'https://opensource.org/licenses/MIT',
@@ -543,7 +543,7 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                         </span>
                       </h4>
                       <p className="text-[10.5px] opacity-75 leading-relaxed mt-0.5 break-words">
-                        全文字のベクター輪郭、メトリクス設定、部首パーツ定義を完全な構造化JSONでローカル保存します。
+                        全文字のベクター輪郭、メトリクス設定、部首パーツ定義をJSON形式でローカル保存します。
                       </p>
                     </div>
                   </div>
@@ -727,7 +727,7 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                     <span>Q. 作成したフォントは商用利用できますか？</span>
                   </h4>
                   <p className="mt-1 opacity-80 leading-relaxed">
-                    <strong>A. はい、完全に商用利用可能です。</strong>
+                    <strong>A. はい、商用利用可能です。</strong>
                     同人誌や商業出版、ポスター・チラシ、WebサイトでのWebフォント利用、YouTubeやTV番組のテロップ、ゲームやスマートフォンアプリ、LINEスタンプ、グッズ販売、社名・ブランドロゴなど、あらゆる用途で自由に無制限にご活用いただけます。
                   </p>
                 </div>
@@ -742,7 +742,7 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                     <span>Q. 作成したフォントを有料で販売・無償配布できますか？</span>
                   </h4>
                   <p className="mt-1 opacity-80 leading-relaxed">
-                    <strong>A. はい、Boothや自サイト等での有料販売・フリー配布も完全に自由です。</strong>
+                    <strong>A. はい、Boothや自サイト等での有料販売・無償配布も自由に行えます。</strong>
                     当ツール運営側がロイヤリティや利用料を請求することは一切ございません。
                   </p>
                 </div>
@@ -758,7 +758,7 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                   </h4>
                   <p className="mt-1 opacity-80 leading-relaxed">
                     <strong>A. ご自身の手書き文字・スケッチ、または権利のクリアな素材をご利用ください。</strong>
-                    他者が制作した著作権のある既存市販フォントをそのまま丸ごとトレースして再配布する行為は権利侵害となる恐れがあります。ご自身の手書き原稿やパブリックドメイン（著作権満了の歴史的書物等）から作成いただくことで、100%オリジナルの安心なフォントを作成できます。
+                    他者が制作した著作権のあるフォントをトレースして再配布する行為は権利侵害となります。独自の手書き原稿またはパブリックドメイン資料から作成してください。
                   </p>
                 </div>
               </div>

@@ -45,7 +45,7 @@ export async function vectorizeImage(
     const srcCanvas = imageSource as HTMLCanvasElement;
     canvasW = srcCanvas.width;
     canvasH = srcCanvas.height;
-    const maxDim = 600;
+    const maxDim = 1024;
     if (canvasW > maxDim || canvasH > maxDim) {
       const scale = Math.min(maxDim / canvasW, maxDim / canvasH);
       canvasW = Math.round(canvasW * scale);
@@ -73,8 +73,8 @@ export async function vectorizeImage(
       img = imageSource as HTMLImageElement;
     }
 
-    // Limit processing resolution for fast interactive tracing (max 500px)
-    const maxDim = 500;
+    // High resolution for clean interactive tracing (up to 1024px)
+    const maxDim = 1024;
     canvasW = img.naturalWidth || img.width || 400;
     canvasH = img.naturalHeight || img.height || 400;
     if (canvasW > maxDim || canvasH > maxDim) {
@@ -236,12 +236,17 @@ export async function vectorizeImage(
     }
   }
 
-  // 5. Simplify loops with Ramer-Douglas-Peucker (RDP) algorithm
-  const simplifiedLoops = loops
+  // 5. Pre-filter loops with sub-pixel Laplacian anti-aliasing to eliminate 1px raster staircases
+  // 5. Pre-filter loops with corner-preserving sub-pixel Laplacian anti-aliasing to eliminate 1px raster staircases
+  const preSmoothedLoops = loops.map((loop) => smoothPolygonLoop(loop, 1));
+
+  // 6. Simplify loops with Ramer-Douglas-Peucker (RDP) algorithm with tight tolerance
+  const simplifiedLoops = preSmoothedLoops
     .map((loop) => rdpSimplify(loop, opts.smoothing))
+    .map(snapCollinearAndAxisAlignedSegments)
     .filter((loop) => loop.length >= 3);
 
-  // 6. Convert simplified polygons to smooth cubic Bezier nodes
+  // 7. Convert simplified polygons to smooth cubic Bezier nodes
   const rawContours: PathContour[] = simplifiedLoops.map((pts) => {
     const nodes = pointsToBezierContourNodes(pts);
     return {
@@ -251,7 +256,7 @@ export async function vectorizeImage(
     };
   });
 
-  // 7. Normalize & Fit to 1000x1000 EM Box coordinate system
+  // 8. Normalize & Fit to 1000x1000 EM Box coordinate system
   if (rawContours.length === 0) {
     return {
       contours: [],
@@ -298,6 +303,107 @@ export async function vectorizeImage(
     width: canvasW,
     height: canvasH,
   };
+}
+
+/**
+ * Snap near-horizontal or near-vertical segments to perfect orthogonal lines and collapse redundant collinear points
+ */
+export function snapCollinearAndAxisAlignedSegments(points: Point[]): Point[] {
+  if (points.length < 3) return points;
+  const n = points.length;
+  const snapped: Point[] = points.map((p) => ({ x: p.x, y: p.y }));
+
+  // 1. Snap near-horizontal and near-vertical segments
+  for (let i = 0; i < n; i++) {
+    const nextIdx = (i + 1) % n;
+    const p1 = snapped[i];
+    const p2 = snapped[nextIdx];
+    const dx = Math.abs(p2.x - p1.x);
+    const dy = Math.abs(p2.y - p1.y);
+
+    // Near horizontal line (within 2px over > 12px span)
+    if (dy <= 2.2 && dx >= 12) {
+      const avgY = Math.round((p1.y + p2.y) / 2);
+      p1.y = avgY;
+      p2.y = avgY;
+    }
+    // Near vertical line (within 2px over > 12px span)
+    else if (dx <= 2.2 && dy >= 12) {
+      const avgX = Math.round((p1.x + p2.x) / 2);
+      p1.x = avgX;
+      p2.x = avgX;
+    }
+  }
+
+  // 2. Collapse redundant collinear points (triplets on the exact same straight line)
+  const result: Point[] = [];
+  for (let i = 0; i < n; i++) {
+    const prev = snapped[(i - 1 + n) % n];
+    const curr = snapped[i];
+    const next = snapped[(i + 1) % n];
+
+    const v1x = curr.x - prev.x;
+    const v1y = curr.y - prev.y;
+    const v2x = next.x - curr.x;
+    const v2y = next.y - curr.y;
+
+    const cross = Math.abs(v1x * v2y - v1y * v2x);
+    const len1 = Math.hypot(v1x, v1y);
+    const len2 = Math.hypot(v2x, v2y);
+
+    // If points are perfectly collinear and in the same direction, skip intermediate point
+    if (len1 > 0 && len2 > 0 && cross / (len1 * len2) < 0.02 && (v1x * v2x + v1y * v2y) > 0) {
+      continue;
+    }
+    result.push(curr);
+  }
+
+  return result.length >= 3 ? result : snapped;
+}
+
+/**
+ * Corner-preserving sub-pixel Laplacian polygon smoothing to eliminate rasterization staircases
+ */
+export function smoothPolygonLoop(points: Point[], passes: number = 1): Point[] {
+  if (points.length < 4) return points;
+  let pts = points;
+  for (let p = 0; p < passes; p++) {
+    const nextPts: Point[] = [];
+    const n = pts.length;
+    for (let i = 0; i < n; i++) {
+      const prev = pts[(i - 1 + n) % n];
+      const curr = pts[i];
+      const next = pts[(i + 1) % n];
+
+      const v1x = curr.x - prev.x;
+      const v1y = curr.y - prev.y;
+      const len1 = Math.hypot(v1x, v1y);
+
+      const v2x = next.x - curr.x;
+      const v2y = next.y - curr.y;
+      const len2 = Math.hypot(v2x, v2y);
+
+      if (len1 === 0 || len2 === 0) {
+        nextPts.push(curr);
+        continue;
+      }
+
+      // If angle is a sharp corner (> 30°), DO NOT smooth it to prevent corner rounding & distortion
+      const dot = (v1x * v2x + v1y * v2y) / (len1 * len2);
+      if (dot < 0.866) {
+        nextPts.push(curr);
+        continue;
+      }
+
+      // Gentle sub-pixel smoothing for continuous curve spans only
+      nextPts.push({
+        x: prev.x * 0.18 + curr.x * 0.64 + next.x * 0.18,
+        y: prev.y * 0.18 + curr.y * 0.64 + next.y * 0.18,
+      });
+    }
+    pts = nextPts;
+  }
+  return pts;
 }
 
 /**
@@ -354,7 +460,7 @@ export function pointsToBezierContourNodes(points: Point[]): BezierNode[] {
   if (n === 0) return [];
 
   const nodes: BezierNode[] = [];
-  const tension = 0.30; // smoothness factor for genuine curves
+  const tension = 0.28; // Controlled tension for authentic typographic curves
 
   for (let i = 0; i < n; i++) {
     const curr = cleanPoints[i];
@@ -370,22 +476,21 @@ export function pointsToBezierContourNodes(points: Point[]): BezierNode[] {
     const len2 = Math.hypot(v2x, v2y);
 
     if (len1 === 0 || len2 === 0) {
-      nodes.push({ id: generateId(), x: curr.x, y: curr.y, type: 'corner' });
+      nodes.push({ id: generateId(), x: Math.round(curr.x), y: Math.round(curr.y), type: 'corner', handleIn: null, handleOut: null });
       continue;
     }
 
     // Angle of deflection between incoming and outgoing segment
     const dot = (v1x * v2x + v1y * v2y) / (len1 * len2);
     const clampedDot = Math.max(-1, Math.min(1, dot));
-    const turnAngleRad = Math.acos(clampedDot); // 0 = straight line, PI = 180° hairpin turn
 
-    // If turn angle is sharp (e.g. > 30 degrees / 0.52 rad) or near straight (< 0.06 rad),
-    // keep it as a crisp corner node with no protruding handles
-    if (turnAngleRad > 0.52 || turnAngleRad < 0.06) {
+    // Sharp corners (angle > 28° or dot < 0.88): MUST be crisp corner nodes without handles
+    // This perfectly protects serifs, stroke turns, and orthogonal junctions (90°)
+    if (clampedDot < 0.88) {
       nodes.push({
         id: generateId(),
-        x: curr.x,
-        y: curr.y,
+        x: Math.round(curr.x),
+        y: Math.round(curr.y),
         type: 'corner',
         handleIn: null,
         handleOut: null,
@@ -393,26 +498,59 @@ export function pointsToBezierContourNodes(points: Point[]): BezierNode[] {
       continue;
     }
 
-    // For smooth gentle curves, compute tangent bounded strictly by adjacent edge lengths
-    const maxHandleLen = Math.min(len1, len2) * tension;
-    const tangentX = next.x - prev.x;
-    const tangentY = next.y - prev.y;
-    const tangentLen = Math.hypot(tangentX, tangentY) || 1;
-    const normTanX = tangentX / tangentLen;
-    const normTanY = tangentY / tangentLen;
+    // Check if both segments are nearly collinear (straight line span)
+    if (clampedDot > 0.998) {
+      nodes.push({
+        id: generateId(),
+        x: Math.round(curr.x),
+        y: Math.round(curr.y),
+        type: 'corner',
+        handleIn: null,
+        handleOut: null,
+      });
+      continue;
+    }
+
+    // Tangent calculation with harmonic bisector weighting for curved spans
+    const u1x = v1x / len1;
+    const u1y = v1y / len1;
+    const u2x = v2x / len2;
+    const u2y = v2y / len2;
+
+    let tanX = u1x + u2x;
+    let tanY = u1y + u2y;
+    let tanLen = Math.hypot(tanX, tanY);
+
+    if (tanLen < 0.001) {
+      tanX = -u1y;
+      tanY = u1x;
+      tanLen = 1;
+    } else {
+      tanX /= tanLen;
+      tanY /= tanLen;
+    }
+
+    // Curvature damping for smooth, natural cubic transitions
+    const cornerDamping = Math.max(0.1, (1 + clampedDot) * 0.5);
+    const handleRatio = tension * cornerDamping;
+
+    const maxInLen = Math.min(len1 * 0.35, 90);
+    const maxOutLen = Math.min(len2 * 0.35, 90);
+    const hInLen = Math.min(len1 * handleRatio, maxInLen);
+    const hOutLen = Math.min(len2 * handleRatio, maxOutLen);
 
     nodes.push({
       id: generateId(),
-      x: curr.x,
-      y: curr.y,
+      x: Math.round(curr.x),
+      y: Math.round(curr.y),
       type: 'smooth',
       handleIn: {
-        x: Math.round(curr.x - normTanX * maxHandleLen),
-        y: Math.round(curr.y - normTanY * maxHandleLen),
+        x: Math.round(curr.x - tanX * hInLen),
+        y: Math.round(curr.y - tanY * hInLen),
       },
       handleOut: {
-        x: Math.round(curr.x + normTanX * maxHandleLen),
-        y: Math.round(curr.y + normTanY * maxHandleLen),
+        x: Math.round(curr.x + tanX * hOutLen),
+        y: Math.round(curr.y + tanY * hOutLen),
       },
     });
   }

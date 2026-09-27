@@ -32,6 +32,7 @@ import {
   outlineOpenContour,
   createSmallKanaContours,
   simplifyGlyphContours,
+  smoothAndFixTransformedContours,
 } from '../utils/pathUtils';
 import {
   calculateOptimalSpacing,
@@ -276,6 +277,20 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
     onChangeContours(scaleContours(contours, factor, factor));
   };
 
+  const handleAspectScale = (scaleX: number, scaleY: number) => {
+    if (contours.length === 0) return;
+    onCommitHistory();
+    onChangeContours(scaleContours(contours, scaleX, scaleY));
+  };
+
+  const handleSmoothAndFix = () => {
+    if (contours.length === 0) return;
+    onCommitHistory();
+    const cleaned = smoothAndFixTransformedContours(contours);
+    onChangeContours(cleaned);
+    onShowToast?.('輪郭のガタツキと変形歪みを滑らかに補正しました', 'success');
+  };
+
   const handleCenter = () => {
     if (contours.length === 0) return;
     onCommitHistory();
@@ -421,7 +436,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                       ? `文字: 「${selectedChar}」`
                       : '未選択'}
                   </span>
-                  <span className={`text-[10.5px] font-mono ${isLight ? 'text-stone-500' : 'text-emerald-400'}`}>
+                  <span className={`text-[10px] font-mono truncate ${isLight ? 'text-stone-500' : 'text-emerald-400'}`}>
                     U+{selectedUnicode.toString(16).toUpperCase().padStart(4, '0')} • {contours.length}パス ({totalNodes}頂点)
                   </span>
                 </div>
@@ -434,64 +449,64 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
             {expandedSections.nav && (
               <div className="p-2.5 pt-0 space-y-2 border-t border-stone-100 dark:border-stone-800/60">
                 {/* Navigation Button Grid */}
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  {/* Prev / Next Character */}
-                  <div className="flex space-x-1">
-                    <button
-                      onClick={onSelectPrevGlyph}
-                      disabled={!onSelectPrevGlyph}
-                      className={`flex-1 min-h-[38px] py-1.5 px-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1 transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${
-                        isLight
-                          ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
-                          : 'bg-[#101813] hover:bg-[#1f2d24] border-[#25362b] text-emerald-200'
-                      }`}
-                      title="前の文字へ (ショートカット: Alt+← または PageUp)"
-                    >
-                      <ChevronLeft className="w-4 h-4 shrink-0" />
-                      <span>前文字</span>
-                    </button>
-                    <button
-                      onClick={onSelectNextGlyph}
-                      disabled={!onSelectNextGlyph}
-                      className={`flex-1 min-h-[38px] py-1.5 px-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1 transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${
-                        isLight
-                          ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
-                          : 'bg-[#101813] hover:bg-[#1f2d24] border-[#25362b] text-emerald-200'
-                      }`}
-                      title="次の文字へ (ショートカット: Alt+→ または PageDown)"
-                    >
-                      <span>次文字</span>
-                      <ChevronRight className="w-4 h-4 shrink-0" />
-                    </button>
-                  </div>
+                <div className="grid grid-cols-2 gap-1.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={onSelectPrevGlyph}
+                    disabled={!onSelectPrevGlyph}
+                    className={`min-h-[38px] py-1.5 px-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1 transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${
+                      isLight
+                        ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
+                        : 'bg-[#101813] hover:bg-[#1f2d24] border-[#25362b] text-emerald-200'
+                    }`}
+                    title="前の文字へ (ショートカット: Alt+← または PageUp)"
+                  >
+                    <ChevronLeft className="w-4 h-4 shrink-0" />
+                    <span>前グリフ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSelectNextGlyph}
+                    disabled={!onSelectNextGlyph}
+                    className={`min-h-[38px] py-1.5 px-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1 transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${
+                      isLight
+                        ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
+                        : 'bg-[#101813] hover:bg-[#1f2d24] border-[#25362b] text-emerald-200'
+                    }`}
+                    title="次の文字へ (ショートカット: Alt+→ または PageDown)"
+                  >
+                    <span>次グリフ</span>
+                    <ChevronRight className="w-4 h-4 shrink-0" />
+                  </button>
 
-                  {/* Skip Uncompleted */}
-                  <div className="flex space-x-1">
-                    <button
-                      onClick={onSelectPrevUncompletedGlyph}
-                      disabled={!onSelectPrevUncompletedGlyph}
-                      className={`flex-1 min-h-[38px] py-1.5 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center space-x-0.5 transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${
-                        isLight
-                          ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900'
-                          : 'bg-amber-950/50 hover:bg-amber-900/60 border-amber-800 text-amber-200'
-                      }`}
-                      title="前の未作成グリフへスキップ"
-                    >
-                      <span>←未作</span>
-                    </button>
-                    <button
-                      onClick={onSelectNextUncompletedGlyph}
-                      disabled={!onSelectNextUncompletedGlyph}
-                      className={`flex-1 min-h-[38px] py-1.5 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center space-x-0.5 transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${
-                        isLight
-                          ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900'
-                          : 'bg-amber-950/50 hover:bg-amber-900/60 border-amber-800 text-amber-200'
-                      }`}
-                      title="次の未作成グリフへジャンプ"
-                    >
-                      <span>未作→</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={onSelectPrevUncompletedGlyph}
+                    disabled={!onSelectPrevUncompletedGlyph}
+                    className={`min-h-[36px] py-1.5 px-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1 transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${
+                      isLight
+                        ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900'
+                        : 'bg-amber-950/50 hover:bg-amber-900/60 border-amber-800 text-amber-200'
+                    }`}
+                    title="前の未作成グリフへスキップ"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 shrink-0" />
+                    <span>未作成文字</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSelectNextUncompletedGlyph}
+                    disabled={!onSelectNextUncompletedGlyph}
+                    className={`min-h-[36px] py-1.5 px-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1 transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${
+                      isLight
+                        ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900'
+                        : 'bg-amber-950/50 hover:bg-amber-900/60 border-amber-800 text-amber-200'
+                    }`}
+                    title="次の未作成グリフへジャンプ"
+                  >
+                    <span>未作成文字</span>
+                    <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                  </button>
                 </div>
               </div>
             )}
@@ -509,11 +524,11 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                 isLight ? 'hover:bg-stone-50' : 'hover:bg-[#1f2d24]'
               }`}
             >
-              <div className="flex items-center space-x-2 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0 pr-1">
                 <span className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-emerald-950' : 'text-emerald-300'}`}>
                   メトリクス数値指定
                 </span>
-                <span className={`text-[10.5px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 ${
                   isLight ? 'bg-emerald-100 text-emerald-900' : 'bg-emerald-950 text-emerald-300'
                 }`}>
                   幅:{advanceWidth ?? 1000} / LSB:{lsb ?? 50}
@@ -539,65 +554,69 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     <span className="text-[10px] font-mono text-stone-500">標準: 1000 (全角)</span>
                   </div>
 
-                  <div className="flex items-center space-x-1.5">
-                    <input
-                      type="number"
-                      value={advanceWidth ?? 1000}
-                      onChange={(e) => {
-                        onChangeAdvanceWidth(Number(e.target.value) || 1000);
-                        onCommitHistory();
-                      }}
-                      className={`flex-1 border rounded-lg px-3 py-2 text-sm font-mono font-bold focus:outline-hidden ${
-                        isLight
-                          ? 'bg-white border-[#c8ded3] text-stone-900 focus:border-emerald-700'
-                          : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 focus:border-emerald-500'
+                  {/* Input Row with Large +/- buttons */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleStepAdvance(-10)}
+                      className={`w-9 h-9 rounded-lg border text-sm font-bold flex items-center justify-center transition-all active:scale-95 cursor-pointer shrink-0 ${
+                        isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
                       }`}
-                      step={10}
-                    />
-
-                    {/* Step Adjustment Buttons */}
-                    <div className="flex space-x-1 shrink-0">
-                      <button
-                        onClick={() => handleStepAdvance(-50)}
-                        className={`min-h-[36px] px-2 py-1 rounded-md border text-xs font-mono font-bold transition-all active:scale-95 ${
-                          isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
+                      title="10px 減らす"
+                    >
+                      -
+                    </button>
+                    <div className="relative flex-1 min-w-0 flex items-center">
+                      <input
+                        type="number"
+                        value={advanceWidth ?? 1000}
+                        onChange={(e) => {
+                          onChangeAdvanceWidth(Number(e.target.value) || 1000);
+                          onCommitHistory();
+                        }}
+                        className={`w-full border rounded-lg px-2.5 py-1.5 pr-7 text-sm font-mono font-bold text-center focus:outline-hidden ${
+                          isLight
+                            ? 'bg-white border-[#c8ded3] text-stone-900 focus:border-emerald-700'
+                            : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 focus:border-emerald-500'
                         }`}
-                        title="50px 減らす"
-                      >
-                        -50
-                      </button>
-                      <button
-                        onClick={() => handleStepAdvance(-10)}
-                        className={`min-h-[36px] px-2 py-1 rounded-md border text-xs font-mono font-bold transition-all active:scale-95 ${
-                          isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
-                        }`}
-                        title="10px 減らす"
-                      >
-                        -10
-                      </button>
-                      <button
-                        onClick={() => handleStepAdvance(10)}
-                        className={`min-h-[36px] px-2 py-1 rounded-md border text-xs font-mono font-bold transition-all active:scale-95 ${
-                          isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
-                        }`}
-                        title="10px 増やす"
-                      >
-                        +10
-                      </button>
-                      <button
-                        onClick={() => handleStepAdvance(50)}
-                        className={`min-h-[36px] px-2 py-1 rounded-md border text-xs font-mono font-bold transition-all active:scale-95 ${
-                          isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
-                        }`}
-                        title="50px 増やす"
-                      >
-                        +50
-                      </button>
+                        step={10}
+                      />
+                      <span className="absolute right-2 text-[10px] font-mono text-stone-400 pointer-events-none font-bold">
+                        px
+                      </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleStepAdvance(10)}
+                      className={`w-9 h-9 rounded-lg border text-sm font-bold flex items-center justify-center transition-all active:scale-95 cursor-pointer shrink-0 ${
+                        isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
+                      }`}
+                      title="10px 増やす"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Step Increment Row (Clean 4-column distribution) */}
+                  <div className="grid grid-cols-4 gap-1">
+                    {[-50, -10, 10, 50].map((step) => (
+                      <button
+                        key={step}
+                        type="button"
+                        onClick={() => handleStepAdvance(step)}
+                        className={`py-1 rounded-md border text-[11px] font-mono font-bold text-center transition-all active:scale-95 cursor-pointer ${
+                          isLight
+                            ? 'bg-white border-stone-200 text-stone-700 hover:bg-emerald-50 hover:border-emerald-300'
+                            : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#1a261f]'
+                        }`}
+                      >
+                        {step > 0 ? `+${step}` : `${step}`}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Preset Width Chips */}
-                  <div className="flex flex-wrap gap-1 pt-1">
+                  <div className="flex flex-wrap gap-1 pt-0.5">
                     {[
                       { label: '全角 1000', val: 1000 },
                       { label: '半角 500', val: 500 },
@@ -607,6 +626,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     ].map((p) => (
                       <button
                         key={p.val}
+                        type="button"
                         onClick={() => handleSetAdvancePreset(p.val)}
                         className={`px-2 py-1 rounded-md border text-[10.5px] font-bold transition-all cursor-pointer ${
                           advanceWidth === p.val
@@ -637,65 +657,69 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     <span className="text-[10px] font-mono text-stone-500">標準: 50px</span>
                   </div>
 
-                  <div className="flex items-center space-x-1.5">
-                    <input
-                      type="number"
-                      value={lsb ?? 50}
-                      onChange={(e) => {
-                        onChangeLsb(Number(e.target.value) || 0);
-                        onCommitHistory();
-                      }}
-                      className={`flex-1 border rounded-lg px-3 py-2 text-sm font-mono font-bold focus:outline-hidden ${
-                        isLight
-                          ? 'bg-white border-[#c8ded3] text-stone-900 focus:border-emerald-700'
-                          : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 focus:border-emerald-500'
+                  {/* Input Row with Large +/- buttons */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleStepLsb(-5)}
+                      className={`w-9 h-9 rounded-lg border text-sm font-bold flex items-center justify-center transition-all active:scale-95 cursor-pointer shrink-0 ${
+                        isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
                       }`}
-                      step={5}
-                    />
-
-                    {/* Step Adjustment Buttons */}
-                    <div className="flex space-x-1 shrink-0">
-                      <button
-                        onClick={() => handleStepLsb(-20)}
-                        className={`min-h-[36px] px-2 py-1 rounded-md border text-xs font-mono font-bold transition-all active:scale-95 ${
-                          isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
+                      title="5px 減らす"
+                    >
+                      -
+                    </button>
+                    <div className="relative flex-1 min-w-0 flex items-center">
+                      <input
+                        type="number"
+                        value={lsb ?? 50}
+                        onChange={(e) => {
+                          onChangeLsb(Number(e.target.value) || 0);
+                          onCommitHistory();
+                        }}
+                        className={`w-full border rounded-lg px-2.5 py-1.5 pr-7 text-sm font-mono font-bold text-center focus:outline-hidden ${
+                          isLight
+                            ? 'bg-white border-[#c8ded3] text-stone-900 focus:border-emerald-700'
+                            : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 focus:border-emerald-500'
                         }`}
-                        title="20px 減らす"
-                      >
-                        -20
-                      </button>
-                      <button
-                        onClick={() => handleStepLsb(-5)}
-                        className={`min-h-[36px] px-2 py-1 rounded-md border text-xs font-mono font-bold transition-all active:scale-95 ${
-                          isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
-                        }`}
-                        title="5px 減らす"
-                      >
-                        -5
-                      </button>
-                      <button
-                        onClick={() => handleStepLsb(5)}
-                        className={`min-h-[36px] px-2 py-1 rounded-md border text-xs font-mono font-bold transition-all active:scale-95 ${
-                          isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
-                        }`}
-                        title="5px 増やす"
-                      >
-                        +5
-                      </button>
-                      <button
-                        onClick={() => handleStepLsb(20)}
-                        className={`min-h-[36px] px-2 py-1 rounded-md border text-xs font-mono font-bold transition-all active:scale-95 ${
-                          isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
-                        }`}
-                        title="20px 増やす"
-                      >
-                        +20
-                      </button>
+                        step={5}
+                      />
+                      <span className="absolute right-2 text-[10px] font-mono text-stone-400 pointer-events-none font-bold">
+                        px
+                      </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleStepLsb(5)}
+                      className={`w-9 h-9 rounded-lg border text-sm font-bold flex items-center justify-center transition-all active:scale-95 cursor-pointer shrink-0 ${
+                        isLight ? 'bg-white border-stone-300 hover:bg-stone-100 text-stone-800' : 'bg-[#1d2b21] border-[#2d4034] text-emerald-200'
+                      }`}
+                      title="5px 増やす"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Step Increment Row (Clean 4-column distribution) */}
+                  <div className="grid grid-cols-4 gap-1">
+                    {[-20, -5, 5, 20].map((step) => (
+                      <button
+                        key={step}
+                        type="button"
+                        onClick={() => handleStepLsb(step)}
+                        className={`py-1 rounded-md border text-[11px] font-mono font-bold text-center transition-all active:scale-95 cursor-pointer ${
+                          isLight
+                            ? 'bg-white border-stone-200 text-stone-700 hover:bg-emerald-50 hover:border-emerald-300'
+                            : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#1a261f]'
+                        }`}
+                      >
+                        {step > 0 ? `+${step}` : `${step}`}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Preset LSB Chips */}
-                  <div className="flex flex-wrap gap-1 pt-1">
+                  <div className="flex flex-wrap gap-1 pt-0.5">
                     {[
                       { label: '0px (密着)', val: 0 },
                       { label: '25px', val: 25 },
@@ -704,6 +728,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     ].map((p) => (
                       <button
                         key={p.val}
+                        type="button"
                         onClick={() => handleSetLsbPreset(p.val)}
                         className={`px-2 py-1 rounded-md border text-[10.5px] font-bold transition-all cursor-pointer ${
                           lsb === p.val
@@ -737,7 +762,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                       }`}
                     >
                       <div className="flex items-center justify-between text-xs font-bold">
-                        <span className={isLight ? 'text-stone-700' : 'text-emerald-300'}>左右余白バランス</span>
+                        <span className={isLight ? 'text-stone-700' : 'text-emerald-300'}>余白バランス</span>
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                             isBalanced
@@ -766,6 +791,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
 
                       {/* 1-Tap Horizontal Center Button */}
                       <button
+                        type="button"
                         onClick={handleCenterWithinAdvance}
                         className={`w-full min-h-[38px] py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 border transition-all active:scale-95 cursor-pointer ${
                           isLight
@@ -775,7 +801,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                         title="送り幅の中で文字を左右中央にセンタリングして余白を均等化"
                       >
                         <MoveHorizontal className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>送り幅の中で左右中央にセンタリング</span>
+                        <span>左右中央に自動センタリング</span>
                       </button>
                     </div>
                   );
@@ -797,7 +823,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
               }`}
             >
               <span className="text-xs font-bold flex items-center space-x-1.5 text-emerald-800 dark:text-emerald-300">
-                <AlignCenter className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <AlignCenter className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span>オートスペーシング (自動余白)</span>
               </span>
               <div className="p-0.5 text-stone-400">
@@ -811,90 +837,56 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                   文字の実幅と形状の光学バランスに応じて、最適な送り幅(Advance)と左右余白(LSB/RSB)を一括計算します。
                 </p>
 
-                {/* Preset Selector Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
-                  <button
-                    onClick={() => {
-                      setSpacingPreset('smart');
-                      handleExecuteAutoSpacing('smart');
-                    }}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col transition-all cursor-pointer active:scale-98 ${
-                      spacingPreset === 'smart'
-                        ? isLight
-                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold shadow-xs'
-                          : 'bg-emerald-950/80 border-emerald-600 text-emerald-200 font-bold'
-                        : isLight
-                        ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                        : 'bg-[#101813] border-[#25362b] text-stone-300'
-                    }`}
-                  >
-                    <span className="font-extrabold flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                      <span>スマート自動</span>
-                    </span>
-                    <span className="text-[10px] opacity-75 mt-0.5 font-normal">和文:全角 / 欧文:光学</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setSpacingPreset('japanese-fullwidth');
-                      handleExecuteAutoSpacing('japanese-fullwidth');
-                    }}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col transition-all cursor-pointer active:scale-98 ${
-                      spacingPreset === 'japanese-fullwidth'
-                        ? isLight
-                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold shadow-xs'
-                          : 'bg-emerald-950/80 border-emerald-600 text-emerald-200 font-bold'
-                        : isLight
-                        ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                        : 'bg-[#101813] border-[#25362b] text-stone-300'
-                    }`}
-                  >
-                    <span className="font-extrabold">和文全角 (1000EM)</span>
-                    <span className="text-[10px] opacity-75 mt-0.5 font-normal">左右均等センタリング</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setSpacingPreset('proportional-balanced');
-                      handleExecuteAutoSpacing('proportional-balanced');
-                    }}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col transition-all cursor-pointer active:scale-98 ${
-                      spacingPreset === 'proportional-balanced'
-                        ? isLight
-                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold shadow-xs'
-                          : 'bg-emerald-950/80 border-emerald-600 text-emerald-200 font-bold'
-                        : isLight
-                        ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                        : 'bg-[#101813] border-[#25362b] text-stone-300'
-                    }`}
-                  >
-                    <span className="font-extrabold">欧文標準プロポーショナル</span>
-                    <span className="text-[10px] opacity-75 mt-0.5 font-normal">字形ごとの光学余白</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setSpacingPreset('proportional-tight');
-                      handleExecuteAutoSpacing('proportional-tight');
-                    }}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col transition-all cursor-pointer active:scale-98 ${
-                      spacingPreset === 'proportional-tight'
-                        ? isLight
-                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold shadow-xs'
-                          : 'bg-emerald-950/80 border-emerald-600 text-emerald-200 font-bold'
-                        : isLight
-                        ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                        : 'bg-[#101813] border-[#25362b] text-stone-300'
-                    }`}
-                  >
-                    <span className="font-extrabold">欧文タイト (詰まり)</span>
-                    <span className="text-[10px] opacity-75 mt-0.5 font-normal">余白を狭めて配置</span>
-                  </button>
+                {/* Preset Selector Grid - 1 column to avoid overflow on narrow sidebars */}
+                <div className="grid grid-cols-1 gap-1.5 text-xs">
+                  {[
+                    { id: 'smart' as AutoSpacingPreset, label: 'スマート自動', desc: '和文:全角1000EM / 欧文:光学余白', icon: Sparkles },
+                    { id: 'japanese-fullwidth' as AutoSpacingPreset, label: '和文全角センタリング (1000EM)', desc: '枠の中心に正確に配置' },
+                    { id: 'proportional-balanced' as AutoSpacingPreset, label: '欧文プロポーショナル', desc: '字形ごとの光学余白' },
+                    { id: 'proportional-tight' as AutoSpacingPreset, label: '欧文タイト (詰まり気味)', desc: '余白を狭めて配置' },
+                  ].map((preset) => {
+                    const PIcon = preset.icon;
+                    const isSelected = spacingPreset === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          setSpacingPreset(preset.id);
+                          handleExecuteAutoSpacing(preset.id);
+                        }}
+                        className={`p-2 rounded-lg border text-left flex items-start justify-between transition-all cursor-pointer active:scale-98 ${
+                          isSelected
+                            ? isLight
+                              ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold shadow-xs'
+                              : 'bg-emerald-950/80 border-emerald-600 text-emerald-200 font-bold'
+                            : isLight
+                            ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                            : 'bg-[#101813] border-[#25362b] text-stone-300 hover:bg-[#18231c]'
+                        }`}
+                      >
+                        <div className="min-w-0 pr-1">
+                          <div className="font-extrabold flex items-center gap-1">
+                            {PIcon && <PIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                            <span>{preset.label}</span>
+                          </div>
+                          <div className="text-[10px] opacity-75 font-normal mt-0.5">
+                            {preset.desc}
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
+                            ✓ 適用中
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Quick Trigger Button */}
                 <button
+                  type="button"
                   onClick={() => handleExecuteAutoSpacing(spacingPreset)}
                   disabled={contours.length === 0}
                   className={`w-full min-h-[42px] py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-2 transition-all shadow-xs active:scale-95 disabled:opacity-40 cursor-pointer ${
@@ -940,7 +932,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
             {expandedSections.simplify && (
               <div className="p-3 pt-0 space-y-2.5 border-t border-stone-100 dark:border-stone-800/60">
                 <p className="text-[11px] leading-relaxed text-stone-600 dark:text-emerald-300/80 pt-1">
-                  不要なアンカーポイント（重複・共線点）を自動削除し、美しい字形を保ちながらファイル容量を削減します。
+                  不要なアンカーポイント（重複・共線点）を自動削除し、字形を保ちながらファイル容量を削減します。
                 </p>
 
                 {/* Strength Selector */}
@@ -1108,7 +1100,46 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     <Minimize2 className="w-4 h-4 shrink-0" />
                     <span>縮小 -10%</span>
                   </button>
+
+                  <button
+                    onClick={() => handleAspectScale(0.85, 1.0)}
+                    className={`min-h-[38px] px-2.5 py-1.5 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1 transition-colors cursor-pointer active:scale-95 ${
+                      isLight
+                        ? 'bg-white border-[#d8e6df] text-stone-800 hover:bg-emerald-50'
+                        : 'bg-[#121a14] border-[#25362b] text-emerald-200 hover:bg-[#1d2b20]'
+                    }`}
+                    title="横幅をスリム化して縦長の長体に変換 (X:85%)"
+                  >
+                    <span>長体 (横縮小)</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleAspectScale(1.15, 0.85)}
+                    className={`min-h-[38px] px-2.5 py-1.5 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1 transition-colors cursor-pointer active:scale-95 ${
+                      isLight
+                        ? 'bg-white border-[#d8e6df] text-stone-800 hover:bg-emerald-50'
+                        : 'bg-[#121a14] border-[#25362b] text-emerald-200 hover:bg-[#1d2b20]'
+                    }`}
+                    title="縦幅を抑えて横広の扁平に変換 (X:115%, Y:85%)"
+                  >
+                    <span>扁平 (横広化)</span>
+                  </button>
                 </div>
+
+                {/* Smooth & Fix Jaggedness Button */}
+                <button
+                  onClick={handleSmoothAndFix}
+                  disabled={contours.length === 0}
+                  className={`w-full min-h-[42px] py-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer active:scale-95 shadow-xs disabled:opacity-40 ${
+                    isLight
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
+                      : 'bg-amber-600 hover:bg-amber-500 text-stone-950 border-amber-400 font-extrabold'
+                  }`}
+                  title="変形・拡大縮小時に生じたガタツキやベジェ曲線の折れ曲がり歪みを自動補正"
+                >
+                  <Sparkles className="w-4 h-4 shrink-0 fill-current" />
+                  <span>変形後のガタツキ・歪みを滑らかに補正</span>
+                </button>
 
                 <button
                   onClick={handleCenter}

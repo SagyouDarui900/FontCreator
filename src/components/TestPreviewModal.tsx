@@ -23,10 +23,27 @@ import {
   Rows,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  GripVertical,
   ChevronDown,
   ChevronUp,
+  Move,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+  Edit3,
+  Save,
+  Lock,
+  Unlock,
+  ExternalLink,
+  Scaling,
+  MousePointerClick,
 } from 'lucide-react';
-import { FontProject } from '../types';
+import { useRef } from 'react';
+import { FontProject, PathContour, Point } from '../types';
 import { compileFont, balanceProjectGlyphMargins } from '../utils/fontCompiler';
 import { getContoursBoundingBox } from '../utils/pathUtils';
 import { ThemeMode, isLightTheme } from '../utils/theme';
@@ -36,15 +53,16 @@ interface TestPreviewModalProps {
   onClose: () => void;
   project: FontProject;
   setProject?: React.Dispatch<React.SetStateAction<FontProject>>;
+  onSelectGlyphForEdit?: (unicode: number) => void;
   theme: ThemeMode;
   onShowToast?: (msg: string, type?: 'success' | 'info' | 'error') => void;
 }
 
 const SAMPLE_PRESETS = [
   {
-    name: '【横組】いろは歌 (ひらがな・パングラム)',
+    name: '【横組】いろは歌 (4行・パングラム)',
     mode: 'horizontal' as const,
-    text: 'いろはにほへと ちりぬるを わかよたれそ つねならむ\nうゐのおくやま けふこえて あさきゆめみし ゑひもせす',
+    text: 'いろはにほへと　ちりぬるを\nわかよたれそ　つねならむ\nうゐのおくやま　けふこえて\nあさきゆめみし　ゑひもせす',
   },
   {
     name: '【縦組】いろは歌 (ひらがな・パングラム)',
@@ -52,9 +70,10 @@ const SAMPLE_PRESETS = [
     text: 'いろはにほへと\nちりぬるを\nわかよたれそ\nつねならむ\nうゐのおくやま\nけふこえて\nあさきゆめみし\nゑひもせす',
   },
   {
-    name: '【横組】五十音・濁音・促音小文字',
+    name: '【横組】五十音・濁音 (4行)',
     mode: 'horizontal' as const,
-    text: 'あいうえお かきくけこ さしすせそ たちつてと なにぬねの\nはひふへほ まみむめも やゆよ らりるれろ わをん\nがぎぐげご ざじずぜぞ だぢづでど ばびぶべぼ ぱぴぷぺぽ\nぁぃぅぇぉ ゃゅょ ゎ っ ヵヶ ァィゥェォ ャュョ ッ',
+    text:
+      'あいうえお　かきくけこ　さしすせそ\nたちつてと　なにぬねの　はひふへほ\nまみむめも　やゆよ　らりるれろ　わをん\nがぎぐげご　ざじずぜぞ　だぢづでど　ばびぶべぼ',
   },
   {
     name: '【横組】見出しと本文 (全角空白字下げ)',
@@ -78,16 +97,52 @@ const SAMPLE_PRESETS = [
   },
 ];
 
+/**
+ * Transforms glyph contours by shifting center dx, dy and scaling around center by scaleX, scaleY ratios.
+ */
+export function transformGlyphContours(
+  contours: PathContour[],
+  dx: number,
+  dy: number,
+  scaleXRatio: number,
+  scaleYRatio: number
+): PathContour[] {
+  if (!contours || contours.length === 0) return contours;
+  const bbox = getContoursBoundingBox(contours);
+  const cx = bbox.centerX;
+  const cy = bbox.centerY;
+
+  const transformPt = (p: Point): Point => {
+    const relX = p.x - cx;
+    const relY = p.y - cy;
+    return {
+      x: Math.round(cx + dx + relX * scaleXRatio),
+      y: Math.round(cy + dy + relY * scaleYRatio),
+    };
+  };
+
+  return contours.map((c) => ({
+    ...c,
+    nodes: c.nodes.map((n) => ({
+      ...n,
+      ...transformPt({ x: n.x, y: n.y }),
+      handleIn: n.handleIn ? transformPt(n.handleIn) : null,
+      handleOut: n.handleOut ? transformPt(n.handleOut) : null,
+    })),
+  }));
+}
+
 export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
   isOpen,
   onClose,
   project,
   setProject,
+  onSelectGlyphForEdit,
   theme,
   onShowToast,
 }) => {
   const [testText, setTestText] = useState<string>(
-    'いろはにほへと ちりぬるを わかよたれそ つねならむ\nうゐのおくやま けふこえて あさきゆめみし ゑひもせす'
+    'いろはにほへと　ちりぬるを\nわかよたれそ　つねならむ\nうゐのおくやま　けふこえて\nあさきゆめみし　ゑひもせす'
   );
   const [writingMode, setWritingMode] = useState<'horizontal' | 'vertical'>('horizontal');
   const [fontSize, setFontSize] = useState<number>(36);
@@ -98,11 +153,67 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
   const [showSpaceMarkers, setShowSpaceMarkers] = useState<boolean>(false); // Highlight 全角/半角空白
   const [showGenkoGrid, setShowGenkoGrid] = useState<boolean>(false); // 原稿用紙マス目
   const [showCharBoxes, setShowCharBoxes] = useState<boolean>(false); // 仮想ボディ枠 (1em)
+  const [showNotebookGuides, setShowNotebookGuides] = useState<boolean>(true); // ノート風ガイド罫線 (ベースライン・中心軸・高さ上限下限)
   const [autoBalanceMargins, setAutoBalanceMargins] = useState<boolean>(false); // デフォルト: ガイド枠の手書き位置優先 (1:1描画位置)
-  const [fontScaleMultiplier, setFontScaleMultiplier] = useState<number>(1.35); // 1.35x (和文標準最適化) or 1.0x (原寸)
+  const [fontScaleMultiplier, setFontScaleMultiplier] = useState<number>(1.0); // 1.0x (原寸キャンバス通り) or 1.35x (拡大)
   const [isWaterfall, setIsWaterfall] = useState<boolean>(false);
   const [fontFamilyName, setFontFamilyName] = useState<string>('CustomTestFont');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Selected character for quick coordinate/scale/aspect adjustment and main editor jump
+  const [selectedCharInfo, setSelectedCharInfo] = useState<{
+    char: string;
+    unicode: number;
+    lineIndex: number;
+    charIndex: number;
+  } | null>(null);
+  const [adjustDx, setAdjustDx] = useState<number>(0);
+  const [adjustDy, setAdjustDy] = useState<number>(0);
+  const [adjustScaleX, setAdjustScaleX] = useState<number>(100);
+  const [adjustScaleY, setAdjustScaleY] = useState<number>(100);
+  const [isAspectLocked, setIsAspectLocked] = useState<boolean>(true);
+
+  // Floating draggable adjustment panel state
+  const [isDocked, setIsDocked] = useState<boolean>(false);
+  const [floatingPos, setFloatingPos] = useState<{ x: number; y: number }>({ x: 20, y: 24 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const dragStartRef = useRef<{ startX: number; startY: number; initialPosX: number; initialPosY: number } | null>(null);
+
+  const handleDragStart = (e: React.PointerEvent) => {
+    if (isDocked) return;
+    e.preventDefault();
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+    setIsDragging(true);
+    dragStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialPosX: floatingPos.x,
+      initialPosY: floatingPos.y,
+    };
+  };
+
+  const handleDragMove = (e: React.PointerEvent) => {
+    if (!isDragging || !dragStartRef.current || isDocked) return;
+    const dx = e.clientX - dragStartRef.current.startX;
+    const dy = e.clientY - dragStartRef.current.startY;
+
+    const nextX = Math.max(8, Math.min(window.innerWidth - 330, dragStartRef.current.initialPosX + dx));
+    const nextY = Math.max(8, Math.min(window.innerHeight - 200, dragStartRef.current.initialPosY + dy));
+
+    setFloatingPos({ x: nextX, y: nextY });
+  };
+
+  const handleDragEnd = (e: React.PointerEvent) => {
+    if (isDragging) {
+      try {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {}
+      setIsDragging(false);
+      dragStartRef.current = null;
+    }
+  };
 
   // Hovered glyph info for inspection
   const [hoveredGlyphInfo, setHoveredGlyphInfo] = useState<{
@@ -225,23 +336,77 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
     return { char, unicode: code, adv, lsb, rsb, diff };
   };
 
-  // Highlight space tokens or render character boxes
+  // Apply vector transform directly to glyph contour in project
+  const handleApplyTransformToGlyph = () => {
+    if (!selectedCharInfo || !setProject) return;
+    const unicode = selectedCharInfo.unicode;
+    const g = project.glyphs[unicode];
+    if (!g || !g.contours || g.contours.length === 0) {
+      if (onShowToast) onShowToast(`「${selectedCharInfo.char}」の輪郭データが見つかりません`, 'warning');
+      return;
+    }
+
+    const scaleXMult = adjustScaleX / 100;
+    const scaleYMult = adjustScaleY / 100;
+
+    const transformedContours = transformGlyphContours(
+      g.contours,
+      adjustDx,
+      adjustDy,
+      scaleXMult,
+      scaleYMult
+    );
+
+    setProject((prev) => {
+      const prevG = prev.glyphs[unicode];
+      if (!prevG) return prev;
+      return {
+        ...prev,
+        glyphs: {
+          ...prev.glyphs,
+          [unicode]: {
+            ...prevG,
+            contours: transformedContours,
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    });
+
+    if (onShowToast) {
+      onShowToast(`「${selectedCharInfo.char}」のグリフ輪郭（座標・拡大縮小・縦横比）を永続保存しました`, 'success');
+    }
+
+    setAdjustDx(0);
+    setAdjustDy(0);
+    setAdjustScaleX(100);
+    setAdjustScaleY(100);
+  };
+
+  const handleJumpToMainEditor = () => {
+    if (!selectedCharInfo) return;
+    if (onSelectGlyphForEdit) {
+      onSelectGlyphForEdit(selectedCharInfo.unicode);
+    } else if (onClose) {
+      onClose();
+    }
+  };
+
+  // Highlight space tokens, character boxes, and interactive character tokens
   const renderedText = useMemo(() => {
     const lines = testText.split('\n');
 
     return lines.map((line, lIdx) => {
       const parts = [];
-      let currentStr = '';
 
       for (let i = 0; i < line.length; i++) {
         const ch = line[i];
+        const code = ch.codePointAt(0) || ch.charCodeAt(0);
+        const isSelected =
+          selectedCharInfo?.lineIndex === lIdx && selectedCharInfo?.charIndex === i;
 
         if (ch === '　') {
           // 全角空白 U+3000
-          if (currentStr) {
-            parts.push(<span key={`${lIdx}-${i}-str`}>{currentStr}</span>);
-            currentStr = '';
-          }
           if (showSpaceMarkers || showCharBoxes) {
             parts.push(
               <span
@@ -260,10 +425,6 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
           }
         } else if (ch === ' ') {
           // 半角空白 U+0020
-          if (currentStr) {
-            parts.push(<span key={`${lIdx}-${i}-str`}>{currentStr}</span>);
-            currentStr = '';
-          }
           if (showSpaceMarkers || showCharBoxes) {
             parts.push(
               <span
@@ -281,22 +442,37 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
             parts.push(<span key={`${lIdx}-${i}-halfspace`}> </span>);
           }
         } else if (showCharBoxes) {
-          // Character Box mode (仮想ボディ枠と中心線の表示)
-          if (currentStr) {
-            parts.push(<span key={`${lIdx}-${i}-str`}>{currentStr}</span>);
-            currentStr = '';
-          }
+          // Character Box mode (仮想ボディ枠と中心線の表示 + インタラクティブ選択)
           const metric = getGlyphMetric(ch);
+          const hasCustomTransform =
+            isSelected &&
+            (adjustDx !== 0 || adjustDy !== 0 || adjustScaleX !== 100 || adjustScaleY !== 100);
+
           parts.push(
             <span
               key={`${lIdx}-${i}-charbox`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedCharInfo({
+                  char: ch,
+                  unicode: code,
+                  lineIndex: lIdx,
+                  charIndex: i,
+                });
+                setAdjustDx(0);
+                setAdjustDy(0);
+                setAdjustScaleX(100);
+                setAdjustScaleY(100);
+              }}
               onMouseEnter={() => metric && setHoveredGlyphInfo(metric)}
-              className={`inline-flex items-center justify-center relative border border-dashed transition-all cursor-crosshair ${
-                metric && Math.abs(metric.diff) > 25 && !autoBalanceMargins
-                  ? 'border-amber-500 bg-amber-500/10'
+              className={`inline-flex items-center justify-center relative border border-dashed transition-all cursor-pointer select-none ${
+                isSelected
+                  ? 'ring-2 ring-emerald-500 bg-emerald-500/25 border-emerald-500 font-bold z-10 shadow-md scale-105'
+                  : metric && Math.abs(metric.diff) > 25 && !autoBalanceMargins
+                  ? 'border-amber-500 bg-amber-500/10 hover:bg-amber-500/25'
                   : isLight
-                  ? 'border-emerald-500/40 bg-emerald-50/25 hover:bg-emerald-100/40'
-                  : 'border-emerald-400/40 bg-emerald-950/25 hover:bg-emerald-900/40'
+                  ? 'border-emerald-500/40 bg-emerald-50/25 hover:bg-emerald-100/60 hover:border-emerald-500'
+                  : 'border-emerald-400/40 bg-emerald-950/25 hover:bg-emerald-900/60 hover:border-emerald-400'
               }`}
               style={{
                 width: writingMode === 'vertical' ? undefined : '1em',
@@ -304,17 +480,15 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                 lineHeight: '1em',
                 textAlign: 'center',
                 boxSizing: 'border-box',
+                transform: hasCustomTransform
+                  ? `translate(${adjustDx * (fontSize / 1000)}px, ${-adjustDy * (fontSize / 1000)}px) scale(${adjustScaleX / 100}, ${adjustScaleY / 100})`
+                  : undefined,
+                transformOrigin: 'center center',
               }}
               title={
                 metric
-                  ? `「${ch}」 送り幅:${metric.adv} 左余白:${metric.lsb} 右余白:${metric.rsb} (${
-                      metric.diff === 0
-                        ? '中央整列'
-                        : metric.diff < 0
-                        ? `左寄り ${Math.abs(Math.round(metric.diff / 2))}px`
-                        : `右寄り ${Math.round(metric.diff / 2)}px`
-                    })`
-                  : `「${ch}」`
+                  ? `「${ch}」 クリックで簡易変形・メイン編集へジャンプ / 送り幅:${metric.adv} 左余白:${metric.lsb} 右余白:${metric.rsb}`
+                  : `「${ch}」 (クリックで簡易移動・変形 / メイン編集へジャンプ)`
               }
             >
               {/* Center vertical crosshair */}
@@ -323,22 +497,385 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
             </span>
           );
         } else {
-          currentStr += ch;
+          // Interactive Character Token mode
+          const metric = getGlyphMetric(ch);
+          const hasCustomTransform =
+            isSelected &&
+            (adjustDx !== 0 || adjustDy !== 0 || adjustScaleX !== 100 || adjustScaleY !== 100);
+
+          parts.push(
+            <span
+              key={`${lIdx}-${i}-${ch}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedCharInfo({
+                  char: ch,
+                  unicode: code,
+                  lineIndex: lIdx,
+                  charIndex: i,
+                });
+                setAdjustDx(0);
+                setAdjustDy(0);
+                setAdjustScaleX(100);
+                setAdjustScaleY(100);
+              }}
+              onMouseEnter={() => metric && setHoveredGlyphInfo(metric)}
+              className={`inline-block relative transition-all cursor-pointer select-none rounded px-0.5 ${
+                isSelected
+                  ? 'ring-2 ring-emerald-500 bg-emerald-500/25 text-emerald-950 dark:text-emerald-100 font-bold z-10 shadow-md'
+                  : 'hover:bg-emerald-500/15 hover:ring-1 hover:ring-emerald-400/80'
+              }`}
+              style={{
+                transform: hasCustomTransform
+                  ? `translate(${adjustDx * (fontSize / 1000)}px, ${-adjustDy * (fontSize / 1000)}px) scale(${adjustScaleX / 100}, ${adjustScaleY / 100})`
+                  : undefined,
+                transformOrigin: 'center center',
+              }}
+              title={`「${ch}」 (クリックで位置・縦横比変形ツールバー表示 / メイン編集へジャンプ)`}
+            >
+              {ch}
+            </span>
+          );
         }
       }
 
-      if (currentStr) {
-        parts.push(<span key={`${lIdx}-end-str`}>{currentStr}</span>);
-      }
-
       return (
-        <React.Fragment key={lIdx}>
-          {parts}
-          {lIdx < lines.length - 1 ? '\n' : ''}
-        </React.Fragment>
+        <div key={lIdx} className="relative group/line">
+          <div className="relative z-10">
+            {parts}
+            {lIdx < lines.length - 1 ? '\n' : ''}
+          </div>
+        </div>
       );
     });
-  }, [testText, showSpaceMarkers, showCharBoxes, autoBalanceMargins, isLight, writingMode, project]);
+  }, [
+    testText,
+    showSpaceMarkers,
+    showCharBoxes,
+    showNotebookGuides,
+    autoBalanceMargins,
+    isLight,
+    writingMode,
+    project,
+    selectedCharInfo,
+    adjustDx,
+    adjustDy,
+    adjustScaleX,
+    adjustScaleY,
+    fontSize,
+  ]);
+
+  const renderSideAdjustPanel = () => {
+    if (!selectedCharInfo) return null;
+
+    const panelContent = (
+      <>
+        {/* Header with Glyph Badge, Title, Grip Handle & Dock/Undock toggle */}
+        <div
+          onPointerDown={!isDocked ? handleDragStart : undefined}
+          onPointerMove={!isDocked ? handleDragMove : undefined}
+          onPointerUp={!isDocked ? handleDragEnd : undefined}
+          className={`flex items-center justify-between pb-2 mb-2 border-b border-inherit select-none ${
+            !isDocked
+              ? 'cursor-grab active:cursor-grabbing p-1 -mx-1 rounded-t-xl bg-emerald-500/5 dark:bg-emerald-500/10'
+              : ''
+          }`}
+        >
+          <div className="flex items-center space-x-2 min-w-0">
+            {!isDocked && (
+              <div
+                className="p-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 shrink-0"
+                title="ドラッグして小窓を移動"
+              >
+                <GripVertical className="w-4 h-4" />
+              </div>
+            )}
+            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600 text-white font-bold text-base shadow-xs shrink-0">
+              {selectedCharInfo.char}
+            </span>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center space-x-1.5 truncate">
+                <span className="font-bold text-xs sm:text-sm truncate">
+                  「{selectedCharInfo.char}」簡易調整
+                </span>
+              </div>
+              <span className="text-[10px] font-mono opacity-70">
+                U+{selectedCharInfo.unicode.toString(16).toUpperCase()}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-1 shrink-0">
+            <button
+              onClick={() => setIsDocked((prev) => !prev)}
+              className="p-1 rounded-md hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-colors"
+              title={isDocked ? 'フローティング小窓にする (ドラッグ移動可能)' : '右サイドバーに固定ドックする'}
+            >
+              {isDocked ? <Maximize2 className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={() => setSelectedCharInfo(null)}
+              className="p-1 rounded-md hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500 transition-colors"
+              title="調整パネルを閉じる (Esc)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Realtime Feedback Notice */}
+        <div className="mb-2.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10.5px] text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5 shrink-0">
+          <Eye className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <span>文字を見ながらリアルタイムに調整できます</span>
+        </div>
+
+        {/* Adjuster Controls */}
+        <div className="space-y-3 text-xs flex-1 overflow-y-auto pr-0.5">
+          {/* 1. Coordinate Position Offset (座標位置 X / Y) */}
+          <div className={`p-2.5 rounded-xl border ${isLight ? 'bg-emerald-50/50 border-emerald-200' : 'bg-emerald-950/30 border-emerald-900/60'}`}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="font-bold text-xs flex items-center space-x-1 text-emerald-900 dark:text-emerald-200">
+                <Move className="w-3.5 h-3.5 text-emerald-600" />
+                <span>位置 (X:{adjustDx}px, Y:{adjustDy}px)</span>
+              </span>
+              <button
+                onClick={() => { setAdjustDx(0); setAdjustDy(0); }}
+                className="text-[10px] px-1.5 py-0.5 rounded border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 font-mono"
+                title="位置を0リセット"
+              >
+                0
+              </button>
+            </div>
+
+            {/* D-Pad Buttons + Sliders */}
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center justify-center py-0.5">
+                <div className="grid grid-cols-3 gap-1 w-24">
+                  <div></div>
+                  <button
+                    onClick={() => setAdjustDy((prev) => prev + 10)}
+                    className="p-1 rounded bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:bg-emerald-100 dark:hover:bg-emerald-950 text-center font-bold"
+                    title="上へ移動 (+10)"
+                  >
+                    <ArrowUp className="w-3 h-3 mx-auto" />
+                  </button>
+                  <div></div>
+                  <button
+                    onClick={() => setAdjustDx((prev) => prev - 10)}
+                    className="p-1 rounded bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:bg-emerald-100 dark:hover:bg-emerald-950 text-center font-bold"
+                    title="左へ移動 (-10)"
+                  >
+                    <ArrowLeft className="w-3 h-3 mx-auto" />
+                  </button>
+                  <button
+                    onClick={() => { setAdjustDx(0); setAdjustDy(0); }}
+                    className="p-1 rounded bg-stone-200 dark:bg-stone-700 font-bold text-[10px] text-center"
+                    title="原点"
+                  >
+                    0
+                  </button>
+                  <button
+                    onClick={() => setAdjustDx((prev) => prev + 10)}
+                    className="p-1 rounded bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:bg-emerald-100 dark:hover:bg-emerald-950 text-center font-bold"
+                    title="右へ移動 (+10)"
+                  >
+                    <ArrowRight className="w-3 h-3 mx-auto" />
+                  </button>
+                  <div></div>
+                  <button
+                    onClick={() => setAdjustDy((prev) => prev - 10)}
+                    className="p-1 rounded bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:bg-emerald-100 dark:hover:bg-emerald-950 text-center font-bold"
+                    title="下へ移動 (-10)"
+                  >
+                    <ArrowDown className="w-3 h-3 mx-auto" />
+                  </button>
+                  <div></div>
+                </div>
+              </div>
+
+              <div className="space-y-1 text-[11px]">
+                <div className="flex items-center space-x-2">
+                  <span className="w-4 font-mono font-bold">X:</span>
+                  <input
+                    type="range"
+                    min={-150}
+                    max={150}
+                    value={adjustDx}
+                    onChange={(e) => setAdjustDx(Number(e.target.value))}
+                    className="flex-1 accent-emerald-600 h-1.5"
+                  />
+                  <span className="w-8 font-mono text-right">{adjustDx}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="w-4 font-mono font-bold">Y:</span>
+                  <input
+                    type="range"
+                    min={-150}
+                    max={150}
+                    value={adjustDy}
+                    onChange={(e) => setAdjustDy(Number(e.target.value))}
+                    className="flex-1 accent-emerald-600 h-1.5"
+                  />
+                  <span className="w-8 font-mono text-right">{adjustDy}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Scale & Aspect Ratio (拡縮・縦横比) */}
+          <div className={`p-2.5 rounded-xl border ${isLight ? 'bg-emerald-50/50 border-emerald-200' : 'bg-emerald-950/30 border-emerald-900/60'}`}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="font-bold text-xs flex items-center space-x-1 text-emerald-900 dark:text-emerald-200">
+                <Scaling className="w-3.5 h-3.5 text-emerald-600" />
+                <span>拡大縮小 (W:{adjustScaleX}% H:{adjustScaleY}%)</span>
+              </span>
+              <button
+                onClick={() => setIsAspectLocked(!isAspectLocked)}
+                className={`text-[10px] px-1.5 py-0.5 rounded border flex items-center space-x-1 transition-colors ${
+                  isAspectLocked
+                    ? 'bg-emerald-700 text-white border-emerald-700'
+                    : 'border-stone-300 dark:border-stone-700 text-stone-600 dark:text-stone-300'
+                }`}
+                title="縦横比固定切替"
+              >
+                {isAspectLocked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+                <span>{isAspectLocked ? '固定' : '自由'}</span>
+              </button>
+            </div>
+
+            <div className="space-y-1.5 text-[11px]">
+              <div className="flex items-center space-x-2">
+                <span className="w-4 font-mono font-bold">幅:</span>
+                <input
+                  type="range"
+                  min={40}
+                  max={200}
+                  value={adjustScaleX}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setAdjustScaleX(val);
+                    if (isAspectLocked) setAdjustScaleY(val);
+                  }}
+                  className="flex-1 accent-emerald-600 h-1.5"
+                />
+                <span className="w-9 font-mono text-right">{adjustScaleX}%</span>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <span className="w-4 font-mono font-bold">高:</span>
+                <input
+                  type="range"
+                  min={40}
+                  max={200}
+                  value={adjustScaleY}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setAdjustScaleY(val);
+                    if (isAspectLocked) setAdjustScaleX(val);
+                  }}
+                  className="flex-1 accent-emerald-600 h-1.5"
+                />
+                <span className="w-9 font-mono text-right">{adjustScaleY}%</span>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center space-x-1">
+                  {[90, 95, 100, 105, 110].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => { setAdjustScaleX(s); setAdjustScaleY(s); }}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                        adjustScaleX === s && adjustScaleY === s
+                          ? 'bg-emerald-700 text-white border-emerald-700 font-bold'
+                          : 'border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      {s}%
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => { setAdjustScaleX(100); setAdjustScaleY(100); }}
+                  className="text-[10px] text-stone-500 hover:underline"
+                >
+                  等倍
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Canvas Jump Button */}
+          {onSelectGlyphForEdit && (
+            <button
+              onClick={handleJumpToMainEditor}
+              className="w-full py-1.5 px-2.5 rounded-lg text-xs font-bold border flex items-center justify-center space-x-1.5 transition-colors border-emerald-600 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+              title="この文字をメインキャンバスで開いて本格パス編集を行います"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>メイン編集でパス直接調整</span>
+            </button>
+          )}
+        </div>
+
+        {/* Bottom Actions: Save & Reset */}
+        <div className="pt-2.5 mt-2.5 border-t border-inherit space-y-1.5 shrink-0">
+          <button
+            onClick={handleApplyTransformToGlyph}
+            disabled={adjustDx === 0 && adjustDy === 0 && adjustScaleX === 100 && adjustScaleY === 100}
+            className={`w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 shadow-xs transition-all ${
+              adjustDx === 0 && adjustDy === 0 && adjustScaleX === 100 && adjustScaleY === 100
+                ? 'bg-stone-200 dark:bg-stone-800 text-stone-400 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-98'
+            }`}
+          >
+            <Save className="w-3.5 h-3.5" />
+            <span>グリフ輪郭に永続保存</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setAdjustDx(0);
+              setAdjustDy(0);
+              setAdjustScaleX(100);
+              setAdjustScaleY(100);
+            }}
+            className="w-full py-1 px-2 rounded-lg text-xs font-medium border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-300 transition-colors text-center"
+          >
+            変更をリセット
+          </button>
+        </div>
+      </>
+    );
+
+    if (isDocked) {
+      return (
+        <aside
+          className={`w-72 sm:w-80 border-l shrink-0 flex flex-col h-full overflow-y-auto p-3.5 sm:p-4 transition-all z-20 shadow-xl ${
+            isLight
+              ? 'bg-white/95 border-stone-200 text-stone-800'
+              : 'bg-[#121c15]/95 border-[#233527] text-emerald-100'
+          }`}
+        >
+          {panelContent}
+        </aside>
+      );
+    }
+
+    return (
+      <div
+        style={{ left: `${floatingPos.x}px`, top: `${floatingPos.y}px` }}
+        className={`absolute z-40 w-72 sm:w-80 max-h-[calc(100%-2rem)] rounded-2xl border shadow-2xl backdrop-blur-md flex flex-col p-3.5 sm:p-4 transition-shadow ${
+          isDragging ? 'shadow-emerald-950/40 ring-2 ring-emerald-500 cursor-grabbing' : ''
+        } ${
+          isLight
+            ? 'bg-white/95 border-stone-200 text-stone-800 shadow-stone-400/30'
+            : 'bg-[#121c15]/95 border-[#233527] text-emerald-100 shadow-black/60'
+        }`}
+      >
+        {panelContent}
+      </div>
+    );
+  };
 
   if (!isOpen) return null;
 
@@ -871,6 +1408,23 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                     <span>{showCharBoxes ? 'ON' : 'OFF'}</span>
                   </button>
 
+                  {/* Notebook Guide Lines Toggle */}
+                  <button
+                    onClick={() => setShowNotebookGuides(!showNotebookGuides)}
+                    className={`w-full p-1.5 rounded text-[11px] font-semibold border text-left transition-colors flex items-center justify-between ${
+                      showNotebookGuides
+                        ? isLight
+                          ? 'bg-emerald-800 text-white border-emerald-900 shadow-2xs'
+                          : 'bg-emerald-500 text-stone-950 font-bold border-emerald-400 shadow-2xs'
+                        : isLight
+                        ? 'bg-white border-[#d8e6df] text-stone-600 hover:bg-emerald-50'
+                        : 'bg-[#18231c] border-[#25362b] text-emerald-400 hover:bg-[#202d24]'
+                    }`}
+                  >
+                    <span>ノートガイド (ベースライン・中心軸)</span>
+                    <span>{showNotebookGuides ? 'ON' : 'OFF'}</span>
+                  </button>
+
                   {/* Space Markers Toggle */}
                   <button
                     onClick={() => setShowSpaceMarkers(!showSpaceMarkers)}
@@ -983,26 +1537,186 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                         : 'bg-[#151e18] border-[#25362b] shadow-black/40'
                     }`}
                   >
-                    <div
-                      style={{
-                        fontFamily: `'${fontFamilyName}', sans-serif`,
-                        fontSize: `${fontSize}px`,
-                        lineHeight: lineHeight,
-                        letterSpacing: `${letterSpacing}em`,
-                        textAlign: textAlign,
-                        writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
-                        fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
-                      }}
-                      className={`whitespace-pre-wrap break-words min-h-[300px] ${
-                        isLight ? 'text-stone-900' : 'text-emerald-50'
-                      } ${writingMode === 'vertical' ? 'h-full' : 'w-full'}`}
-                    >
-                      {renderedText}
+                    {/* Notebook Guide Legend Badge */}
+                    {showNotebookGuides && (
+                      <div className="mb-3 px-2 py-1 rounded bg-stone-100/90 dark:bg-stone-900/90 border border-stone-200/80 dark:border-stone-800 text-[10px] flex flex-wrap items-center gap-3 shrink-0 select-none pointer-events-none opacity-80">
+                        <span className="font-bold text-stone-600 dark:text-stone-300">ノートガイド凡例:</span>
+                        {writingMode === 'horizontal' ? (
+                          <>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-indigo-500 rounded-full"></span>
+                              <span>ベースライン (主罫線)</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-emerald-500 border-b border-dashed border-emerald-500"></span>
+                              <span>中心軸線</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-sky-400 border-b border-dotted border-sky-400"></span>
+                              <span>上限線 (Cap)</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-rose-400 border-b border-dotted border-rose-400"></span>
+                              <span>下限線 (Base)</span>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-emerald-500 border-b border-dashed border-emerald-500"></span>
+                              <span>縦中心軸線</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-sky-400 border-b border-dotted border-sky-400"></span>
+                              <span>右境界線</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-rose-400 border-b border-dotted border-rose-400"></span>
+                              <span>左境界線</span>
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="relative w-full overflow-hidden">
+                      {/* Multi-line Notebook Ruling Layer */}
+                      {showNotebookGuides && (
+                        writingMode === 'horizontal' ? (
+                          <svg
+                            className="absolute inset-0 w-full h-full pointer-events-none select-none"
+                            style={{ minHeight: '100%' }}
+                          >
+                            <defs>
+                              <pattern
+                                id="notebook-ruling-h-split"
+                                width="100%"
+                                height={fontSize * lineHeight}
+                                patternUnits="userSpaceOnUse"
+                              >
+                                {/* Top Cap Line */}
+                                <line
+                                  x1="0"
+                                  y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.1}
+                                  x2="100%"
+                                  y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.1}
+                                  stroke={isLight ? '#38bdf8' : '#0284c7'}
+                                  strokeDasharray="3 3"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                                {/* Center Axis Line */}
+                                <line
+                                  x1="0"
+                                  y1={(fontSize * lineHeight) / 2}
+                                  x2="100%"
+                                  y2={(fontSize * lineHeight) / 2}
+                                  stroke={isLight ? '#10b981' : '#059669'}
+                                  strokeDasharray="5 4"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                                {/* Baseline (Main Ruled Line) */}
+                                <line
+                                  x1="0"
+                                  y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.8}
+                                  x2="100%"
+                                  y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.8}
+                                  stroke={isLight ? '#6366f1' : '#818cf8'}
+                                  strokeWidth="1.5"
+                                  strokeOpacity="0.85"
+                                />
+                                {/* Bottom Descender Line */}
+                                <line
+                                  x1="0"
+                                  y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
+                                  x2="100%"
+                                  y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
+                                  stroke={isLight ? '#f43f5e' : '#e11d48'}
+                                  strokeDasharray="3 3"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                              </pattern>
+                            </defs>
+                            <rect width="100%" height="100%" fill="url(#notebook-ruling-h-split)" />
+                          </svg>
+                        ) : (
+                          <svg
+                            className="absolute inset-0 w-full h-full pointer-events-none select-none"
+                            style={{ minHeight: '100%' }}
+                          >
+                            <defs>
+                              <pattern
+                                id="notebook-ruling-v-split"
+                                width={fontSize * lineHeight}
+                                height="100%"
+                                patternUnits="userSpaceOnUse"
+                              >
+                                {/* Left Boundary */}
+                                <line
+                                  x1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.05}
+                                  y1="0"
+                                  x2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.05}
+                                  y2="100%"
+                                  stroke={isLight ? '#f43f5e' : '#e11d48'}
+                                  strokeDasharray="3 3"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                                {/* Vertical Center Axis */}
+                                <line
+                                  x1={(fontSize * lineHeight) / 2}
+                                  y1="0"
+                                  x2={(fontSize * lineHeight) / 2}
+                                  y2="100%"
+                                  stroke={isLight ? '#10b981' : '#059669'}
+                                  strokeDasharray="5 4"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                                {/* Right Boundary */}
+                                <line
+                                  x1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
+                                  y1="0"
+                                  x2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
+                                  y2="100%"
+                                  stroke={isLight ? '#38bdf8' : '#0284c7'}
+                                  strokeDasharray="3 3"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                              </pattern>
+                            </defs>
+                            <rect width="100%" height="100%" fill="url(#notebook-ruling-v-split)" />
+                          </svg>
+                        )
+                      )}
+
+                      <div
+                        style={{
+                          fontFamily: `'${fontFamilyName}', sans-serif`,
+                          fontSize: `${fontSize}px`,
+                          lineHeight: lineHeight,
+                          letterSpacing: `${letterSpacing}em`,
+                          textAlign: textAlign,
+                          writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                          fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
+                        }}
+                        className={`relative z-10 whitespace-pre-wrap break-words min-h-[300px] ${
+                          isLight ? 'text-stone-900' : 'text-emerald-50'
+                        } ${writingMode === 'vertical' ? 'h-full' : 'w-full'}`}
+                      >
+                        {renderedText}
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
+
+            {/* Right Side Docked Glyph Adjuster Panel */}
+            {renderSideAdjustPanel()}
           </div>
         ) : (
           /* ==================== TOP STACKED MODE (WITH COLLAPSIBLE CONTROLS) ==================== */
@@ -1222,6 +1936,12 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                       仮想枠
                     </button>
                     <button
+                      onClick={() => setShowNotebookGuides(!showNotebookGuides)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${showNotebookGuides ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                    >
+                      ノートガイド
+                    </button>
+                    <button
                       onClick={() => setShowGenkoGrid(!showGenkoGrid)}
                       className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${showGenkoGrid ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
                     >
@@ -1257,9 +1977,10 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
               </>
             )}
 
-            {/* Main Proofing Stage */}
-            <div
-              className={`flex-1 min-h-0 overflow-auto overscroll-contain p-3 sm:p-8 select-text relative min-h-[250px] ${
+            {/* Main Proofing Stage and Docked Side Panel Container */}
+            <div className="flex-1 min-h-0 flex flex-row overflow-hidden relative">
+              <div
+                className={`flex-1 min-h-0 overflow-auto overscroll-contain p-3 sm:p-8 select-text relative min-h-[250px] ${
                 isLight ? 'bg-[#eef4f0]' : 'bg-[#0b100d]'
               } ${
                 showGenkoGrid
@@ -1325,28 +2046,189 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                         : 'bg-[#151e18] border-[#25362b] shadow-black/40'
                     }`}
                   >
-                    <div
-                      style={{
-                        fontFamily: `'${fontFamilyName}', sans-serif`,
-                        fontSize: `${fontSize}px`,
-                        lineHeight: lineHeight,
-                        letterSpacing: `${letterSpacing}em`,
-                        textAlign: textAlign,
-                        writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
-                        fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
-                      }}
-                      className={`whitespace-pre-wrap break-words min-h-[220px] ${
-                        isLight ? 'text-stone-900' : 'text-emerald-50'
-                      } ${writingMode === 'vertical' ? 'h-full' : 'w-full'}`}
-                    >
-                      {renderedText}
+                    {/* Notebook Guide Legend Badge */}
+                    {showNotebookGuides && (
+                      <div className="mb-3 px-2 py-1 rounded bg-stone-100/90 dark:bg-stone-900/90 border border-stone-200/80 dark:border-stone-800 text-[10px] flex flex-wrap items-center gap-3 shrink-0 select-none pointer-events-none opacity-80">
+                        <span className="font-bold text-stone-600 dark:text-stone-300">ノートガイド凡例:</span>
+                        {writingMode === 'horizontal' ? (
+                          <>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-indigo-500 rounded-full"></span>
+                              <span>ベースライン (主罫線)</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-emerald-500 border-b border-dashed border-emerald-500"></span>
+                              <span>中心軸線</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-sky-400 border-b border-dotted border-sky-400"></span>
+                              <span>上限線 (Cap)</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-rose-400 border-b border-dotted border-rose-400"></span>
+                              <span>下限線 (Base)</span>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-emerald-500 border-b border-dashed border-emerald-500"></span>
+                              <span>縦中心軸線</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-sky-400 border-b border-dotted border-sky-400"></span>
+                              <span>右境界線</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <span className="w-3 h-0.5 bg-rose-400 border-b border-dotted border-rose-400"></span>
+                              <span>左境界線</span>
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="relative w-full overflow-hidden">
+                      {/* Multi-line Notebook Ruling Layer */}
+                      {showNotebookGuides && (
+                        writingMode === 'horizontal' ? (
+                          <svg
+                            className="absolute inset-0 w-full h-full pointer-events-none select-none"
+                            style={{ minHeight: '100%' }}
+                          >
+                            <defs>
+                              <pattern
+                                id="notebook-ruling-h-top"
+                                width="100%"
+                                height={fontSize * lineHeight}
+                                patternUnits="userSpaceOnUse"
+                              >
+                                {/* Top Cap Line */}
+                                <line
+                                  x1="0"
+                                  y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.1}
+                                  x2="100%"
+                                  y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.1}
+                                  stroke={isLight ? '#38bdf8' : '#0284c7'}
+                                  strokeDasharray="3 3"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                                {/* Center Axis Line */}
+                                <line
+                                  x1="0"
+                                  y1={(fontSize * lineHeight) / 2}
+                                  x2="100%"
+                                  y2={(fontSize * lineHeight) / 2}
+                                  stroke={isLight ? '#10b981' : '#059669'}
+                                  strokeDasharray="5 4"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                                {/* Baseline (Main Ruled Line) */}
+                                <line
+                                  x1="0"
+                                  y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.8}
+                                  x2="100%"
+                                  y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.8}
+                                  stroke={isLight ? '#6366f1' : '#818cf8'}
+                                  strokeWidth="1.5"
+                                  strokeOpacity="0.85"
+                                />
+                                {/* Bottom Descender Line */}
+                                <line
+                                  x1="0"
+                                  y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
+                                  x2="100%"
+                                  y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
+                                  stroke={isLight ? '#f43f5e' : '#e11d48'}
+                                  strokeDasharray="3 3"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                              </pattern>
+                            </defs>
+                            <rect width="100%" height="100%" fill="url(#notebook-ruling-h-top)" />
+                          </svg>
+                        ) : (
+                          <svg
+                            className="absolute inset-0 w-full h-full pointer-events-none select-none"
+                            style={{ minHeight: '100%' }}
+                          >
+                            <defs>
+                              <pattern
+                                id="notebook-ruling-v-top"
+                                width={fontSize * lineHeight}
+                                height="100%"
+                                patternUnits="userSpaceOnUse"
+                              >
+                                {/* Left Boundary */}
+                                <line
+                                  x1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.05}
+                                  y1="0"
+                                  x2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.05}
+                                  y2="100%"
+                                  stroke={isLight ? '#f43f5e' : '#e11d48'}
+                                  strokeDasharray="3 3"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                                {/* Vertical Center Axis */}
+                                <line
+                                  x1={(fontSize * lineHeight) / 2}
+                                  y1="0"
+                                  x2={(fontSize * lineHeight) / 2}
+                                  y2="100%"
+                                  stroke={isLight ? '#10b981' : '#059669'}
+                                  strokeDasharray="5 4"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                                {/* Right Boundary */}
+                                <line
+                                  x1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
+                                  y1="0"
+                                  x2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
+                                  y2="100%"
+                                  stroke={isLight ? '#38bdf8' : '#0284c7'}
+                                  strokeDasharray="3 3"
+                                  strokeWidth="1"
+                                  strokeOpacity="0.8"
+                                />
+                              </pattern>
+                            </defs>
+                            <rect width="100%" height="100%" fill="url(#notebook-ruling-v-top)" />
+                          </svg>
+                        )
+                      )}
+
+                      <div
+                        style={{
+                          fontFamily: `'${fontFamilyName}', sans-serif`,
+                          fontSize: `${fontSize}px`,
+                          lineHeight: lineHeight,
+                          letterSpacing: `${letterSpacing}em`,
+                          textAlign: textAlign,
+                          writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                          fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
+                        }}
+                        className={`relative z-10 whitespace-pre-wrap break-words min-h-[220px] ${
+                          isLight ? 'text-stone-900' : 'text-emerald-50'
+                        } ${writingMode === 'vertical' ? 'h-full' : 'w-full'}`}
+                      >
+                        {renderedText}
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
-          </>
-        )}
+
+            {/* Right Side Docked Glyph Adjuster Panel */}
+            {renderSideAdjustPanel()}
+          </div>
+        </>
+      )}
 
         {/* Footer info bar & Hover Glyph Inspector */}
         <div

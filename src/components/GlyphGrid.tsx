@@ -272,6 +272,19 @@ const GlyphGridCard = memo(
         </div>
       </div>
     );
+  },
+  (prevProps, nextProps) => {
+    return (
+      prevProps.item.code === nextProps.item.code &&
+      prevProps.isSelected === nextProps.isSelected &&
+      prevProps.isLight === nextProps.isLight &&
+      prevProps.density === nextProps.density &&
+      prevProps.glyphData === nextProps.glyphData &&
+      prevProps.glyphData?.locked === nextProps.glyphData?.locked &&
+      prevProps.glyphData?.contours?.length === nextProps.glyphData?.contours?.length &&
+      prevProps.onSelectGlyph === nextProps.onSelectGlyph &&
+      prevProps.onContextMenu === nextProps.onContextMenu
+    );
   }
 );
 

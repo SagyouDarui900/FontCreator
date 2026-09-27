@@ -49,8 +49,8 @@ export const FONT_GLOSSARY: GlossaryTerm[] = [
     category: 'spacing',
     shortSummary: '隣り合う文字との間隔を保つための左右の余白',
     easyExplanation: '文字同士が接触せず自然に読めるよう、左右に設ける余白領域のことです。左側の余白を LSB (Left Side Bearing)、右側の余白を RSB (Right Side Bearing)、全体の幅を送り幅（Advance Width）と呼びます。',
-    appFeatureTip: 'ショートカット「Shift + Alt + S」を押すか、右側パネルの「字幅調律」をクリックすることで自動計算できます。',
-    badge: '超重要',
+    appFeatureTip: 'ショートカット「Shift + Alt + S」を押すか、右側パネルの「字幅自動設定」をクリックすることで自動計算できます。',
+    badge: '基本メトリクス',
   },
   {
     id: 'bezier-curve',
@@ -70,7 +70,7 @@ export const FONT_GLOSSARY: GlossaryTerm[] = [
     english: 'Anchor Point / Node',
     category: 'drawing',
     shortSummary: '曲線の位置と曲がり具合を決定する制御点',
-    easyExplanation: 'ベジェ曲線の輪郭を構成する通過点です。アンカーポイントから伸びる「ハンドル」の長さや向きを調整することで、曲線の膨らみや角度を自由自在に変更できます。',
+    easyExplanation: 'ベジェ曲線の輪郭を構成する通過点です。アンカーポイントから伸びる「ハンドル」の長さや向きを調整することで、曲線の膨らみや角度を変更できます。',
     appFeatureTip: 'ノード編集ツール [A] でアンカーポイントやハンドルを選択し、ドラッグして形状を微調整できます。',
   },
   {
@@ -82,7 +82,7 @@ export const FONT_GLOSSARY: GlossaryTerm[] = [
     shortSummary: '余分なアンカーポイントを削減し、滑らかな曲線に最適化する機能',
     easyExplanation: 'フリーハンドで描画した直後はアンカーポイントが多くなりがちです。パスの単純化を実行することで、文字本来のシルエットを保ちながら余分な点を整理し、容量の軽量化と滑らかな輪郭への最適化を同時に行います。',
     appFeatureTip: '描画後に「Alt + S」キーを押すか、上部バーの「単純化」ボタンからいつでもワンタッチで実行できます。',
-    badge: 'おすすめ',
+    badge: '推奨',
   },
   {
     id: 'baseline',
@@ -91,7 +91,7 @@ export const FONT_GLOSSARY: GlossaryTerm[] = [
     english: 'Baseline',
     category: 'spacing',
     shortSummary: '欧文や数字の配置基準となる水平ライン',
-    easyExplanation: 'アルファベットの大文字や多くの小文字、数字などの底面が揃う基準となる水平線です。日本語フォントであっても、半角英数字や記号との混植時に美しく並ぶようベースラインが設定されます。',
+    easyExplanation: 'アルファベットの大文字や多くの小文字、数字などの底面が揃う基準となる水平線です。日本語フォントであっても、半角英数字や記号との混植時に文字の下端が揃うようベースラインが設定されます。',
     appFeatureTip: 'キャンバス下部に表示される水平線がベースライン（Y=200）です。英小文字の「g」や「y」の下部はベースラインより下へ配置します。',
   },
   {
@@ -112,7 +112,7 @@ export const FONT_GLOSSARY: GlossaryTerm[] = [
     category: 'spacing',
     shortSummary: '特定の文字ペア間で発生する不自然な隙間を詰める文字間調整',
     easyExplanation: '文字の形状によって、通常の文字幅のまま並べると間隔が広く見えてしまう組み合わせ（例: 「T」と「o」、「A」と「V」など）に対し、個別に文字間隔を調整して自然な文字並びにする機能です。',
-    appFeatureTip: '「機能」メニュー内の「カーニング調律」から、頻出する文字ペアの間隔をスライダーで簡単に設定できます。',
+    appFeatureTip: '「機能」メニュー内の「カーニング調整」から、頻出する文字ペアの間隔をスライダーで設定できます。',
   },
   {
     id: 'ttf-otf',

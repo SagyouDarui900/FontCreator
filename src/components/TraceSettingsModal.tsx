@@ -378,7 +378,7 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
                 >
                   <div className="flex items-center space-x-1 font-bold text-emerald-700 dark:text-emerald-400">
                     <Info className="w-3.5 h-3.5 shrink-0" />
-                    <span>おすすめの画像仕様（フォント下絵・トレース用）</span>
+                    <span>推奨画像仕様（フォント下絵・トレース用）</span>
                   </div>
                   <ul className="space-y-0.5 text-stone-600 dark:text-stone-300 pl-0.5 leading-snug">
                     <li>・<strong>推奨サイズ:</strong> 1000 × 1000 px 〜 2048 × 2048 px （1:1 正方形 / FontForge規格適合）</li>

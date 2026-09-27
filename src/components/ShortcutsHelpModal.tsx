@@ -33,12 +33,14 @@ import {
 import { ThemeMode, isLightTheme } from '../utils/theme';
 import { BeginnerTutorialTab } from './help/BeginnerTutorialTab';
 import { GlossaryTab } from './help/GlossaryTab';
+import { FeedbackTab } from './help/FeedbackTab';
+import { Github, MessageSquare } from 'lucide-react';
 
 interface ShortcutsHelpModalProps {
   isOpen: boolean;
   onClose: () => void;
   theme: ThemeMode;
-  initialTab?: 'tutorial' | 'glossary' | 'features' | 'shortcuts' | 'faq';
+  initialTab?: 'tutorial' | 'glossary' | 'features' | 'shortcuts' | 'faq' | 'feedback';
 }
 
 interface ShortcutItem {
@@ -76,14 +78,14 @@ const SHORTCUTS: ShortcutItem[] = [
   { keys: ['Delete', '/', 'Backspace'], description: '選択中の輪郭、または選択ノードを削除', category: 'drawing' },
   { keys: ['Ctrl / ⌘', '+', 'A'], description: '現在の文字のすべての輪郭パスを選択', category: 'drawing' },
   { keys: ['Alt', '+', 'S'], description: 'パスの単純化（頂点数を減らし滑らかに最適化）', category: 'drawing', badge: '最適化' },
-  { keys: ['Shift', '+', 'Alt', '+', 'S'], description: 'スマート自動字幅・左右余白バランス調律', category: 'drawing', badge: '自動調律' },
+  { keys: ['Shift', '+', 'Alt', '+', 'S'], description: '左右余白（サイドベアリング）自動設定', category: 'drawing', badge: '自動設定' },
 
   // モーダル・ダイアログの即時呼び出し
   { keys: ['Ctrl / ⌘', '+', 'E', 'または', 'Alt + E'], description: 'フォント書き出しモーダル（TTF / WOFF / SVG）を開く', category: 'tools', badge: '書き出し' },
   { keys: ['Alt', '+', 'T'], description: '試し打ち・文章プレビュー画面を開く', category: 'tools', badge: 'プレビュー' },
   { keys: ['Alt', '+', 'Q'], description: 'フォント品質検査・自動診断画面を開く', category: 'tools', badge: '品質診断' },
   { keys: ['Alt', '+', 'I'], description: 'フォント情報・基本メトリクス設定を開く', category: 'tools' },
-  { keys: ['Alt', '+', 'K'], description: 'カーニング（文字間ペア調律）画面を開く', category: 'tools' },
+  { keys: ['Alt', '+', 'K'], description: 'カーニング（文字間ペア調整）画面を開く', category: 'tools' },
   { keys: ['Alt', '+', 'M'], description: 'ストレージ管理・バックアップ復元画面を開く', category: 'tools' },
 
   // 表示・ズーム・レイアウト
@@ -133,7 +135,7 @@ const SHORTCUT_CATEGORIES = [
   { id: 'edit', label: '履歴・保存', icon: Undo2 },
 ];
 
-type MainTab = 'tutorial' | 'glossary' | 'features' | 'shortcuts' | 'faq';
+type MainTab = 'tutorial' | 'glossary' | 'features' | 'shortcuts' | 'faq' | 'feedback';
 
 export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
   isOpen,
@@ -351,6 +353,20 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
             <HelpCircle className="w-4 h-4 text-sky-500" />
             <span>よくあるご質問・導入</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('feedback')}
+            className={`py-3 px-3 border-b-2 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
+              activeTab === 'feedback'
+                ? isLight
+                  ? 'border-emerald-600 text-emerald-800'
+                  : 'border-emerald-400 text-emerald-200'
+                : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
+            }`}
+          >
+            <Github className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+            <span>フィードバック & 不具合報告 (GitHub)</span>
+          </button>
         </div>
 
         {/* Tab Content Body */}
@@ -385,7 +401,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                     <h4 className="text-xs font-bold">筆ツール & 手振れ補正</h4>
                   </div>
                   <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                    毛筆・万年筆・丸ペン・サインペンなど多彩な筆スタイルを搭載。手書き時のヨレを滑らかにする「リアルタイム手振れ補正」と「自動パス結合」で、自然で美しいベクター輪郭を生成します。
+                    毛筆・万年筆・丸ペン・サインペンなどの筆スタイルを搭載。手書き時のヨレを平滑化する「手振れ補正」と「自動パス結合」でベクター輪郭を生成します。
                   </p>
                 </div>
 
@@ -402,7 +418,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                     <h4 className="text-xs font-bold">濁点・小書き自動合成</h4>
                   </div>
                   <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                    「か・さ・た・は」などの清音から、濁点（゛）・半濁点（゜）付き文字や「っ・ゃ・ゅ・ょ」の小書き文字を一括自動生成。手作業の負担を劇的に削減します。
+                    「か・さ・た・は」などの清音から、濁点（゛）・半濁点（゜）付き文字や「っ・ゃ・ゅ・ょ」の小書き文字を一括自動生成できます。
                   </p>
                 </div>
 
@@ -535,7 +551,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                     <div className="p-1.5 rounded-lg bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300">
                       <Database className="w-4 h-4" />
                     </div>
-                    <h4 className="text-xs font-bold">安心のストレージ管理 & スナップショット復元</h4>
+                    <h4 className="text-xs font-bold">ストレージ管理 & スナップショット復元</h4>
                   </div>
                   <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
                     自動保存に加えて、世代バックアップ（スナップショット履歴）から過去の状態へいつでも復元可能。ストレージの消費量内訳の確認や、単一文字のJSONバックアップ書き出しにも対応しています。
@@ -553,10 +569,10 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
               >
                 <div className="flex items-center space-x-2 font-bold text-xs">
                   <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                  <span>プロの作字テクニック: 字面枠（仮想ボディ）と余白の調律</span>
+                  <span>字面枠（仮想ボディ）と余白の調整</span>
                 </div>
                 <p className="text-xs leading-relaxed opacity-90">
-                  文字を書くときは、キャンバスの薄緑の枠（字面枠・900×900）に少し余裕を持って収めると、文章にしたときに文字同士がくっつかず美しく並びます。<strong>Shift+Alt+S</strong> を押すと、文字の左右余白（サイドベアリング）を自動で均等調律できます。
+                  文字を書くときは、キャンバスの薄緑の枠（字面枠・900×900）の内側に収めると、文章にしたときに文字同士が重ならず並びます。<strong>Shift+Alt+S</strong> を押すと、文字の左右余白（サイドベアリング）を自動で設定できます。
                 </p>
               </div>
             </div>
@@ -667,7 +683,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                   <span>Q. 作成したフォントは商用利用・配布できますか？</span>
                 </h4>
                 <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed pl-5">
-                  <strong>A. はい、完全に自由です。</strong> あなた自身が描画・作成したフォントの著作権は100%あなたに帰属します。同人誌、商業印刷、Webサイト、ゲーム、動画テロップ、LINEスタンプなど、商用・非商用問わず無償でご自由にご活用いただけます。
+                  <strong>A. はい、商用・非商用問わず自由に利用できます。</strong> 自身が描画・作成したフォントの著作権は制作者に帰属します。商業印刷、Webサイト、ゲーム、動画テロップなど、用途を問わず利用可能です。
                 </p>
               </div>
 
@@ -713,7 +729,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                   <span>Q. 途中で作業を中断・保存したい場合は？</span>
                 </h4>
                 <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed pl-5">
-                  ブラウザのローカルストレージおよびIndexedDBに二重自動保存されますが、端末の変更や万一のキャッシュ削除に備えて、「機能」メニュー内の「<strong>セーブ保存 (.fontproj.json)</strong>」からプロジェクトファイルを保存しておくことをおすすめします。いつでも「セーブ読込」から続きを再開できます。
+                  ブラウザのローカルストレージおよびIndexedDBに自動保存されますが、端末の変更やキャッシュ削除に備えて、「機能」メニュー内の「<strong>セーブ保存 (.fontproj.json)</strong>」からプロジェクトファイルを定期的に保存してください。いつでも「セーブ読込」から再開できます。
                 </p>
               </div>
 
@@ -725,7 +741,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
               >
                 <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
                   <HelpCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Q. iPadやApple Pencilで描く時の筆圧感知や快適化のコツは？</span>
+                  <span>Q. iPadやApple Pencilで描く時の筆圧感知の設定方法は？</span>
                 </h4>
                 <div className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed pl-5 space-y-1.5">
                   <p>
@@ -738,7 +754,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                     <strong>タッチジェスチャー:</strong> キャンバス上を<strong>2本指タップで1手戻す (Undo)</strong>、<strong>3本指タップでやり直す (Redo)</strong>、<strong>2本指ピンチで拡大・縮小・移動</strong>がスムーズに行えます。
                   </p>
                   <p>
-                    <strong>パームリジェクション:</strong> 画面上部の設定メニューから「パームリジェクション」を「自動」または「スタイラス専用」に設定すると、画面に置いた手のひらによる誤反応を完全に遮断できます。
+                    <strong>パームリジェクション:</strong> 画面上部の設定メニューから「パームリジェクション」を「自動」または「スタイラス専用」に設定すると、画面に置いた手のひらによる誤反応を防止できます。
                   </p>
                 </div>
               </div>
@@ -763,6 +779,11 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB 6: フィードバック & GitHub 不具合報告 */}
+          {activeTab === 'feedback' && (
+            <FeedbackTab isLight={isLight} />
           )}
         </div>
 

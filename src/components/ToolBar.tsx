@@ -534,30 +534,62 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
         {/* Geometric Shapes Multi-Tool */}
         <div className="relative" ref={shapeMenuRef}>
-          <button
-            id="shape-tool-main-button"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setShapeAnchorTop(Math.max(50, Math.min(window.innerHeight - 520, rect.top)));
-              setShowBrushMenu(false);
-              setShowGridMenu(false);
-              if (isCurrentToolShape) {
-                setShowShapeMenu((prev) => !prev);
-              } else {
-                setToolMode(lastSelectedShape);
+          <div className="relative flex items-center">
+            <button
+              id="shape-tool-main-button"
+              type="button"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setShapeAnchorTop(Math.max(10, Math.min(window.innerHeight - 380, rect.top - 10)));
+                setShowBrushMenu(false);
+                setShowGridMenu(false);
+                if (isCurrentToolShape) {
+                  setShowShapeMenu((prev) => !prev);
+                } else {
+                  setToolMode(lastSelectedShape);
+                  setShowShapeMenu(true);
+                }
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                const rect = e.currentTarget.getBoundingClientRect();
+                setShapeAnchorTop(Math.max(10, Math.min(window.innerHeight - 380, rect.top - 10)));
+                setShowBrushMenu(false);
+                setShowGridMenu(false);
                 setShowShapeMenu(true);
-              }
-            }}
-            className={`p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center relative ${
-              isCurrentToolShape || showShapeMenu
-                ? themeClasses.activeTool
-                : themeClasses.activeToolHover
-            }`}
-            title={`幾何学図形ツール (${currentShapeTool.label}) (U) - クリックで全20種類の図形から選択`}
-          >
-            <CurrentShapeIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="absolute bottom-0.5 right-1 text-[7px] opacity-70">▾</span>
-          </button>
+              }}
+              className={`p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center relative ${
+                isCurrentToolShape || showShapeMenu
+                  ? themeClasses.activeTool
+                  : themeClasses.activeToolHover
+              }`}
+              title={`幾何学図形ツール (${currentShapeTool.label}) (U) - クリックまたは▼で全20種類の図形から選択 (右クリックでも開閉可能)`}
+            >
+              <CurrentShapeIcon className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110" />
+            </button>
+            {/* Small settings chevron trigger for direct shape picker open */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                setShapeAnchorTop(Math.max(10, Math.min(window.innerHeight - 380, rect.top - 10)));
+                setShowBrushMenu(false);
+                setShowGridMenu(false);
+                setShowShapeMenu((prev) => !prev);
+              }}
+              className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7.5px] font-bold border transition-colors ${
+                showShapeMenu
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  : isLight
+                  ? 'bg-stone-100 hover:bg-emerald-100 border-stone-300 text-stone-700'
+                  : 'bg-stone-800 hover:bg-emerald-900 border-stone-700 text-emerald-300'
+              }`}
+              title="図形一覧パレットを開く"
+            >
+              ▾
+            </button>
+          </div>
 
           {/* Shape Selection Popout Menu (Desktop & Tablet) */}
           {showShapeMenu && isSmScreen && (
@@ -581,7 +613,11 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                 <div className="flex items-center space-x-2">
                   <span className="text-[10px] font-normal opacity-60">全20種類</span>
                   <button
-                    onClick={() => setShowShapeMenu(false)}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowShapeMenu(false);
+                    }}
                     className="p-1 rounded-md hover:bg-stone-200 dark:hover:bg-[#25362b] opacity-70 hover:opacity-100 transition-opacity"
                     title="閉じる"
                   >
@@ -592,7 +628,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
               {/* Basic & Curved Geometrics */}
               <div className="text-[10px] font-bold text-stone-400 dark:text-emerald-500/80 px-1 mb-1">
-                基本・角丸・カプセル
+                基本・角丸・カプセル (6種類)
               </div>
               <div className="grid grid-cols-2 gap-1 mb-2">
                 {SHAPE_TOOLS.slice(0, 6).map((shape) => {
@@ -601,7 +637,9 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                   return (
                     <button
                       key={shape.id}
-                      onClick={() => {
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setLastSelectedShape(shape.id);
                         setToolMode(shape.id);
                         setShowShapeMenu(false);
@@ -625,7 +663,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
               {/* Polygons & Lines */}
               <div className="text-[10px] font-bold text-stone-400 dark:text-emerald-500/80 px-1 mb-1">
-                多角形・直線・幾何学
+                多角形・直線・幾何学 (9種類)
               </div>
               <div className="grid grid-cols-2 gap-1 mb-2">
                 {SHAPE_TOOLS.slice(6, 15).map((shape) => {
@@ -634,7 +672,9 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                   return (
                     <button
                       key={shape.id}
-                      onClick={() => {
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setLastSelectedShape(shape.id);
                         setToolMode(shape.id);
                         setShowShapeMenu(false);
@@ -658,7 +698,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
               {/* Ornaments & Stars */}
               <div className="text-[10px] font-bold text-stone-400 dark:text-emerald-500/80 px-1 mb-1">
-                記号・星型・三日月
+                記号・星型・三日月 (5種類)
               </div>
               <div className="grid grid-cols-2 gap-1">
                 {SHAPE_TOOLS.slice(15).map((shape) => {
@@ -667,7 +707,9 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                   return (
                     <button
                       key={shape.id}
-                      onClick={() => {
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setLastSelectedShape(shape.id);
                         setToolMode(shape.id);
                         setShowShapeMenu(false);

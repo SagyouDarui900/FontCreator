@@ -341,19 +341,19 @@ export function compileFont(
         : (g.unicode > 255 ? (project.metadata.unitsPerEm || DEFAULT_UPM) : Math.round((project.metadata.unitsPerEm || DEFAULT_UPM) / 2))
     );
 
-    const scaleFactor = options?.scaleFactor !== undefined ? options.scaleFactor : 1.35;
+    const scaleFactor = options?.scaleFactor !== undefined ? options.scaleFactor : 1.0;
     const shouldBalance = options?.balanceSideBearings !== false;
     const shouldMerge = options?.mergeOverlaps === true;
 
     if (glyphContours.length > 0) {
       const origBbox = getContoursBoundingBox(glyphContours);
       if (origBbox.width > 0 && origBbox.height > 0) {
-        // 1. Scale around optical center (anchorX, anchorY) so Japanese glyphs expand to standard em-box size
+        // 1. Scale around optical center (anchorX, anchorY) so Japanese glyphs expand smoothly
         if (Math.abs(scaleFactor - 1.0) > 0.001) {
           const isAsymmetric = isAsymmetricOrPunctuationGlyph(g.unicode, g.char);
           const anchorX = (shouldBalance && !isAsymmetric) ? origBbox.centerX : advWidth / 2;
-          // In screen coords (0..1000), optical center of guide box is 500 (em-box center)
-          const anchorY = 500;
+          // In screen coords (0..1000), Japanese 仮想ボディ (100..800) center is 450
+          const anchorY = 450;
 
           // Safety boundary clamping: prevent expanding beyond em-box boundaries (0..1000)
           // which would cause vertical clipping or line collision in Word / web renderers
@@ -628,8 +628,8 @@ export function compileFont(
   const desc = project.metadata.descender || DEFAULT_DESCENDER;
   const lineGap = project.metadata.lineGap ?? 0;
 
-  font.tables.os2.usWinAscent = Math.max(asc, 880);
-  font.tables.os2.usWinDescent = Math.abs(Math.min(desc, -120));
+  font.tables.os2.usWinAscent = Math.max(asc, 800);
+  font.tables.os2.usWinDescent = Math.abs(desc);
   font.tables.os2.sTypoAscender = asc;
   font.tables.os2.sTypoDescender = desc;
   font.tables.os2.sTypoLineGap = lineGap;

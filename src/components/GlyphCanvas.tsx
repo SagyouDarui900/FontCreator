@@ -126,6 +126,7 @@ import {
   flipMultipleContoursV,
   duplicateMultipleContours,
   unionContours,
+  doContoursIntersectOrTouch,
   normalizeGlyphContoursWinding,
   groupContoursWithHoles,
   resolveContourOverlaps,
@@ -134,9 +135,13 @@ import {
   getContoursBoundingBox,
   isPointNearContour,
   eraseContoursAtPoint,
+  subtractEraserStrokeFromContours,
   PEN_PRESETS,
   insertNodeOnContourAtPoint,
   toggleNodeType,
+  straightenWobblyContour,
+  booleanSubtractContours,
+  booleanIntersectContours,
 } from '../utils/pathUtils';
 import {
   DAKUTEN_MAPPINGS,
@@ -626,6 +631,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
   const isErasingRef = useRef<boolean>(false);
   const erasedAnyInSessionRef = useRef<boolean>(false);
   const lastErasePosRef = useRef<Point | null>(null);
+  const eraserStrokePointsRef = useRef<Point[]>([]);
+  const activeEraserPathRef = useRef<SVGPathElement | null>(null);
 
   // Bounding Box Transformation Session (Move, Free Rotate, 8-directional Resizing for single or multiple contours)
   const [transformSession, setTransformSession] = useState<{
@@ -642,7 +649,10 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
       centerY: number;
     };
     initialContours: PathContour[];
+    allInitialNodes?: Point[];
   } | null>(null);
+  const transformRafRef = useRef<number | null>(null);
+  const pendingTransformContoursRef = useRef<PathContour[] | null>(null);
   const [rotateDisplayAngle, setRotateDisplayAngle] = useState<number | null>(null);
 
   // Ruler Measurement & Straight Line Draw Tool State
@@ -755,6 +765,15 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
         strokePts = getDecimatedPointsForLivePreview(pts);
       }
 
+      // 手ブレ補正設定に応じた平滑化強度を適用
+      const effectiveSmoothing = autoSmoothBrush
+        ? smoothStrength === 'strong'
+          ? Math.max(75, smoothingIntensity)
+          : smoothStrength === 'standard'
+          ? Math.max(55, smoothingIntensity)
+          : Math.max(35, smoothingIntensity)
+        : smoothingIntensity;
+
       const rawContour = strokePointsToOutline(
         strokePts,
         brushWidth,
@@ -762,34 +781,18 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
         true,
         pressureSensitivity,
         pressureCurve,
-        smoothingIntensity,
+        effectiveSmoothing,
         isFinalize
           ? undefined
-          : { subdivisionStep: 4.5, density: 'normal', widthSmoothingPasses: 1 }
+          : { subdivisionStep: 3.5, density: 'normal', widthSmoothingPasses: 1 }
       );
-      // カクカク角筆・角丸筆（sharp / sharp_round / polygon）は専用ジオメトリ生成のため自動平滑化をバイパスし、直線と角丸を100%保持
-      const isSharp = brushStyle === 'sharp' || brushStyle === 'sharp_round' || brushStyle === 'polygon';
-      if (!isFinalize || isSharp) {
-        return rawContour;
-      }
 
-      // 手ブレ補正ON時: ユーザー指定の平滑化強度でカーブフィッティング＆頂点最適化を実行
-      if (autoSmoothBrush) {
-        return smoothStrokeContour(rawContour, {
-          level: smoothStrength,
-          preserveCorners: smoothPreserveCorners,
-        }).contour;
-      }
-
-      // 手ブレ補正OFF時: 生の軌跡（微細な手の震えや直角・鋭角・不揃いな形）の忠実度を100%保ちつつ、
-      // 許容誤差0.85pxで同一直線上の冗長頂点や超微小ポリゴンのみを適切に整理（ノード数爆発を防止）
-      return smoothStrokeContour(rawContour, {
-        tolerance: 0.85,
-        preserveCorners: true,
-        cornerAngleDeg: 42,
-      }).contour;
+      // strokePointsToOutline は物理弧長ガウス平滑化・Catmull-Rom連続スプラインにより
+      // 完全に滑らかで美しいG1連続ベジェ曲線を生成します。
+      // これを直接返すことで、サンプリングによる多角形化（ガタガタ）を防ぎます。
+      return rawContour;
     },
-    [brushWidth, brushStyle, pressureSensitivity, pressureCurve, smoothingIntensity, autoSmoothBrush, smoothStrength, smoothPreserveCorners]
+    [brushWidth, brushStyle, pressureSensitivity, pressureCurve, smoothingIntensity, autoSmoothBrush, smoothStrength]
   );
 
   // Real-time Hover Position in Font Canvas Coordinates (0 - 1000)
@@ -823,6 +826,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
       }
       if (panRafRef.current != null) {
         cancelAnimationFrame(panRafRef.current);
+      }
+      if (transformRafRef.current != null) {
+        cancelAnimationFrame(transformRafRef.current);
       }
     };
   }, []);
@@ -1084,11 +1090,12 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
     return () => window.removeEventListener('keydown', handleCanvasShortcut);
   }, [resetView, onToggleZenMode, showCanvasToast, handleZoomStep, isAnyModalOpen, toolMode, handleResetTracePosition]);
 
-  // Screen to Canvas Coordinates Converter (Pure geometric mapping)
+  // Screen to Canvas Coordinates Converter (Pure geometric mapping with zero drift)
   const screenToCanvas = useCallback(
     (clientX: number, clientY: number): Point => {
-      const rect = containerRectRef.current || (containerRef.current ? containerRef.current.getBoundingClientRect() : null);
+      const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return { x: 0, y: 0 };
+      containerRectRef.current = rect;
       const currentZoom = zoomRef.current || 1;
       const currentPan = panRef.current || { x: 0, y: 0 };
       const x = (clientX - rect.left - currentPan.x) / currentZoom;
@@ -1233,11 +1240,13 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
       const bbox = getContoursBoundingBox(targetContours);
       const pos = screenToCanvas(e.clientX, e.clientY);
+      const allInitialNodes = targetContours.flatMap((c) => c.nodes.map((n) => ({ x: n.x, y: n.y })));
       setTransformSession({
         handle,
         startPoint: pos,
         initialBBox: bbox,
         initialContours: targetContours,
+        allInitialNodes,
       });
     },
     [selectedContourIds, contours, screenToCanvas]
@@ -1612,11 +1621,19 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
       isErasingRef.current = true;
       erasedAnyInSessionRef.current = false;
       lastErasePosRef.current = pos;
-      const eraseRadius = Math.max(8, (eraserSize / 2) / zoom);
-      const updatedContours = eraseContoursAtPoint(contours, pos, eraseRadius, eraserMode);
-      if (updatedContours !== contours) {
-        erasedAnyInSessionRef.current = true;
-        onChangeContours(updatedContours);
+      eraserStrokePointsRef.current = [pos];
+      const eraseRadius = Math.max(2, eraserSize / 2);
+
+      if (eraserMode === 'cut') {
+        if (activeEraserPathRef.current) {
+          activeEraserPathRef.current.setAttribute('d', `M ${pos.x} ${pos.y} L ${pos.x + 0.1} ${pos.y}`);
+        }
+      } else {
+        const updatedContours = eraseContoursAtPoint(contours, pos, eraseRadius, eraserMode);
+        if (updatedContours !== contours) {
+          erasedAnyInSessionRef.current = true;
+          onChangeContours(updatedContours);
+        }
       }
       return;
     }
@@ -1901,7 +1918,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
     // ---------------- ACTIVE BOUNDING BOX TRANSFORMATION DRAG ----------------
     if (transformSession && selectedContourIds.length > 0) {
-      const { handle, startPoint, initialBBox, initialContours } = transformSession;
+      const { handle, startPoint, initialBBox, initialContours, allInitialNodes: precomputedNodes } = transformSession;
       const rawDx = pos.x - startPoint.x;
       const rawDy = pos.y - startPoint.y;
 
@@ -1913,7 +1930,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
         if (!e.altKey && (Boolean(gridSettings.snapToGuides) || Boolean(gridSettings.snapToGrid))) {
           const otherContours = contours.filter((c) => !selectedContourIds.includes(c.id));
           const snapThreshold = Math.max(7, Math.round(12 / zoom));
-          const allInitialNodes = initialContours.flatMap((c) => c.nodes);
+          const allInitialNodes = precomputedNodes || initialContours.flatMap((c) => c.nodes);
           const snapResult = snapContourMovement(
             initialBBox,
             rawDx,
@@ -1945,7 +1962,17 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
             })),
           });
         }
-        onChangeContours(contours.map((c) => updatedMap.get(c.id) || c));
+
+        const nextContours = contours.map((c) => updatedMap.get(c.id) || c);
+        pendingTransformContoursRef.current = nextContours;
+        if (transformRafRef.current == null) {
+          transformRafRef.current = requestAnimationFrame(() => {
+            transformRafRef.current = null;
+            if (pendingTransformContoursRef.current) {
+              onChangeContours(pendingTransformContoursRef.current);
+            }
+          });
+        }
         return;
       }
 
@@ -1989,7 +2016,17 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
             })),
           });
         }
-        onChangeContours(contours.map((c) => updatedMap.get(c.id) || c));
+
+        const nextContours = contours.map((c) => updatedMap.get(c.id) || c);
+        pendingTransformContoursRef.current = nextContours;
+        if (transformRafRef.current == null) {
+          transformRafRef.current = requestAnimationFrame(() => {
+            transformRafRef.current = null;
+            if (pendingTransformContoursRef.current) {
+              onChangeContours(pendingTransformContoursRef.current);
+            }
+          });
+        }
         return;
       }
 
@@ -2152,19 +2189,42 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
         });
       }
 
-      onChangeContours(contours.map((c) => updatedMap.get(c.id) || c));
+      const nextContours = contours.map((c) => updatedMap.get(c.id) || c);
+      pendingTransformContoursRef.current = nextContours;
+      if (transformRafRef.current == null) {
+        transformRafRef.current = requestAnimationFrame(() => {
+          transformRafRef.current = null;
+          if (pendingTransformContoursRef.current) {
+            onChangeContours(pendingTransformContoursRef.current);
+          }
+        });
+      }
       return;
     }
 
     // Eraser Tool continuous sweep-erase while dragging
     if (toolMode === 'eraser' && isErasingRef.current) {
-      const eraseRadius = Math.max(8, (eraserSize / 2) / zoom);
+      const eraseRadius = Math.max(2, eraserSize / 2);
       const prevPos = lastErasePosRef.current || pos;
-      const updatedContours = eraseContoursAtPoint(contours, pos, eraseRadius, eraserMode, prevPos);
       lastErasePosRef.current = pos;
-      if (updatedContours !== contours) {
-        erasedAnyInSessionRef.current = true;
-        onChangeContours(updatedContours);
+      eraserStrokePointsRef.current.push(pos);
+
+      if (eraserMode === 'cut') {
+        // Fast SVG preview overlay without mutating/degrading vector contours every frame
+        if (activeEraserPathRef.current && eraserStrokePointsRef.current.length > 0) {
+          const pts = eraserStrokePointsRef.current;
+          let d = `M ${pts[0].x} ${pts[0].y}`;
+          for (let i = 1; i < pts.length; i++) {
+            d += ` L ${pts[i].x} ${pts[i].y}`;
+          }
+          activeEraserPathRef.current.setAttribute('d', d);
+        }
+      } else {
+        const updatedContours = eraseContoursAtPoint(contours, pos, eraseRadius, eraserMode, prevPos);
+        if (updatedContours !== contours) {
+          erasedAnyInSessionRef.current = true;
+          onChangeContours(updatedContours);
+        }
       }
       return;
     }
@@ -2412,11 +2472,69 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                 handleOut: node.handleOut ? { x: node.handleOut.x + dx, y: node.handleOut.y + dy } : null,
               };
             } else if (selectedHandleType === 'handleOut') {
+              if (e.altKey) {
+                return {
+                  ...node,
+                  handleOut: { x: pos.x, y: pos.y },
+                  type: 'corner' as const,
+                };
+              }
+              if (node.type === 'smooth' || node.type === 'symmetric') {
+                const dx = pos.x - node.x;
+                const dy = pos.y - node.y;
+                const lenOut = Math.hypot(dx, dy);
+                let handleIn = node.handleIn;
+                if (lenOut > 0.01 && handleIn) {
+                  const lenIn =
+                    node.type === 'symmetric'
+                      ? lenOut
+                      : Math.hypot(handleIn.x - node.x, handleIn.y - node.y);
+                  const angle = Math.atan2(dy, dx);
+                  handleIn = {
+                    x: Math.round(node.x - Math.cos(angle) * lenIn),
+                    y: Math.round(node.y - Math.sin(angle) * lenIn),
+                  };
+                }
+                return {
+                  ...node,
+                  handleOut: { x: pos.x, y: pos.y },
+                  handleIn,
+                };
+              }
               return {
                 ...node,
                 handleOut: { x: pos.x, y: pos.y },
               };
             } else if (selectedHandleType === 'handleIn') {
+              if (e.altKey) {
+                return {
+                  ...node,
+                  handleIn: { x: pos.x, y: pos.y },
+                  type: 'corner' as const,
+                };
+              }
+              if (node.type === 'smooth' || node.type === 'symmetric') {
+                const dx = pos.x - node.x;
+                const dy = pos.y - node.y;
+                const lenIn = Math.hypot(dx, dy);
+                let handleOut = node.handleOut;
+                if (lenIn > 0.01 && handleOut) {
+                  const lenOut =
+                    node.type === 'symmetric'
+                      ? lenIn
+                      : Math.hypot(handleOut.x - node.x, handleOut.y - node.y);
+                  const angle = Math.atan2(dy, dx);
+                  handleOut = {
+                    x: Math.round(node.x - Math.cos(angle) * lenOut),
+                    y: Math.round(node.y - Math.sin(angle) * lenOut),
+                  };
+                }
+                return {
+                  ...node,
+                  handleIn: { x: pos.x, y: pos.y },
+                  handleOut,
+                };
+              }
               return {
                 ...node,
                 handleIn: { x: pos.x, y: pos.y },
@@ -2738,7 +2856,21 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
     if (toolMode === 'eraser' && isErasingRef.current) {
       isErasingRef.current = false;
       lastErasePosRef.current = null;
-      if (erasedAnyInSessionRef.current) {
+      if (activeEraserPathRef.current) {
+        activeEraserPathRef.current.setAttribute('d', '');
+      }
+
+      if (eraserMode === 'cut' && eraserStrokePointsRef.current.length > 0) {
+        const eraseRadius = Math.max(2, eraserSize / 2);
+        const pts = eraserStrokePointsRef.current;
+        eraserStrokePointsRef.current = [];
+        const updated = subtractEraserStrokeFromContours(contours, pts, eraseRadius);
+        if (updated !== contours) {
+          onChangeContours(updated);
+          onCommitHistory();
+          showCanvasToast('パスを削り・分割しました');
+        }
+      } else if (erasedAnyInSessionRef.current) {
         erasedAnyInSessionRef.current = false;
         onCommitHistory();
       }
@@ -2867,25 +2999,26 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                 } else {
                   // ループにより複数の外輪郭/内輪郭に分割された場合
                   if (autoUnionBrush && contours.length > 0) {
-                    const newBBox = getContoursBoundingBox(selfMerged);
-                    const overlappingContours: PathContour[] = [];
-                    const independentContours: PathContour[] = [];
+                    const directContacts = contours.filter((c) =>
+                      selfMerged.some((sm) => doContoursIntersectOrTouch(c, sm))
+                    );
 
-                    for (const c of contours) {
-                      const b = getContoursBoundingBox([c]);
-                      const overlaps =
-                        newBBox.minX <= b.maxX + 4 &&
-                        newBBox.maxX >= b.minX - 4 &&
-                        newBBox.minY <= b.maxY + 4 &&
-                        newBBox.maxY >= b.minY - 4;
-                      if (overlaps) {
-                        overlappingContours.push(c);
-                      } else {
-                        independentContours.push(c);
+                    if (directContacts.length > 0) {
+                      const contactIdSet = new Set<string>(directContacts.map((c) => c.id));
+                      const queue = [...directContacts];
+                      while (queue.length > 0) {
+                        const current = queue.shift()!;
+                        for (const c of contours) {
+                          if (!contactIdSet.has(c.id) && doContoursIntersectOrTouch(c, current)) {
+                            contactIdSet.add(c.id);
+                            queue.push(c);
+                          }
+                        }
                       }
-                    }
 
-                    if (overlappingContours.length > 0) {
+                      const overlappingContours = contours.filter((c) => contactIdSet.has(c.id));
+                      const independentContours = contours.filter((c) => !contactIdSet.has(c.id));
+
                       const mergedSubset = unionContours([...overlappingContours, ...selfMerged], 1.2, false);
                       if (mergedSubset && mergedSubset.length > 0) {
                         onChangeContours([...independentContours, ...mergedSubset]);
@@ -2906,27 +3039,27 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
         }
 
         if (autoUnionBrush && contours.length > 0) {
-          // 既存輪郭とのバウンディングボックス接触判定（接触している画のみ抽出し局所ブーリアン合成で爆速化）
-          const newBBox = getContoursBoundingBox([finalizedContour]);
-          const overlappingContours: PathContour[] = [];
-          const independentContours: PathContour[] = [];
+          // 実際に幾何学的に交差・接触している輪郭のみを局所抽出
+          const directContacts = contours.filter((c) => doContoursIntersectOrTouch(c, finalizedContour));
 
-          for (const c of contours) {
-            const b = getContoursBoundingBox([c]);
-            const overlaps =
-              newBBox.minX <= b.maxX + 4 &&
-              newBBox.maxX >= b.minX - 4 &&
-              newBBox.minY <= b.maxY + 4 &&
-              newBBox.maxY >= b.minY - 4;
-            if (overlaps) {
-              overlappingContours.push(c);
-            } else {
-              independentContours.push(c);
+          if (directContacts.length > 0) {
+            // 連鎖的に接触している輪郭群（連結成分）を探索
+            const contactIdSet = new Set<string>(directContacts.map((c) => c.id));
+            const queue = [...directContacts];
+            while (queue.length > 0) {
+              const current = queue.shift()!;
+              for (const c of contours) {
+                if (!contactIdSet.has(c.id) && doContoursIntersectOrTouch(c, current)) {
+                  contactIdSet.add(c.id);
+                  queue.push(c);
+                }
+              }
             }
-          }
 
-          if (overlappingContours.length > 0) {
-            // 接触している画のみを対象に局所ブーリアン結合を実行（画数が増えても100〜300msかかっていた処理が1ms未満の即時応答に革新）
+            const overlappingContours = contours.filter((c) => contactIdSet.has(c.id));
+            const independentContours = contours.filter((c) => !contactIdSet.has(c.id));
+
+            // 接触している画のみを対象に局所ブーリアン結合を実行
             const mergedSubset = unionContours([...overlappingContours, finalizedContour], 1.2, false);
             if (mergedSubset && mergedSubset.length > 0) {
               onChangeContours([...independentContours, ...mergedSubset]);
@@ -2934,7 +3067,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
               onChangeContours([...contours, finalizedContour]);
             }
           } else {
-            // 離れた独立画は即座に配列追加（超高速 0ms）
+            // 離れた独立画は即座に配列追加（100%元形状を保持）
             onChangeContours([...contours, finalizedContour]);
           }
         } else {
@@ -3001,6 +3134,14 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
     // Finalize Bounding Box Transform Drag
     if (transformSession) {
+      if (transformRafRef.current != null) {
+        cancelAnimationFrame(transformRafRef.current);
+        transformRafRef.current = null;
+      }
+      if (pendingTransformContoursRef.current) {
+        onChangeContours(pendingTransformContoursRef.current);
+        pendingTransformContoursRef.current = null;
+      }
       setTransformSession(null);
       setRotateDisplayAngle(null);
       onCommitHistory();
@@ -3537,6 +3678,50 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
     }
   };
 
+  // Boolean Difference (型抜き): Subtract cutter paths from base path
+  const handleSubtractSelectedContours = () => {
+    if (selectedContourIds.length < 2) {
+      showCanvasToast('型抜きには2つ以上のパスを選択してください');
+      return;
+    }
+    const selected = contours.filter((c) => selectedContourIds.includes(c.id));
+    const base = [selected[0]];
+    const cutters = selected.slice(1);
+    const result = booleanSubtractContours(base, cutters);
+    if (result.length === 0) {
+      showCanvasToast('型抜き結果が空になりました');
+      return;
+    }
+    const other = contours.filter((c) => !selectedContourIds.includes(c.id));
+    const updated = [...other, ...result];
+    onChangeContours(updated);
+    setSelectedContourIds(result.map((r) => r.id));
+    onCommitHistory();
+    showCanvasToast('パスを型抜き（前面で背面を切り抜き）しました');
+  };
+
+  // Boolean Intersection (交差): Keep only overlapping region
+  const handleIntersectSelectedContours = () => {
+    if (selectedContourIds.length < 2) {
+      showCanvasToast('交差には2つ以上のパスを選択してください');
+      return;
+    }
+    const selected = contours.filter((c) => selectedContourIds.includes(c.id));
+    const base = [selected[0]];
+    const cutters = selected.slice(1);
+    const result = booleanIntersectContours(base, cutters);
+    if (result.length === 0) {
+      showCanvasToast('交差部分がありませんでした');
+      return;
+    }
+    const other = contours.filter((c) => !selectedContourIds.includes(c.id));
+    const updated = [...other, ...result];
+    onChangeContours(updated);
+    setSelectedContourIds(result.map((r) => r.id));
+    onCommitHistory();
+    showCanvasToast('パスの交差重なり部分を抽出しました');
+  };
+
   // Reverse / Flip Winding Order (時計回り ⇄ 反時計回り) to fix transparent overlaps or create holes
   const handleReverseWindingSelected = () => {
     if (selectedContourIds.length === 0) return;
@@ -3579,7 +3764,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
     const levelName = level === 'mild' ? 'マイルド' : level === 'strong' ? '強力' : '標準';
     showCanvasToast(
       `選択パスを平滑化 (${levelName})`,
-      `${selectedContourIds.length}個のパスを美化・アンカーポイント最適化完了`
+      `${selectedContourIds.length}個のパスのアンカーポイント最適化完了`
     );
   };
 
@@ -3597,6 +3782,29 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
       `全ストロークを一括平滑化 (${levelName})`,
       `全パーツ合計: ${result.totalOriginalPoints}点 → ${result.totalReducedPoints}点 (-${result.totalReductionPercent}% 削減)`
     );
+  };
+
+  // 1-Click Straighten & De-wobble wobbly strokes
+  const handleStraightenWobblySelected = () => {
+    if (selectedContourIds.length === 0) {
+      handleStraightenWobblyAll();
+      return;
+    }
+    const updated = contours.map((c) => {
+      if (!selectedContourIds.includes(c.id)) return c;
+      return straightenWobblyContour(c);
+    });
+    onChangeContours(updated);
+    onCommitHistory();
+    showCanvasToast('選択パスの歪み・うねりを直線化補正しました', `${selectedContourIds.length}個のパーツ`);
+  };
+
+  const handleStraightenWobblyAll = () => {
+    if (contours.length === 0) return;
+    const updated = contours.map((c) => straightenWobblyContour(c));
+    onChangeContours(updated);
+    onCommitHistory();
+    showCanvasToast('全ストロークの歪み・うねりを直線化補正しました', `${contours.length}個のパーツ`);
   };
 
   // Path Simplification & Curvature Conversions
@@ -4145,6 +4353,17 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                     <span>{autoSmoothBrush ? 'ON' : 'OFF'}</span>
                   </button>
 
+                  {/* Straighten Wobbly Contour Action */}
+                  <button
+                    onClick={handleStraightenWobblySelected}
+                    className="px-2 py-1 rounded-lg text-xs font-bold border transition-colors flex items-center space-x-1 bg-amber-600 hover:bg-amber-700 text-white border-amber-600 shadow-xs"
+                    title="描いた線のうねり・ガタガタ歪みを自動でまっすぐ直線化補正します"
+                  >
+                    <Compass className="w-3 h-3" />
+                    <span className="hidden sm:inline">うねり直線補正</span>
+                    <span className="sm:hidden">直線補正</span>
+                  </button>
+
                   {onOpenPenPresetsModal && (
                     <button
                       onClick={onOpenPenPresetsModal}
@@ -4305,7 +4524,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                         ? 'bg-white dark:bg-stone-700 text-emerald-700 dark:text-emerald-300 shadow-xs font-bold'
                         : 'text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'
                     }`}
-                    title="すっきり小ドット表示（文字の形がはっきり見えます）"
+                    title="小ドット表示"
                   >
                     形状優先
                   </button>
@@ -4364,43 +4583,20 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
               </div>
             )}
 
-            {/* Shape Tool options in Header */}
+            {/* Shape Tool modifier options in Header */}
             {isShapeTool && (
-              <div className="flex items-center space-x-1.5 ml-1 pl-1.5 border-l border-stone-200 dark:border-stone-700 relative" ref={shapePickerRef}>
-                <div className="text-[11px] font-bold text-stone-500 dark:text-stone-400 hidden sm:inline">
-                  図形:
-                </div>
-                {/* Shape Selector Button & Dropdown */}
-                {(() => {
-                  const currentShapeObj = CANVAS_SHAPE_LIST.find((s) => s.id === toolMode) || CANVAS_SHAPE_LIST[0];
-                  const SIcon = currentShapeObj.icon;
-                  return (
-                    <button
-                      onClick={() => setShowShapePickerDropdown((prev) => !prev)}
-                      className={`px-2 py-1 rounded text-xs font-bold border transition-colors flex items-center space-x-1.5 shadow-xs ${
-                        isLight
-                          ? 'bg-emerald-100 text-emerald-950 border-emerald-300 hover:bg-emerald-200'
-                          : 'bg-emerald-950 text-emerald-200 border-emerald-700 hover:bg-emerald-900'
-                      }`}
-                      title="図形の種類を切り替え"
-                    >
-                      <SIcon className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
-                      <span>{currentShapeObj.label.split(' ')[0]}</span>
-                      <span className="text-[9px] opacity-70">▾</span>
-                    </button>
-                  );
-                })()}
-
+              <div className="flex items-center space-x-1.5 ml-1 pl-1.5 border-l border-stone-200 dark:border-stone-700">
                 {/* Shape aspect ratio lock toggle */}
                 <button
+                  type="button"
                   onClick={() => {
                     setIsShiftLockRatio((prev) => !prev);
                     showCanvasToast(!isShiftLockRatio ? '正方形・正円比率に固定しました' : '自由比率に切り替えました');
                   }}
-                  className={`px-2 py-1 rounded text-xs font-bold border transition-colors flex items-center space-x-1 ${
+                  className={`px-2 py-1 rounded text-xs font-bold border transition-colors flex items-center space-x-1 cursor-pointer ${
                     isShiftLockRatio
                       ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-700'
+                      : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-700 hover:bg-stone-200 dark:hover:bg-stone-700'
                   }`}
                   title="1:1 正方形・正円比率固定 (ドラッグ中Shiftキーでも可能)"
                 >
@@ -4410,65 +4606,21 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
                 {/* Shape center draw toggle */}
                 <button
+                  type="button"
                   onClick={() => {
                     setIsAltFromCenter((prev) => !prev);
                     showCanvasToast(!isAltFromCenter ? '中心基準作図をONにしました' : '中心基準作図をOFFにしました');
                   }}
-                  className={`hidden sm:flex px-2 py-1 rounded text-xs font-bold border transition-colors items-center space-x-1 ${
+                  className={`hidden sm:flex px-2 py-1 rounded text-xs font-bold border transition-colors items-center space-x-1 cursor-pointer ${
                     isAltFromCenter
                       ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-700'
+                      : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-700 hover:bg-stone-200 dark:hover:bg-stone-700'
                   }`}
                   title="中心から作図 (ドラッグ中Altキーでも可能)"
                 >
                   <span>中心基準:</span>
                   <span>{isAltFromCenter ? 'ON' : 'OFF'}</span>
                 </button>
-
-                {/* Shape Picker Dropdown */}
-                {showShapePickerDropdown && (
-                  <div
-                    className={`absolute top-full left-0 mt-1 z-50 w-64 p-2 rounded-xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-100 ${
-                      isLight
-                        ? 'bg-white/98 border-stone-200 text-stone-800 shadow-emerald-950/15'
-                        : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 shadow-black/60'
-                    }`}
-                  >
-                    <div className="text-[10px] font-bold text-stone-400 dark:text-emerald-500/80 px-1 mb-1.5 flex items-center justify-between">
-                      <span>図形を選択 (全13種類)</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1 max-h-60 overflow-y-auto">
-                      {CANVAS_SHAPE_LIST.map((shape) => {
-                        const SIcon = shape.icon;
-                        const isSelected = toolMode === shape.id;
-                        return (
-                          <button
-                            key={shape.id}
-                            onClick={() => {
-                              if (onSetToolMode) {
-                                onSetToolMode(shape.id);
-                              }
-                              setShowShapePickerDropdown(false);
-                              showCanvasToast(`図形を「${shape.label.split(' ')[0]}」に切り替えました`);
-                            }}
-                            className={`flex items-center space-x-1.5 p-1.5 rounded-lg text-xs font-medium text-left transition-all ${
-                              isSelected
-                                ? isLight
-                                  ? 'bg-emerald-700 text-white font-bold shadow-xs'
-                                  : 'bg-emerald-600 text-white font-bold shadow-xs'
-                                : isLight
-                                ? 'hover:bg-stone-100 text-stone-700'
-                                : 'hover:bg-[#1f2b23] text-emerald-200'
-                            }`}
-                          >
-                            <SIcon className="w-3.5 h-3.5 shrink-0" />
-                            <span className="truncate">{shape.label.split(' ')[0]}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -4515,6 +4667,24 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                     )}
                     <span>{selectedContourIds.length === 1 ? '重なり白抜き解消' : '合体・白抜き解消'}</span>
                   </button>
+                )}
+                {selectedContourIds.length >= 2 && (
+                  <>
+                    <button
+                      onClick={handleSubtractSelectedContours}
+                      className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold flex items-center space-x-1 shadow-xs transition-all active:scale-95 mr-1"
+                      title="前面のパスで背面のパスを型抜き（差分）"
+                    >
+                      <span>型抜き</span>
+                    </button>
+                    <button
+                      onClick={handleIntersectSelectedContours}
+                      className="px-2 py-0.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-bold flex items-center space-x-1 shadow-xs transition-all active:scale-95 mr-1"
+                      title="重なった部分のみを抽出（交差）"
+                    >
+                      <span>交差</span>
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={() => handleSmoothStrokeSelected(smoothStrength, smoothPreserveCorners)}
@@ -4880,7 +5050,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
         ref={containerRef}
         className={`relative flex-1 h-full w-full overflow-hidden select-none touch-none transition-colors ${
           isLight ? 'bg-[#f0f4f1]' : 'bg-[#0c120e]'
-        }`}
+        } ${isAnyModalOpen ? 'pointer-events-none' : ''}`}
         style={{
           touchAction: 'none',
           WebkitTouchCallout: 'none',
@@ -4888,6 +5058,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
           userSelect: 'none',
         }}
         onWheel={(e) => {
+          if (isAnyModalOpen) return;
           // Normalize Firefox deltaMode (DOM_DELTA_LINE = 1, DOM_DELTA_PAGE = 2) to pixels
           let normalizedDeltaX = e.deltaX;
           let normalizedDeltaY = e.deltaY;
@@ -5226,7 +5397,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                     現在の文字: 「{activeChar}」（漢字）
                   </div>
                   <div>
-                    緑色の<strong>漢字字面枠 (85%)</strong>の内側に収まるよう作図します。外枠（1000UPM）いっぱいまで描かず周囲に適切な余白を残すことで、美しい組版バランスが保たれます。
+                    緑色の<strong>漢字字面枠 (85%)</strong>の内側に収まるよう作図します。外枠（1000UPM）いっぱいまで描かず周囲に余白を残すことで、組版時の字間バランスが保たれます。
                   </div>
                 </>
               ) : (
@@ -5630,6 +5801,19 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
             stroke="#d97706"
             strokeWidth={1}
             fillRule="nonzero"
+            pointerEvents="none"
+          />
+
+          {/* Active Cut Eraser Stroke in-progress */}
+          <path
+            ref={activeEraserPathRef}
+            d=""
+            fill="none"
+            stroke="#f43f5e"
+            strokeWidth={Math.max(8, eraserSize)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeOpacity={0.65}
             pointerEvents="none"
           />
 
@@ -6691,7 +6875,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                       ? 'bg-emerald-700 text-white shadow-xs'
                       : 'text-stone-600 dark:text-stone-300 hover:text-emerald-800'
                   }`}
-                  title="ドラッグ＆ドロップで直接綺麗な直線ストロークを作図します"
+                  title="ドラッグ＆ドロップで直線ストロークを作図します"
                 >
                   直線を作図
                 </button>
@@ -6829,7 +7013,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                       nextMode === 'auto'
                         ? '自動検知（ペン使用時に手のひら無効化）'
                         : nextMode === 'strict_pen_only'
-                        ? 'ペン専用（指作図を完全遮断）'
+                        ? 'ペン専用（指作図を無効化）'
                         : 'OFF（指でも作図可能）'
                     }`
                   );
@@ -7524,7 +7708,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
             {/* Smoothing and Optimization */}
             <div>
-              <div className="font-bold text-stone-500 dark:text-stone-400 mb-1.5">ストローク最適化・美化</div>
+              <div className="font-bold text-stone-500 dark:text-stone-400 mb-1.5">ストローク最適化</div>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
                   onClick={() => handleSmoothStrokeSelected('standard', true)}
