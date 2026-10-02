@@ -110,6 +110,12 @@ export function getHorizontalSnapTargets(
       { position: 666.7, name: '九宮格 (Y: 667)', type: 'metric', color: '#0284c7', priority: 6 }
     );
   }
+  if (gridSettings?.japaneseGuide === 'sixteen') {
+    targets.push(
+      { position: 250, name: '十六宮格 (Y: 250)', type: 'metric', color: '#0284c7', priority: 6 },
+      { position: 750, name: '十六宮格 (Y: 750)', type: 'metric', color: '#0284c7', priority: 6 }
+    );
+  }
   if (gridSettings?.showBodyFrame) {
     targets.push(
       { position: 75, name: '漢字字面枠上端 (Y: 75)', type: 'metric', color: '#059669', priority: 6 },
@@ -206,11 +212,29 @@ export function getVerticalSnapTargets(
     priority: 5,
   });
 
-  // 4. Japanese Guide Frames (九宮格、漢字枠、仮名枠)
-  if (gridSettings?.japaneseGuide === 'jiugong') {
+  // 4. Japanese Guide Frames (九宮格、十六宮格、縦分割ガイド、漢字枠、仮名枠)
+  if (gridSettings?.japaneseGuide === 'jiugong' || gridSettings?.verticalGuide === 'thirds') {
     targets.push(
-      { position: 333.3, name: '九宮格 (X: 333)', type: 'metric', color: '#0284c7', priority: 6 },
-      { position: 666.7, name: '九宮格 (X: 667)', type: 'metric', color: '#0284c7', priority: 6 }
+      { position: 333.3, name: '九宮格/3分割 (X: 333)', type: 'metric', color: '#0284c7', priority: 6 },
+      { position: 666.7, name: '九宮格/3分割 (X: 667)', type: 'metric', color: '#0284c7', priority: 6 }
+    );
+  }
+  if (
+    gridSettings?.japaneseGuide === 'sixteen' ||
+    gridSettings?.verticalGuide === 'quarters' ||
+    gridSettings?.verticalGuide === 'eighths'
+  ) {
+    targets.push(
+      { position: 250, name: '4分割 (X: 250)', type: 'metric', color: '#0284c7', priority: 6 },
+      { position: 750, name: '4分割 (X: 750)', type: 'metric', color: '#0284c7', priority: 6 }
+    );
+  }
+  if (gridSettings?.verticalGuide === 'eighths') {
+    targets.push(
+      { position: 125, name: '8分割 (X: 125)', type: 'metric', color: '#7c3aed', priority: 5 },
+      { position: 375, name: '8分割 (X: 375)', type: 'metric', color: '#7c3aed', priority: 5 },
+      { position: 625, name: '8分割 (X: 625)', type: 'metric', color: '#7c3aed', priority: 5 },
+      { position: 875, name: '8分割 (X: 875)', type: 'metric', color: '#7c3aed', priority: 5 }
     );
   }
   if (gridSettings?.showBodyFrame) {

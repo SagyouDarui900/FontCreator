@@ -571,8 +571,8 @@ export function compileFont(
 
   font.tables.os2.version = 4;
   font.tables.os2.xAvgCharWidth = avgWidth;
-  font.tables.os2.usWeightClass = isBold ? 700 : 400;
-  font.tables.os2.usWidthClass = 5; // Medium (normal)
+  font.tables.os2.usWeightClass = project.metadata.usWeightClass ?? (isBold ? 700 : 400);
+  font.tables.os2.usWidthClass = project.metadata.usWidthClass ?? 5; // Medium (normal)
   font.tables.os2.fsType = 0x0000; // Installable embedding (no DRM restrictions)
   font.tables.os2.sFamilyClass = 0;
   font.tables.os2.panose = [2, 0, 5, 3, 0, 0, 0, 0, 0, 0];
@@ -610,9 +610,6 @@ export function compileFont(
   if (hasKanji) uRange2 |= 0x08000000; // Kanji
 
   // OS/2 Table: Code Page Ranges (Crucial for Windows Japanese IME, DirectWrite & Font Selection)
-  // Bit 17 (0x00020000) = JIS/Japanese (CP 932 - Shift-JIS)
-  // Bit 0  (0x00000001) = Latin 1 (CP 1252)
-  // Intentionally do NOT set Bit 18 (CP 936 Simplified Chinese) or Bit 20 (CP 950 Traditional Chinese)
   font.tables.os2.ulCodePageRange1 = 0x00020001;
   font.tables.os2.ulCodePageRange2 = 0x00000000;
 
@@ -621,18 +618,18 @@ export function compileFont(
   font.tables.os2.ulUnicodeRange2 = uRange2;
   font.tables.os2.ulUnicodeRange3 = uRange3;
   font.tables.os2.ulUnicodeRange4 = uRange4;
-  font.tables.os2.achVendID = 'OTED';
+  font.tables.os2.achVendID = (project.metadata.vendorId || 'OTED').padEnd(4, ' ').slice(0, 4);
 
   // OS/2 Table: Windows & Typographic Line Metrics
   const asc = project.metadata.ascender || DEFAULT_ASCENDER;
   const desc = project.metadata.descender || DEFAULT_DESCENDER;
   const lineGap = project.metadata.lineGap ?? 0;
 
-  font.tables.os2.usWinAscent = Math.max(asc, 800);
-  font.tables.os2.usWinDescent = Math.abs(desc);
-  font.tables.os2.sTypoAscender = asc;
-  font.tables.os2.sTypoDescender = desc;
-  font.tables.os2.sTypoLineGap = lineGap;
+  font.tables.os2.usWinAscent = project.metadata.winAscent ?? Math.max(asc, 800);
+  font.tables.os2.usWinDescent = project.metadata.winDescent ?? Math.abs(desc);
+  font.tables.os2.sTypoAscender = project.metadata.typoAscender ?? asc;
+  font.tables.os2.sTypoDescender = project.metadata.typoDescender ?? desc;
+  font.tables.os2.sTypoLineGap = project.metadata.typoLineGap ?? lineGap;
   font.tables.os2.sCapHeight = project.metadata.capHeight || 700;
   font.tables.os2.sxHeight = project.metadata.xHeight || 500;
   // bit 7 (0x0080) = USE_TYPO_METRICS (essential for Windows DirectWrite/AviUtl2/GDI consistent line metrics)
@@ -648,6 +645,17 @@ export function compileFont(
   font.tables.hhea.ascender = asc;
   font.tables.hhea.descender = desc;
   font.tables.hhea.lineGap = lineGap;
+
+  // Post table metadata
+  if (!font.tables.post) {
+    font.tables.post = {} as any;
+  }
+  if (typeof project.metadata.italicAngle === 'number') {
+    font.tables.post.italicAngle = project.metadata.italicAngle;
+  }
+  if (typeof project.metadata.isFixedPitch === 'boolean') {
+    font.tables.post.isFixedPitch = project.metadata.isFixedPitch ? 1 : 0;
+  }
   font.tables.hhea.advanceWidthMax = Math.max(maxAdvanceWidth, 1000);
   font.tables.hhea.minLeftSideBearing = 0;
   font.tables.hhea.minRightSideBearing = 0;

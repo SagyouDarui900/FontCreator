@@ -250,8 +250,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               ? 'w-screen h-screen rounded-none border-none shadow-none bg-white text-stone-900'
               : 'w-screen h-screen rounded-none border-none shadow-none bg-[#151f18] text-emerald-100'
             : isLight
-            ? 'w-full max-w-xl xl:max-w-2xl rounded-2xl border shadow-2xl max-h-[92vh] bg-white border-stone-200 text-stone-900 shadow-emerald-950/10'
-            : 'w-full max-w-xl xl:max-w-2xl rounded-2xl border shadow-2xl max-h-[92vh] bg-[#151f18] border-[#25362b] text-emerald-100 shadow-black/50'
+            ? 'w-full max-w-xl xl:max-w-2xl rounded-2xl border shadow-2xl max-h-[92vh] bg-white border-stone-200 text-stone-900 '
+            : 'w-full max-w-xl xl:max-w-2xl rounded-2xl border shadow-2xl max-h-[92vh] bg-[#151f18] border-[#25362b] text-emerald-100 '
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -593,7 +593,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   onClick={() => setPreviewText(preset.text)}
                   className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium transition-all ${
                     previewText === preset.text
-                      ? 'bg-emerald-700 text-white font-bold shadow-xs'
+                      ? 'bg-emerald-700 text-white font-bold '
                       : 'bg-white dark:bg-[#18261e] border border-stone-200 dark:border-[#283d30] text-stone-700 dark:text-emerald-200 hover:bg-emerald-50 dark:hover:bg-[#203328]'
                   }`}
                 >
@@ -669,7 +669,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 }}
                 className={`w-full sm:w-auto px-3 py-1.5 rounded-lg text-xs font-bold border shrink-0 transition-colors text-center ${
                   isLight
-                    ? 'bg-white border-emerald-300 text-emerald-800 hover:bg-emerald-50 shadow-xs'
+                    ? 'bg-white border-emerald-300 text-emerald-800 hover:bg-emerald-50 '
                     : 'bg-[#1a271f] border-emerald-700 text-emerald-200 hover:bg-[#23342a]'
                 }`}
               >

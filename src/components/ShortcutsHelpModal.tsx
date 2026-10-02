@@ -29,6 +29,7 @@ import {
   Database,
   Hand,
   Book,
+  Mouse,
 } from 'lucide-react';
 import { ThemeMode, isLightTheme } from '../utils/theme';
 import { BeginnerTutorialTab } from './help/BeginnerTutorialTab';
@@ -46,11 +47,22 @@ interface ShortcutsHelpModalProps {
 interface ShortcutItem {
   keys: string[];
   description: string;
-  category: 'tools' | 'drawing' | 'view' | 'nav' | 'edit';
+  category: 'tools' | 'drawing' | 'view' | 'nav' | 'edit' | 'mouse';
   badge?: string;
 }
 
 const SHORTCUTS: ShortcutItem[] = [
+  // マウス・ホイール・クリック操作
+  { keys: ['通常ホイール'], description: '画面の上下スクロール移動 (Pan Y)', category: 'mouse', badge: '基本' },
+  { keys: ['Shift', '+', 'ホイール'], description: '画面の左右スクロール移動 (Pan X)', category: 'mouse' },
+  { keys: ['Ctrl / ⌘', '+', 'ホイール'], description: 'マウスカーソル位置を中心とした拡大・縮小（10%〜3200%）', category: 'mouse', badge: '便利' },
+  { keys: ['Alt', '+', 'ホイール'], description: '筆太さ・消しゴムサイズの直感的ホイール拡大縮小調整', category: 'mouse', badge: '直感操作' },
+  { keys: ['中ボタン (ホイール押し込みドラッグ)'], description: 'ツール切り替え不要でキャンバスを自由にパン移動（手のひら）', category: 'mouse', badge: 'おすすめ' },
+  { keys: ['Space', '+', '左ドラッグ'], description: '一時的に手のひらツールになりキャンバスを高速パン移動', category: 'mouse' },
+  { keys: ['パスをダブルクリック'], description: '当該輪郭の全ノード選択＆ノード編集モード（アンカー・ハンドル編集）へ自動切替', category: 'mouse', badge: '時短' },
+  { keys: ['Shift', '+', '左クリック (選択時)'], description: '複数輪郭パーツの追加選択・除外（複数選択トグル）', category: 'mouse' },
+  { keys: ['Shift', '+', '左ドラッグ (筆描画時)'], description: '直前位置から水平・垂直・45度への直線引きアシスト', category: 'mouse' },
+
   // ツール切替
   { keys: ['B'], description: '筆・毛筆ブラシツールに切り替え', category: 'tools', badge: '手書き' },
   { keys: ['P'], description: 'ベクターペンツール（ベジェ曲線）に切り替え', category: 'tools', badge: 'ベジェ' },
@@ -98,6 +110,8 @@ const SHORTCUTS: ShortcutItem[] = [
   { keys: ['Z', 'または', 'Shift + Z'], description: '全面作図・集中モード (サイドバーの収納/展開)', category: 'view', badge: '集中' },
   { keys: ['F'], description: 'フォント品質・プレビュー・ヒートマップの全画面切替', category: 'view', badge: '全画面' },
   { keys: ['\\'], description: '文字一覧サイドバーの開閉', category: 'view' },
+  { keys: ['Shift', '+', 'O', 'または', 'Alt + O'], description: 'パス輪郭のみ表示（ワイヤーフレーム表示 / 塗りつぶし）の切り替え', category: 'view', badge: '輪郭モード' },
+  { keys: ['N'], description: 'パス頂点（ノード）とハンドルの表示 / 非表示切り替え', category: 'view', badge: '頂点表示' },
   { keys: ['G'], description: '方眼グリッドの表示 / 非表示切り替え', category: 'view' },
   { keys: ['Alt', '+', '+'], description: '方眼グリッドのマス目サイズを拡大 (+5px)', category: 'view' },
   { keys: ['Alt', '+', '-'], description: '方眼グリッドのマス目サイズを縮小 (-5px)', category: 'view' },
@@ -128,6 +142,7 @@ const SHORTCUTS: ShortcutItem[] = [
 
 const SHORTCUT_CATEGORIES = [
   { id: 'all', label: 'すべて', icon: Keyboard },
+  { id: 'mouse', label: 'マウス・ホイール', icon: Mouse },
   { id: 'tools', label: 'ツール切替', icon: Paintbrush },
   { id: 'drawing', label: '描画・パス編集', icon: PenTool },
   { id: 'view', label: '表示・ズーム', icon: Maximize2 },
@@ -280,91 +295,91 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
 
         {/* Tab Navigation */}
         <div
-          className={`flex items-center px-4 sm:px-6 border-b shrink-0 gap-2 overflow-x-auto no-scrollbar text-xs font-bold ${
+          className={`flex items-center px-4 sm:px-6 border-b shrink-0 gap-2 overflow-x-auto custom-scrollbar touch-scroll-x min-w-0 text-xs font-bold ${
             isLight ? 'bg-white border-stone-200' : 'bg-[#141e17] border-[#223025]'
           }`}
         >
           <button
             onClick={() => setActiveTab('tutorial')}
-            className={`py-3 px-3 border-b-2 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
+            className={`py-3 px-3 border-b-2 shrink-0 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'tutorial'
                 ? isLight
-                  ? 'border-emerald-600 text-emerald-800'
-                  : 'border-emerald-400 text-emerald-200'
+                  ? 'border-emerald-600 text-emerald-800 font-extrabold'
+                  : 'border-emerald-400 text-emerald-200 font-extrabold'
                 : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
             }`}
           >
-            <Sparkles className="w-4 h-4 text-amber-500" />
+            <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>初心者入門ガイド</span>
           </button>
 
           <button
             onClick={() => setActiveTab('glossary')}
-            className={`py-3 px-3 border-b-2 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
+            className={`py-3 px-3 border-b-2 shrink-0 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'glossary'
                 ? isLight
-                  ? 'border-emerald-600 text-emerald-800'
-                  : 'border-emerald-400 text-emerald-200'
+                  ? 'border-emerald-600 text-emerald-800 font-extrabold'
+                  : 'border-emerald-400 text-emerald-200 font-extrabold'
                 : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
             }`}
           >
-            <Book className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <Book className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>用語・概念辞典</span>
           </button>
 
           <button
             onClick={() => setActiveTab('features')}
-            className={`py-3 px-3 border-b-2 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
+            className={`py-3 px-3 border-b-2 shrink-0 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'features'
                 ? isLight
-                  ? 'border-emerald-600 text-emerald-800'
-                  : 'border-emerald-400 text-emerald-200'
+                  ? 'border-emerald-600 text-emerald-800 font-extrabold'
+                  : 'border-emerald-400 text-emerald-200 font-extrabold'
                 : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
             }`}
           >
-            <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>制作機能・自動化</span>
           </button>
 
           <button
             onClick={() => setActiveTab('shortcuts')}
-            className={`py-3 px-3 border-b-2 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
+            className={`py-3 px-3 border-b-2 shrink-0 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'shortcuts'
                 ? isLight
-                  ? 'border-emerald-600 text-emerald-800'
-                  : 'border-emerald-400 text-emerald-200'
+                  ? 'border-emerald-600 text-emerald-800 font-extrabold'
+                  : 'border-emerald-400 text-emerald-200 font-extrabold'
                 : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
             }`}
           >
-            <Keyboard className="w-4 h-4 text-indigo-500" />
+            <Keyboard className="w-4 h-4 text-indigo-500 shrink-0" />
             <span>ショートカット一覧</span>
           </button>
 
           <button
             onClick={() => setActiveTab('faq')}
-            className={`py-3 px-3 border-b-2 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
+            className={`py-3 px-3 border-b-2 shrink-0 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'faq'
                 ? isLight
-                  ? 'border-emerald-600 text-emerald-800'
-                  : 'border-emerald-400 text-emerald-200'
+                  ? 'border-emerald-600 text-emerald-800 font-extrabold'
+                  : 'border-emerald-400 text-emerald-200 font-extrabold'
                 : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
             }`}
           >
-            <HelpCircle className="w-4 h-4 text-sky-500" />
+            <HelpCircle className="w-4 h-4 text-sky-500 shrink-0" />
             <span>よくあるご質問・導入</span>
           </button>
 
           <button
             onClick={() => setActiveTab('feedback')}
-            className={`py-3 px-3 border-b-2 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
+            className={`py-3 px-3 border-b-2 shrink-0 flex items-center space-x-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'feedback'
                 ? isLight
-                  ? 'border-emerald-600 text-emerald-800'
-                  : 'border-emerald-400 text-emerald-200'
+                  ? 'border-emerald-600 text-emerald-800 font-extrabold'
+                  : 'border-emerald-400 text-emerald-200 font-extrabold'
                 : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
             }`}
           >
-            <Github className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+            <Github className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
             <span>フィードバック & 不具合報告 (GitHub)</span>
           </button>
         </div>
@@ -777,6 +792,21 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                     さらに描画後にキーボードの <strong>Alt + S（パス単純化）</strong> を押すと、微細な不要ノードを削減してデータ量を軽量化し、フォントファイルサイズをコンパクトに保てます。
                   </p>
                 </div>
+              </div>
+
+              {/* FAQ 7: 機能追加・ご要望について */}
+              <div
+                className={`p-4 rounded-xl border space-y-1.5 ${
+                  isLight ? 'bg-amber-50/70 border-amber-200' : 'bg-[#1e1c14] border-amber-900/60'
+                }`}
+              >
+                <h4 className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center space-x-1.5">
+                  <HelpCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span>Q. 新機能の追加や機能要望・アイデアのリクエストはできますか？</span>
+                </h4>
+                <p className="text-xs text-stone-700 dark:text-stone-300 leading-relaxed pl-5">
+                  本アプリは生成AIを活用して開発を進めている個人プロジェクトです。そのため、新規の大型機能の追加や大幅な仕様変更・独自仕様のご要望につきましては、AI生成の特性上対応が厳しい（難しい）場合がございます。あらかじめご理解・ご了承をいただけますと幸いです。（操作上の明らかな不具合やバグの修正、既存機能の改善については「フィードバック」タブのGitHub Issueよりご報告いただければ積極的に対応いたします）
+                </p>
               </div>
             </div>
           )}

@@ -291,3 +291,72 @@ export function batchAdjustSidebearings(
 
   return { updatedGlyphs, modifiedCount };
 }
+
+/**
+ * Calculate optical kerning offset between two glyphs (FontForge AutoKern Algorithm)
+ */
+export function calculateAutoKernOffset(
+  leftGlyph: GlyphData,
+  rightGlyph: GlyphData,
+  targetGap: number = 40
+): number {
+  if (!leftGlyph?.contours?.length || !rightGlyph?.contours?.length) {
+    return 0;
+  }
+
+  const leftBbox = getContoursBoundingBox(leftGlyph.contours);
+  const rightBbox = getContoursBoundingBox(rightGlyph.contours);
+
+  if (leftBbox.width <= 0 || rightBbox.width <= 0) return 0;
+
+  const minY = Math.max(leftBbox.minY, rightBbox.minY);
+  const maxY = Math.min(leftBbox.maxY, rightBbox.maxY);
+
+  if (maxY <= minY) return 0;
+
+  const steps = 16;
+  const stepY = (maxY - minY) / steps;
+
+  let minGap = Infinity;
+  let totalGap = 0;
+  let validSamples = 0;
+
+  for (let i = 0; i <= steps; i++) {
+    const sampleY = minY + i * stepY;
+
+    let maxLeftX = -Infinity;
+    for (const c of leftGlyph.contours) {
+      for (const n of c.nodes) {
+        if (Math.abs(n.y - sampleY) < stepY * 1.5) {
+          if (n.x > maxLeftX) maxLeftX = n.x;
+        }
+      }
+    }
+
+    let minRightX = Infinity;
+    for (const c of rightGlyph.contours) {
+      for (const n of c.nodes) {
+        const shiftedX = n.x + (leftGlyph.advanceWidth || 1000);
+        if (Math.abs(n.y - sampleY) < stepY * 1.5) {
+          if (shiftedX < minRightX) minRightX = shiftedX;
+        }
+      }
+    }
+
+    if (maxLeftX !== -Infinity && minRightX !== Infinity) {
+      const gap = minRightX - maxLeftX;
+      if (gap < minGap) minGap = gap;
+      totalGap += gap;
+      validSamples++;
+    }
+  }
+
+  if (validSamples === 0 || !Number.isFinite(minGap)) return 0;
+
+  const avgGap = totalGap / validSamples;
+  const opticalGap = minGap * 0.6 + avgGap * 0.4;
+  const kerningDelta = Math.round(targetGap - opticalGap);
+
+  return Math.max(-350, Math.min(150, kerningDelta));
+}
+

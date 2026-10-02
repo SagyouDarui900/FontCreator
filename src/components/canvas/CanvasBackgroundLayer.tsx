@@ -6,38 +6,40 @@ interface CanvasBackgroundLayerProps {
   theme?: ThemeMode;
   showGrid: boolean;
   gridSize: number;
+  gridOpacity?: number;
 }
 
 export const CanvasBackgroundLayer: React.FC<CanvasBackgroundLayerProps> = React.memo(
-  ({ isLight, theme = 'light', showGrid, gridSize }) => {
+  ({ isLight, theme = 'light', showGrid, gridSize, gridOpacity = 30 }) => {
     const size = gridSize || 50;
+    const opacityFactor = Math.min(1, Math.max(0.08, gridOpacity / 100));
 
-    // Determine colors tailored for eye-comfort presets
+    // Determine colors tailored for eye-comfort presets - subtle, non-intrusive lines
     const gridStroke =
       theme === 'sepia'
-        ? '#ded2be'
+        ? 'rgba(140, 103, 59, 0.45)'
         : theme === 'warm'
-        ? '#eedec8'
+        ? 'rgba(194, 65, 12, 0.4)'
         : theme === 'nord'
-        ? '#3b4252'
+        ? 'rgba(94, 129, 172, 0.45)'
         : theme === 'monochrome'
-        ? '#e4e4e7'
+        ? 'rgba(0, 0, 0, 0.25)'
         : isLight
-        ? '#cce5d8'
-        : '#1f2d24';
+        ? 'rgba(5, 150, 105, 0.35)'
+        : 'rgba(52, 211, 153, 0.3)';
 
     const dimmingFill =
       theme === 'sepia'
-        ? 'rgba(60, 45, 30, 0.07)'
+        ? 'rgba(60, 45, 30, 0.05)'
         : theme === 'warm'
-        ? 'rgba(70, 45, 20, 0.06)'
+        ? 'rgba(70, 45, 20, 0.04)'
         : theme === 'nord'
-        ? 'rgba(0, 0, 0, 0.35)'
+        ? 'rgba(0, 0, 0, 0.25)'
         : theme === 'monochrome'
-        ? 'rgba(0, 0, 0, 0.08)'
+        ? 'rgba(0, 0, 0, 0.05)'
         : isLight
-        ? 'rgba(15, 30, 20, 0.04)'
-        : 'rgba(0, 0, 0, 0.3)';
+        ? 'rgba(15, 30, 20, 0.03)'
+        : 'rgba(0, 0, 0, 0.25)';
 
     const emBoxFill =
       theme === 'sepia'
@@ -54,29 +56,29 @@ export const CanvasBackgroundLayer: React.FC<CanvasBackgroundLayerProps> = React
 
     const emBoxStroke =
       theme === 'sepia'
-        ? '#8c673b'
+        ? 'rgba(140, 103, 59, 0.4)'
         : theme === 'warm'
-        ? '#c2410c'
+        ? 'rgba(194, 65, 12, 0.35)'
         : theme === 'nord'
-        ? '#5e81ac'
+        ? 'rgba(94, 129, 172, 0.4)'
         : theme === 'monochrome'
-        ? '#18181b'
+        ? 'rgba(24, 24, 27, 0.35)'
         : isLight
-        ? '#065f46'
-        : '#2d4034';
+        ? 'rgba(5, 150, 105, 0.35)'
+        : 'rgba(52, 211, 153, 0.3)';
 
     const cropMarkStroke =
       theme === 'sepia'
-        ? '#a16207'
+        ? 'rgba(161, 98, 7, 0.45)'
         : theme === 'warm'
-        ? '#ea580c'
+        ? 'rgba(234, 88, 12, 0.45)'
         : theme === 'nord'
-        ? '#88c0d0'
+        ? 'rgba(136, 192, 208, 0.5)'
         : theme === 'monochrome'
-        ? '#18181b'
+        ? 'rgba(24, 24, 27, 0.35)'
         : isLight
-        ? '#059669'
-        : '#10b981';
+        ? 'rgba(5, 150, 105, 0.4)'
+        : 'rgba(16, 185, 129, 0.45)';
 
     return (
       <g className="canvas-background-layer pointer-events-none select-none">
@@ -103,7 +105,7 @@ export const CanvasBackgroundLayer: React.FC<CanvasBackgroundLayerProps> = React
           fillRule="evenodd"
         />
 
-        {/* Em Square Box (1000x1000) Background */}
+        {/* Em Square Box (1000x1000) Background with subtle, gentle frame border */}
         <rect
           x={0}
           y={0}
@@ -111,24 +113,31 @@ export const CanvasBackgroundLayer: React.FC<CanvasBackgroundLayerProps> = React
           height={1000}
           fill={emBoxFill}
           stroke={emBoxStroke}
-          strokeWidth={3}
+          strokeWidth={1.5}
         />
 
         {/* Professional Font Drafting Corner Crop/Register Marks (トンボ) */}
-        <g opacity={0.6}>
+        <g opacity={0.4}>
           {/* Top-Left */}
-          <path d="M -30 0 L 0 0 M 0 -30 L 0 0" stroke={cropMarkStroke} strokeWidth={1.5} />
+          <path d="M -30 0 L 0 0 M 0 -30 L 0 0" stroke={cropMarkStroke} strokeWidth={1.2} />
           {/* Top-Right */}
-          <path d="M 1030 0 L 1000 0 M 1000 -30 L 1000 0" stroke={cropMarkStroke} strokeWidth={1.5} />
+          <path d="M 1030 0 L 1000 0 M 1000 -30 L 1000 0" stroke={cropMarkStroke} strokeWidth={1.2} />
           {/* Bottom-Left */}
-          <path d="M -30 1000 L 0 1000 M 0 1030 L 0 1000" stroke={cropMarkStroke} strokeWidth={1.5} />
+          <path d="M -30 1000 L 0 1000 M 0 1030 L 0 1000" stroke={cropMarkStroke} strokeWidth={1.2} />
           {/* Bottom-Right */}
-          <path d="M 1030 1000 L 1000 1000 M 1000 1030 L 1000 1000" stroke={cropMarkStroke} strokeWidth={1.5} />
+          <path d="M 1030 1000 L 1000 1000 M 1000 1030 L 1000 1000" stroke={cropMarkStroke} strokeWidth={1.2} />
         </g>
 
-        {/* Grid Overlay */}
+        {/* Grid Overlay with configurable opacity */}
         {showGrid && (
-          <rect x={0} y={0} width={1000} height={1000} fill="url(#canvasGridPattern)" />
+          <rect
+            x={0}
+            y={0}
+            width={1000}
+            height={1000}
+            fill="url(#canvasGridPattern)"
+            opacity={opacityFactor}
+          />
         )}
       </g>
     );

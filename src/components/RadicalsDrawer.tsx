@@ -38,6 +38,7 @@ import {
   RadicalFontPreset,
 } from '../utils/radicalExtractor';
 import { ThemeMode, isLightTheme, getThemeClasses } from '../utils/theme';
+import { loadCustomParts, saveCustomParts } from '../utils/customPartsStorage';
 
 const CUSTOM_PARTS_STORAGE_KEY = 'font_editor_custom_parts_v1';
 
@@ -162,19 +163,12 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
 
   const lastSavedDrawerJsonRef = useRef<string>('');
 
-  // Reload custom parts with content comparison to prevent re-render loops
-  const reloadCustomParts = useCallback(() => {
+  // Reload custom parts from IndexedDB
+  const reloadCustomParts = useCallback(async () => {
     try {
-      const saved = localStorage.getItem(CUSTOM_PARTS_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setCustomParts((prev) => {
-            if (JSON.stringify(prev) === saved) return prev;
-            lastSavedDrawerJsonRef.current = saved;
-            return parsed;
-          });
-        }
+      const loaded = await loadCustomParts();
+      if (Array.isArray(loaded) && loaded.length > 0) {
+        setCustomParts(loaded);
       }
     } catch {
       // ignore
@@ -197,16 +191,13 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
     };
   }, [reloadCustomParts]);
 
-  // Sync custom parts to localStorage only when content actually changes
+  // Sync custom parts to IndexedDB when customParts state updates
   useEffect(() => {
-    try {
-      const json = JSON.stringify(customParts);
-      if (json === lastSavedDrawerJsonRef.current) return;
-      lastSavedDrawerJsonRef.current = json;
-      localStorage.setItem(CUSTOM_PARTS_STORAGE_KEY, json);
-    } catch {
-      // ignore
-    }
+    if (!customParts || customParts.length === 0) return;
+    const jsonStr = JSON.stringify(customParts.map((p) => p.id));
+    if (jsonStr === lastSavedDrawerJsonRef.current) return;
+    lastSavedDrawerJsonRef.current = jsonStr;
+    saveCustomParts(customParts);
   }, [customParts]);
 
   // Perform font extraction
@@ -414,10 +405,10 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Mobile Click-Outside Dismiss (Non-darkening on tablet/desktop) */}
       <div
         onClick={onClose}
-        className="fixed inset-0 bg-black/40 backdrop-blur-2xs z-45 animate-in fade-in duration-150"
+        className="fixed inset-0 bg-transparent sm:hidden z-45"
       />
 
       <div
@@ -430,7 +421,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
           }`}
         >
           <div className="flex items-center space-x-2">
-            <Sparkles className={`w-4 h-4 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
+            <Type className={`w-4 h-4 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
             <div className="flex flex-col">
               <span className={`text-xs font-bold tracking-wide ${isLight ? 'text-emerald-950' : 'text-emerald-200'}`}>
                 部首・偏旁＆フォントパーツスタジオ
@@ -611,7 +602,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                   <button
                     key={cat.id}
                     onClick={() => setCategoryFilter(cat.id)}
-                    className={`px-2 py-0.5 rounded-full whitespace-nowrap text-[10px] transition-colors ${
+                    className={`px-2 py-0.5 rounded-md whitespace-nowrap text-[10px] transition-colors ${
                       categoryFilter === cat.id
                         ? isLight
                           ? 'bg-emerald-800 text-white font-bold'
@@ -668,7 +659,14 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
 
             {/* Footer action to import to My Parts */}
             <div className={`p-2 border-t shrink-0 flex items-center justify-between text-xs ${isLight ? 'bg-white' : 'bg-[#18231c]'}`}>
-              <span className="text-[10px] text-stone-500">{filteredRadicals.length} 件の定番部首</span>
+              <div className="flex flex-col">
+                <span className="text-[10.5px] font-semibold text-stone-700 dark:text-stone-300">
+                  ベクター即時編集パーツ: {filteredRadicals.length} / 138 件
+                </span>
+                <span className="text-[9.5px] text-stone-500 dark:text-stone-400">
+                  全214部首は「康熙214」タブから参照・自動抽出可能
+                </span>
+              </div>
               <button
                 onClick={handleImportAllPresetRadicals}
                 className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all ${
@@ -925,7 +923,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
               <div className="flex space-x-1 overflow-x-auto text-[10px] pb-0.5">
                 <button
                   onClick={() => setKangxiStrokeFilter('all')}
-                  className={`px-2 py-0.5 rounded-full whitespace-nowrap ${
+                  className={`px-2 py-0.5 rounded-md whitespace-nowrap ${
                     kangxiStrokeFilter === 'all'
                       ? 'bg-emerald-800 text-white font-bold'
                       : isLight
@@ -939,7 +937,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                   <button
                     key={s}
                     onClick={() => setKangxiStrokeFilter(s)}
-                    className={`px-2 py-0.5 rounded-full whitespace-nowrap ${
+                    className={`px-2 py-0.5 rounded-md whitespace-nowrap ${
                       kangxiStrokeFilter === s
                         ? 'bg-emerald-800 text-white font-bold'
                         : isLight

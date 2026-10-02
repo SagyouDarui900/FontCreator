@@ -830,8 +830,8 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
               ? 'w-screen h-screen rounded-none border-none shadow-none bg-white text-stone-900'
               : 'w-screen h-screen rounded-none border-none shadow-none bg-[#151f18] text-emerald-100'
             : isLight
-            ? 'w-full max-w-5xl xl:max-w-6xl rounded-2xl border border-stone-200 shadow-2xl max-h-[94vh] bg-white text-stone-900 shadow-emerald-950/10'
-            : 'w-full max-w-5xl xl:max-w-6xl rounded-2xl border border-[#25362b] shadow-2xl max-h-[94vh] bg-[#151f18] text-emerald-100 shadow-black/50'
+            ? 'w-full max-w-5xl xl:max-w-6xl rounded-2xl border border-stone-200 shadow-2xl max-h-[94vh] bg-white text-stone-900 '
+            : 'w-full max-w-5xl xl:max-w-6xl rounded-2xl border border-[#25362b] shadow-2xl max-h-[94vh] bg-[#151f18] text-emerald-100 '
         }`}
       >
         {/* Header */}
@@ -869,8 +869,8 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                       className={`px-2 py-1 sm:px-2.5 sm:py-1 rounded-md text-[11px] sm:text-xs font-bold flex items-center space-x-1.5 transition-all ${
                         mainView === 'quality'
                           ? isLight
-                            ? 'bg-white text-emerald-950 shadow-2xs'
-                            : 'bg-[#152319] text-emerald-300 shadow-2xs'
+                            ? 'bg-white text-emerald-950 '
+                            : 'bg-[#152319] text-emerald-300 '
                           : 'text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'
                       }`}
                     >
@@ -889,8 +889,8 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                       className={`px-2 py-1 sm:px-2.5 sm:py-1 rounded-md text-[11px] sm:text-xs font-bold flex items-center space-x-1.5 transition-all ${
                         mainView === 'diagnostics'
                           ? isLight
-                            ? 'bg-white text-amber-950 shadow-2xs'
-                            : 'bg-[#152319] text-amber-300 shadow-2xs'
+                            ? 'bg-white text-amber-950 '
+                            : 'bg-[#152319] text-amber-300 '
                           : 'text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'
                       }`}
                     >
@@ -974,8 +974,8 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
               className={`hidden sm:flex p-2 sm:px-2.5 sm:py-2 rounded-xl border text-xs font-semibold items-center space-x-1.5 transition-colors shrink-0 ${
                 isFullscreen
                   ? isLight
-                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300 shadow-xs'
-                    : 'bg-emerald-950 text-emerald-300 border-emerald-700 shadow-xs'
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300 '
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700 '
                   : isLight
                   ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-100'
                   : 'bg-[#1a261f] border-[#25362b] text-emerald-200 hover:bg-[#223328]'
@@ -1215,7 +1215,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                   <button
                     onClick={handleRunStrokeEqualization}
                     disabled={isEqualizing}
-                    className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition-all shadow-sm ${
+ className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition-all ${
                       isLight
                         ? 'bg-emerald-700 text-white hover:bg-emerald-800 active:scale-98'
                         : 'bg-emerald-500 text-black hover:bg-emerald-400 active:scale-98'
@@ -1459,7 +1459,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                   <button
                     onClick={handleRunNodeOptimization}
                     disabled={isOptimizing}
-                    className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition-all shadow-sm ${
+ className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition-all ${
                       isLight
                         ? 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-98'
                         : 'bg-emerald-500 text-black hover:bg-emerald-400 active:scale-98'
@@ -1722,7 +1722,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                   <button
                     onClick={handleRunExtremaOptimization}
                     disabled={isOptimizingExtrema}
-                    className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition-all shadow-sm ${
+ className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition-all ${
                       isLight
                         ? 'bg-cyan-700 text-white hover:bg-cyan-800 active:scale-98'
                         : 'bg-cyan-500 text-black hover:bg-cyan-400 active:scale-98'
@@ -1801,7 +1801,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div className="flex items-center space-x-2.5 min-w-0">
                   <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center border shadow-xs shrink-0 ${
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center border  shrink-0 ${
                       healthStatus.badgeBg
                     }`}
                   >
@@ -1832,7 +1832,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                     <button
                       onClick={() => handleBatchFix(undefined)}
                       title="安全な修正（白抜き解消・極点最適化・線幅均一化）を一括実行します"
-                      className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition-all shadow-sm active:scale-98 ${
+ className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition-all active:scale-98 ${
                         isLight
                           ? 'bg-emerald-700 hover:bg-emerald-800 text-white border border-emerald-800'
                           : 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500'
@@ -1971,7 +1971,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                 </div>
 
                 {/* Category Tabs */}
-                <div className="flex items-center space-x-1 overflow-x-auto py-0.5 scrollbar-none">
+                <div className="flex items-center space-x-1 overflow-x-auto py-0.5 custom-scrollbar touch-scroll-x min-w-0">
                   {[
                     { id: 'all', label: 'すべて', count: report?.totalIssues ?? 0 },
                     { id: 'duplicate_shape', label: '字形重複', count: report?.categoryCounts.duplicate_shape ?? 0 },
@@ -1984,11 +1984,11 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as TabFilter)}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors whitespace-nowrap flex items-center space-x-1 ${
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors whitespace-nowrap shrink-0 flex items-center space-x-1 ${
                         activeTab === tab.id
                           ? isLight
-                            ? 'bg-emerald-800 text-white shadow-2xs'
-                            : 'bg-emerald-600 text-white shadow-2xs'
+                            ? 'bg-emerald-800 text-white '
+                            : 'bg-emerald-600 text-white '
                           : isLight
                           ? 'text-stone-600 hover:bg-stone-100'
                           : 'text-stone-400 hover:bg-[#1f2d22]'
@@ -2018,7 +2018,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                 {activeTab === 'path_intersection' && (report?.categoryCounts.path_intersection ?? 0) > 0 && (
                   <button
                     onClick={() => handleBatchFix('path_intersection')}
-                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border  ${
                       isLight
                         ? 'bg-amber-600 text-white border-amber-700 hover:bg-amber-700'
                         : 'bg-amber-600 text-white border-amber-500 hover:bg-amber-500'
@@ -2032,7 +2032,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                 {activeTab === 'missing_extrema' && (report?.categoryCounts.missing_extrema ?? 0) > 0 && (
                   <button
                     onClick={() => handleBatchFix('missing_extrema')}
-                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border  ${
                       isLight
                         ? 'bg-cyan-700 text-white border-cyan-800 hover:bg-cyan-800'
                         : 'bg-cyan-600 text-white border-cyan-500 hover:bg-cyan-500'
@@ -2046,7 +2046,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                 {activeTab === 'uneven_stroke' && (report?.categoryCounts.uneven_stroke ?? 0) > 0 && (
                   <button
                     onClick={() => handleBatchFix('uneven_stroke')}
-                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border  ${
                       isLight
                         ? 'bg-emerald-700 text-white border-emerald-800 hover:bg-emerald-800'
                         : 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500'
@@ -2060,7 +2060,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                 {activeTab === 'excessive_nodes' && (report?.categoryCounts.excessive_nodes ?? 0) > 0 && (
                   <button
                     onClick={() => handleBatchFix('excessive_nodes')}
-                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border  ${
                       isLight
                         ? 'bg-purple-700 text-white border-purple-800 hover:bg-purple-800'
                         : 'bg-purple-600 text-white border-purple-500 hover:bg-purple-500'
@@ -2074,7 +2074,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                 {activeTab === 'baseline_deviation' && (report?.categoryCounts.baseline_deviation ?? 0) > 0 && (
                   <button
                     onClick={() => handleBatchFix('baseline_deviation')}
-                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border shadow-xs ${
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 transition-colors border  ${
                       isLight
                         ? 'bg-blue-700 text-white border-blue-800 hover:bg-blue-800'
                         : 'bg-blue-600 text-white border-blue-500 hover:bg-blue-500'
@@ -2122,7 +2122,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                   key={issue.id}
                   className={`p-3.5 sm:p-4 rounded-xl border flex flex-col sm:flex-row gap-4 transition-all ${
                     isLight
-                      ? 'bg-white border-stone-200 hover:border-stone-300 shadow-xs'
+                      ? 'bg-white border-stone-200 hover:border-stone-300 '
                       : 'bg-[#162119] border-[#25362b] hover:border-stone-700'
                   }`}
                 >
@@ -2385,7 +2385,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                       <button
                         onClick={() => handleFixIssue(issue)}
                         title="文字の形や角・曲率を崩さずに安全に修正します"
-                        className={`w-full sm:w-auto px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-all shadow-xs shrink-0 ${
+                        className={`w-full sm:w-auto px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-all  shrink-0 ${
                           issue.autoFixType === 'merge_intersection'
                             ? isLight
                               ? 'bg-amber-600 hover:bg-amber-700 text-white border border-amber-700'
@@ -2433,7 +2433,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                       <button
                         onClick={() => setHeatmapModalUnicode(issue.unicode)}
                         title="この文字の輪郭密度ヒートマップを開き、過密アンカー箇所を可視化してクリックで即時単純化します"
-                        className={`w-full sm:w-auto px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors border shadow-xs shrink-0 ${
+                        className={`w-full sm:w-auto px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors border  shrink-0 ${
                           isLight
                             ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
                             : 'bg-amber-950/60 text-amber-300 border-amber-800 hover:bg-amber-900'

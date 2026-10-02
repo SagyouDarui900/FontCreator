@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   ExternalLink,
   Bug,
-  Sparkles,
+  Info,
   Github,
   Copy,
   Check,
@@ -61,8 +61,8 @@ export const FeedbackTab: React.FC<FeedbackTabProps> = ({ isLight }) => {
       <div
         className={`p-5 rounded-2xl border relative overflow-hidden ${
           isLight
-            ? 'bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white border-emerald-200'
-            : 'bg-gradient-to-br from-[#132318] via-[#16291e] to-[#101913] border-emerald-800/80'
+            ? 'bg-stone-50 border-stone-200'
+            : 'bg-[#152018] border-[#25362b]'
         }`}
       >
         <div className="relative z-10 space-y-2">
@@ -76,8 +76,7 @@ export const FeedbackTab: React.FC<FeedbackTabProps> = ({ isLight }) => {
           </div>
           <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed max-w-2xl">
             Font Creator Studio をご利用いただきありがとうございます。
-            本アプリは生成AIを活用して個人開発を行っています。
-            操作中の不具合・文字データの破損・フォント出力エラーなどがございましたら、GitHubのIssueよりお知らせいただけますと幸いです。
+            操作中の不具合・文字データやフォント出力に関するご要望・改善提案がございましたら、GitHubのIssueよりお知らせいただけますと幸いです。
           </p>
         </div>
       </div>
@@ -173,19 +172,18 @@ export const FeedbackTab: React.FC<FeedbackTabProps> = ({ isLight }) => {
         </div>
       </div>
 
-      {/* Note about Generative AI & Feature Requests */}
+      {/* Note about Feature Requests & AI Development */}
       <div
         className={`p-4 rounded-xl border space-y-2.5 ${
           isLight ? 'bg-amber-50/70 border-amber-200' : 'bg-[#1d1b14] border-amber-900/60'
         }`}
       >
         <div className="flex items-center space-x-2 text-amber-800 dark:text-amber-300 font-bold text-xs">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>機能追加・ご要望についてのお知らせ</span>
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>機能追加・ご要望についてのお知らせ（AI生成による個人開発）</span>
         </div>
         <p className="text-xs text-stone-700 dark:text-stone-300 leading-relaxed pl-1">
-          本アプリは生成AIを活用して開発を進めている個人プロジェクトです。そのため、新規の大型機能や大幅な仕様変更のご要望には対応が難しい場合がございます。あらかじめご理解いただけますと幸いです。
-          （操作上の明らかな不具合やバグの修正については、上記Issueよりご報告いただければ対応いたします）
+          本アプリは生成AIを活用して開発を進めている個人プロジェクトです。そのため、新規の大型機能の追加や大幅な仕様変更・独自仕様のご要望につきましては、AI生成の特性上対応が厳しい（難しい）場合がございます。あらかじめご理解とご了承をいただけますと幸いです。（操作上の明らかな不具合やバグの修正、既存機能の安定性向上につきましては、上記GitHub Issueよりご報告いただければ積極的に対応いたします）
         </p>
       </div>
 
@@ -196,7 +194,7 @@ export const FeedbackTab: React.FC<FeedbackTabProps> = ({ isLight }) => {
         }`}
       >
         <div className="flex items-center space-x-2 text-stone-800 dark:text-emerald-200 font-bold text-xs">
-          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <Info className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span>不具合をご報告いただく際のお願い</span>
         </div>
         <ul className="text-xs text-stone-600 dark:text-stone-300 space-y-2 list-disc list-inside leading-relaxed pl-1">

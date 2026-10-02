@@ -3,7 +3,8 @@ import {
   X,
   Upload,
   FileCode,
-  Sparkles,
+  Wand2,
+  Clipboard,
   Sliders,
   Eye,
   Download,
@@ -233,7 +234,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
           }`}
         >
           <div className="flex items-center space-x-2">
-            <Sparkles className={`w-4 h-4 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
+            <Wand2 className={`w-4 h-4 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
             <h2
               className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${
                 isLight ? 'text-emerald-950' : 'text-emerald-200'
@@ -357,7 +358,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                     : 'bg-[#1a261f] border-[#25362b] hover:bg-[#223127]'
                 }`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <Clipboard className="w-3.5 h-3.5 text-stone-600 dark:text-stone-400" />
                 <span>クリップボード貼り付け</span>
               </button>
 
@@ -390,7 +391,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                   <div>
                     <p className="font-bold text-sm">手書き文字の写真やスケッチ画像をアップロード</p>
                     <p className="text-[11px] text-stone-500 mt-1">
-                      AI/アルゴリズムが高精度なベクター輪郭（SVGベジェ曲線）へ自動変換します
+                      高精度な輪郭抽出アルゴリズムによりベクター輪郭（SVGベジェ曲線）へ自動変換します
                     </p>
                   </div>
                 </div>
@@ -653,7 +654,7 @@ export const SvgVectorizerModal: React.FC<SvgVectorizerModalProps> = ({
                       : 'bg-[#1a261f] border-[#25362b] hover:bg-[#223127]'
                   }`}
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <Clipboard className="w-3.5 h-3.5 text-stone-600 dark:text-stone-400" />
                   <span>クリップボード貼り付け</span>
                 </button>
               </div>

@@ -321,11 +321,11 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
 
   return (
     <>
-      {/* Mobile/Overlay Backdrop */}
+      {/* Mobile/Overlay Click-Outside Dismiss (Transparent, non-darkening) */}
       {effectiveIsOverlay && (
         <div
           onClick={onClose}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 animate-in fade-in duration-150"
+          className="fixed inset-0 bg-transparent sm:hidden z-40 pointer-events-auto"
         />
       )}
 
@@ -334,23 +334,21 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
           effectiveIsOverlay
             ? 'fixed inset-y-0 right-0 z-50 w-full sm:w-96 max-w-full shadow-2xl animate-in slide-in-from-right duration-200'
             : 'relative z-10 w-72 lg:w-80 shadow-none shrink-0'
-        } border-l flex flex-col h-full overflow-hidden select-none transition-colors ${themeClasses.sidebarBg} ${
-          isLight ? 'border-[#d8e6df]' : 'border-[#25362b]'
-        }`}
+        } border-l flex flex-col h-full overflow-hidden select-none transition-colors ${themeClasses.sidebarBg} border-stone-200 dark:border-stone-800`}
       >
         {/* Sticky Mobile/Desktop Header */}
         <div
           className={`flex items-center justify-between p-3 border-b shrink-0 z-10 ${
-            isLight ? 'bg-white/95 border-[#d8e6df]' : 'bg-[#141e17]/95 border-[#25362b]'
+            isLight ? 'bg-white/95 border-stone-200' : 'bg-[#141e17]/95 border-stone-800'
           } backdrop-blur-sm`}
           style={{ paddingTop: 'max(env(safe-area-inset-top, 0px) + 8px, 12px)' }}
         >
           <div className="flex items-center space-x-2 min-w-0">
-            <div className={`p-1.5 rounded-lg shrink-0 ${isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-950 text-emerald-400'}`}>
+            <div className={`p-1.5 rounded-lg shrink-0 ${isLight ? 'bg-stone-100 text-stone-800' : 'bg-stone-800 text-emerald-300'}`}>
               <Sliders className="w-4 h-4 shrink-0" />
             </div>
             <div className="flex flex-col min-w-0">
-              <span className={`text-xs font-extrabold truncate ${isLight ? 'text-emerald-950' : 'text-emerald-300'}`}>
+              <span className={`text-xs font-bold truncate ${isLight ? 'text-stone-900' : 'text-emerald-300'}`}>
                 メトリクス・文字ツール
               </span>
               <span className="text-[10px] text-stone-500 dark:text-stone-400 truncate">
@@ -364,8 +362,8 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
               onClick={handleToggleAll}
               className={`px-2 py-1 rounded-md text-[10px] font-bold border transition-colors cursor-pointer ${
                 isLight
-                  ? 'bg-stone-50 border-[#d8e6df] text-stone-700 hover:bg-emerald-50'
-                  : 'bg-[#18231c] border-[#25362b] text-emerald-300 hover:bg-[#202d24]'
+                  ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  : 'bg-[#18231c] border-stone-800 text-emerald-300 hover:bg-[#202d24]'
               }`}
               title={isAllExpanded ? 'すべての項目を折りたたむ' : 'すべての項目を展開'}
             >
@@ -375,14 +373,14 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
             {onClose && (
               <button
                 onClick={onClose}
-                className={`min-h-[36px] px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 text-xs font-bold shadow-xs active:scale-95 cursor-pointer ${
+                className={`min-h-[32px] px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 text-xs font-bold  active:scale-95 cursor-pointer ${
                   isLight
-                    ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
-                    : 'bg-emerald-600 hover:bg-emerald-500 text-stone-950'
+                    ? 'bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200'
+                    : 'bg-stone-800 hover:bg-stone-700 text-stone-100 border border-stone-700'
                 }`}
                 title="パネルを閉じる (作図エリアへ戻る)"
               >
-                <X className="w-4 h-4 shrink-0" />
+                <X className="w-3.5 h-3.5 shrink-0" />
                 <span>閉じる</span>
               </button>
             )}
@@ -400,7 +398,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
         >
           {/* 1. Fast Glyph Navigation & Active Character Card */}
           <div
-            className={`flex flex-col rounded-xl border overflow-hidden shadow-xs transition-colors ${
+            className={`flex flex-col rounded-xl border overflow-hidden  transition-colors ${
               isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
             }`}
           >
@@ -414,7 +412,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                 <div
                   className={`w-10 h-10 rounded-lg border flex items-center justify-center text-center font-bold shrink-0 ${
                     isLight
-                      ? 'bg-[#f0f7f3] border-emerald-300 text-emerald-950 shadow-xs'
+                      ? 'bg-[#f0f7f3] border-emerald-300 text-emerald-950 '
                       : 'bg-[#101813] border-emerald-700 text-emerald-300'
                   }`}
                 >
@@ -514,7 +512,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
 
           {/* 2. Manual Metrics Adjustment (送り幅 & LSB) */}
           <div
-            className={`flex flex-col rounded-xl border overflow-hidden shadow-xs transition-colors ${
+            className={`flex flex-col rounded-xl border overflow-hidden  transition-colors ${
               isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
             }`}
           >
@@ -631,7 +629,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                         className={`px-2 py-1 rounded-md border text-[10.5px] font-bold transition-all cursor-pointer ${
                           advanceWidth === p.val
                             ? isLight
-                              ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                              ? 'bg-emerald-700 text-white border-emerald-800 '
                               : 'bg-emerald-500 text-stone-950 border-emerald-400 font-extrabold'
                             : isLight
                             ? 'bg-white border-stone-200 text-stone-700 hover:bg-emerald-50'
@@ -733,7 +731,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                         className={`px-2 py-1 rounded-md border text-[10.5px] font-bold transition-all cursor-pointer ${
                           lsb === p.val
                             ? isLight
-                              ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                              ? 'bg-emerald-700 text-white border-emerald-800 '
                               : 'bg-emerald-500 text-stone-950 border-emerald-400 font-extrabold'
                             : isLight
                             ? 'bg-white border-stone-200 text-stone-700 hover:bg-emerald-50'
@@ -795,7 +793,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                         onClick={handleCenterWithinAdvance}
                         className={`w-full min-h-[38px] py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 border transition-all active:scale-95 cursor-pointer ${
                           isLight
-                            ? 'bg-white hover:bg-emerald-50 border-emerald-300 text-emerald-900 shadow-xs'
+                            ? 'bg-white hover:bg-emerald-50 border-emerald-300 text-emerald-900 '
                             : 'bg-[#18261e] hover:bg-[#22352a] border-emerald-700 text-emerald-200'
                         }`}
                         title="送り幅の中で文字を左右中央にセンタリングして余白を均等化"
@@ -812,7 +810,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
 
           {/* 3. Auto-Spacing (サイドベアリング自動設定) Section */}
           <div
-            className={`flex flex-col rounded-xl border overflow-hidden shadow-xs transition-colors ${
+            className={`flex flex-col rounded-xl border overflow-hidden  transition-colors ${
               isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
             }`}
           >
@@ -840,7 +838,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                 {/* Preset Selector Grid - 1 column to avoid overflow on narrow sidebars */}
                 <div className="grid grid-cols-1 gap-1.5 text-xs">
                   {[
-                    { id: 'smart' as AutoSpacingPreset, label: 'スマート自動', desc: '和文:全角1000EM / 欧文:光学余白', icon: Sparkles },
+                    { id: 'smart' as AutoSpacingPreset, label: '自動計算 (和欧最適化)', desc: '和文:全角1000EM / 欧文:光学余白', icon: Sliders },
                     { id: 'japanese-fullwidth' as AutoSpacingPreset, label: '和文全角センタリング (1000EM)', desc: '枠の中心に正確に配置' },
                     { id: 'proportional-balanced' as AutoSpacingPreset, label: '欧文プロポーショナル', desc: '字形ごとの光学余白' },
                     { id: 'proportional-tight' as AutoSpacingPreset, label: '欧文タイト (詰まり気味)', desc: '余白を狭めて配置' },
@@ -858,7 +856,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                         className={`p-2 rounded-lg border text-left flex items-start justify-between transition-all cursor-pointer active:scale-98 ${
                           isSelected
                             ? isLight
-                              ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold shadow-xs'
+                              ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold '
                               : 'bg-emerald-950/80 border-emerald-600 text-emerald-200 font-bold'
                             : isLight
                             ? 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
@@ -889,7 +887,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                   type="button"
                   onClick={() => handleExecuteAutoSpacing(spacingPreset)}
                   disabled={contours.length === 0}
-                  className={`w-full min-h-[42px] py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-2 transition-all shadow-xs active:scale-95 disabled:opacity-40 cursor-pointer ${
+                  className={`w-full min-h-[42px] py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-2 transition-all  active:scale-95 disabled:opacity-40 cursor-pointer ${
                     isLight
                       ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-stone-950 font-extrabold'
@@ -905,7 +903,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
 
           {/* 4. Simplify (輪郭の単純化・頂点数削減) Section */}
           <div
-            className={`flex flex-col rounded-xl border overflow-hidden shadow-xs transition-colors ${
+            className={`flex flex-col rounded-xl border overflow-hidden  transition-colors ${
               isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
             }`}
           >
@@ -916,7 +914,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
               }`}
             >
               <span className="text-xs font-bold flex items-center space-x-1.5 text-emerald-800 dark:text-emerald-300">
-                <Sparkles className="w-4 h-4 text-amber-500 fill-current" />
+                <Wand2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>輪郭の単純化 (Simplify)</span>
               </span>
               <div className="flex items-center space-x-1.5">
@@ -942,7 +940,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     className={`min-h-[38px] py-1.5 rounded-lg font-bold border transition-all cursor-pointer ${
                       simplifyLevel === 'mild'
                         ? isLight
-                          ? 'bg-emerald-100 border-emerald-400 text-emerald-950 shadow-xs'
+                          ? 'bg-emerald-100 border-emerald-400 text-emerald-950 '
                           : 'bg-emerald-950 border-emerald-600 text-emerald-200'
                         : isLight
                         ? 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
@@ -957,7 +955,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     className={`min-h-[38px] py-1.5 rounded-lg font-bold border transition-all cursor-pointer ${
                       simplifyLevel === 'normal'
                         ? isLight
-                          ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                          ? 'bg-emerald-700 text-white border-emerald-800 '
                           : 'bg-emerald-600 text-stone-950 border-emerald-500 font-bold'
                         : isLight
                         ? 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
@@ -972,7 +970,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     className={`min-h-[38px] py-1.5 rounded-lg font-bold border transition-all cursor-pointer ${
                       simplifyLevel === 'strong'
                         ? isLight
-                          ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                          ? 'bg-amber-600 text-white border-amber-700 '
                           : 'bg-amber-600 text-stone-950 border-amber-500 font-bold'
                         : isLight
                         ? 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
@@ -988,7 +986,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                 <button
                   onClick={handleExecuteSimplify}
                   disabled={contours.length === 0 || totalNodes === 0}
-                  className={`w-full min-h-[42px] py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 transition-all shadow-xs active:scale-95 disabled:opacity-40 cursor-pointer ${
+                  className={`w-full min-h-[42px] py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 transition-all  active:scale-95 disabled:opacity-40 cursor-pointer ${
                     isLight
                       ? 'bg-emerald-800 hover:bg-emerald-700 text-white'
                       : 'bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold'
@@ -1004,7 +1002,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
 
           {/* 5. Transform Tools (Slant, Flip, Scale, Center) */}
           <div
-            className={`flex flex-col rounded-xl border overflow-hidden shadow-xs transition-colors ${
+            className={`flex flex-col rounded-xl border overflow-hidden  transition-colors ${
               isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
             }`}
           >
@@ -1130,14 +1128,14 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                 <button
                   onClick={handleSmoothAndFix}
                   disabled={contours.length === 0}
-                  className={`w-full min-h-[42px] py-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer active:scale-95 shadow-xs disabled:opacity-40 ${
+                  className={`w-full min-h-[42px] py-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer active:scale-95  disabled:opacity-40 ${
                     isLight
-                      ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
-                      : 'bg-amber-600 hover:bg-amber-500 text-stone-950 border-amber-400 font-extrabold'
+                      ? 'bg-stone-100 hover:bg-stone-200 border-stone-300 text-stone-800'
+                      : 'bg-[#1b261f] hover:bg-[#23332a] border-[#2c3d31] text-emerald-200'
                   }`}
                   title="変形・拡大縮小時に生じたガタツキやベジェ曲線の折れ曲がり歪みを自動補正"
                 >
-                  <Sparkles className="w-4 h-4 shrink-0 fill-current" />
+                  <Wand2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <span>変形後のガタツキ・歪みを滑らかに補正</span>
                 </button>
 
@@ -1172,7 +1170,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
 
           {/* 6. Outline Stroke Paths */}
           <div
-            className={`flex flex-col rounded-xl border overflow-hidden shadow-xs transition-colors ${
+            className={`flex flex-col rounded-xl border overflow-hidden  transition-colors ${
               isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18231c] border-[#25362b]'
             }`}
           >
@@ -1225,7 +1223,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
               <div className="flex items-center space-x-2 animate-in fade-in duration-150">
                 <button
                   onClick={handleExecuteClear}
-                  className="flex-1 min-h-[44px] py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors shadow-sm bg-rose-600 hover:bg-rose-700 text-white border-rose-700 cursor-pointer active:scale-95"
+ className="flex-1 min-h-[44px] py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors bg-rose-600 hover:bg-rose-700 text-white border-rose-700 cursor-pointer active:scale-95"
                 >
                   <Trash2 className="w-4 h-4 shrink-0" />
                   <span>本当に全消去する</span>

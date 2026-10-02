@@ -402,8 +402,8 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
                     className={`p-2 rounded border text-left flex flex-col transition-all ${
                       scope === s.id
                         ? isLight
-                          ? 'bg-emerald-100/70 border-emerald-600 text-emerald-950 font-bold shadow-xs'
-                          : 'bg-emerald-950 border-emerald-500 text-emerald-200 font-bold shadow-xs'
+                          ? 'bg-emerald-100/70 border-emerald-600 text-emerald-950 font-bold '
+                          : 'bg-emerald-950 border-emerald-500 text-emerald-200 font-bold '
                         : isLight
                         ? 'bg-white border-[#d8e6df] text-stone-700 hover:bg-stone-50'
                         : 'bg-[#101813] border-[#25362b] text-emerald-300/80 hover:bg-[#18231c]'
@@ -695,7 +695,7 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
 
           <button
             onClick={handleApplyBatch}
-            className={`px-5 py-2 rounded-lg font-bold text-xs flex items-center space-x-1.5 shadow-md active:scale-95 transition-all ${
+ className={`px-5 py-2 rounded-lg font-bold text-xs flex items-center space-x-1.5 active:scale-95 transition-all ${
               isLight
                 ? 'bg-emerald-800 hover:bg-emerald-700 text-white'
                 : 'bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold'

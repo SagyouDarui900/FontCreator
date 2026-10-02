@@ -232,51 +232,51 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
       >
         {/* Header Bar */}
         <div
-          className={`flex items-center justify-between px-5 py-4 border-b shrink-0 ${
+          className={`flex flex-col sm:flex-row sm:items-center justify-between px-3 sm:px-5 py-3 sm:py-4 border-b shrink-0 gap-3 ${
             isLight ? 'bg-stone-50/80 border-stone-200' : 'bg-[#16231a] border-[#223326]'
           }`}
         >
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 min-w-0">
             <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center border shadow-xs ${
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center border shrink-0 ${
                 isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-emerald-950/60 border-emerald-800 text-emerald-400'
               }`}
             >
               <AlignVerticalJustifyCenter className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center space-x-2">
-                <h2 className="text-base sm:text-lg font-extrabold tracking-tight">
-                  OpenType Features & 縦書き・合字スタジオ
+                <h2 className="text-sm sm:text-lg font-extrabold tracking-tight truncate">
+                  縦書き・合字スタジオ
                 </h2>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${
                     config.enabled
                       ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
                       : 'bg-stone-500/10 text-stone-500 border-stone-500/30'
                   }`}
                 >
-                  {config.enabled ? 'GSUB/GPOS 有効' : '無効'}
+                  {config.enabled ? 'ON' : 'OFF'}
                 </span>
               </div>
-              <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-                日本語縦書き（`vert`/`vhea`）、合字（`liga`/`dlig`）、ペア調整（GPOS Kerning）のビジュアル設計とリアルタイム検証
+              <p className="text-[11px] sm:text-xs text-stone-500 dark:text-stone-400 mt-0.5 truncate">
+                日本語縦書き・合字・ペア調整のビジュアル設計と検証
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-between sm:justify-end space-x-2 shrink-0">
             {/* Global Feature Enable Toggle */}
             <button
               onClick={toggleFeaturesGlobal}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-all shadow-2xs ${
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-all ${
                 config.enabled
                   ? 'bg-emerald-700 hover:bg-emerald-800 text-white border-emerald-800'
                   : 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400 border-stone-300 dark:border-stone-700'
               }`}
             >
               <Zap className="w-3.5 h-3.5" />
-              <span>{config.enabled ? 'Features ON' : 'Features OFF'}</span>
+              <span>{config.enabled ? '有効' : '無効'}</span>
             </button>
 
             <button
@@ -290,7 +290,7 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
 
         {/* Tab Navigation */}
         <div
-          className={`flex items-center px-5 py-2 border-b shrink-0 text-xs font-bold gap-1 overflow-x-auto ${
+          className={`flex items-center px-3 sm:px-5 py-2 border-b shrink-0 text-xs font-bold gap-1 overflow-x-auto custom-scrollbar touch-scroll-x min-w-0 ${
             isLight ? 'bg-stone-100/60 border-stone-200' : 'bg-[#141e17] border-[#25362b]'
           }`}
         >
@@ -298,24 +298,28 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
             {
               id: 'vert',
               label: '縦書き設定 (`vert`/`vhea`)',
+              shortLabel: '縦書き',
               icon: AlignVerticalJustifyCenter,
               count: config.verticalWriting.substitutions.filter((s) => s.enabled).length,
             },
             {
               id: 'liga',
               label: '合字・リガチャー (`liga`/`dlig`)',
+              shortLabel: '合字',
               icon: Layers,
               count: config.ligatures.filter((l) => l.enabled).length,
             },
             {
               id: 'gpos',
               label: 'カーニング・ペア調整 (GPOS)',
+              shortLabel: 'カーニング',
               icon: ArrowUpDown,
               count: Object.keys(project.kerning || {}).length,
             },
             {
               id: 'preview',
               label: 'リアルタイム縦書き・合字プレビュー',
+              shortLabel: 'プレビュー',
               icon: Eye,
               badge: 'LIVE',
             },
@@ -327,18 +331,19 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3.5 py-2 rounded-xl flex items-center space-x-2 transition-all whitespace-nowrap ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl flex items-center space-x-1.5 sm:space-x-2 transition-all whitespace-nowrap shrink-0 ${
                   isSelected
                     ? isLight
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'bg-emerald-600 text-white shadow-xs'
+                      ? 'bg-emerald-800 text-white font-bold'
+                      : 'bg-emerald-600 text-white font-bold'
                     : isLight
                     ? 'text-stone-600 hover:bg-stone-200/80'
                     : 'text-stone-400 hover:bg-[#1a281e]'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                <span>{tab.label}</span>
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.shortLabel}</span>
                 {tab.count !== undefined && (
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
@@ -393,7 +398,7 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={handleAutoDetectVerticalGlyphs}
-                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs ${
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-all  ${
                         isLight
                           ? 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50'
                           : 'bg-[#1b2b20] text-emerald-300 border-emerald-800 hover:bg-[#223628]'
@@ -405,7 +410,7 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
 
                     <button
                       onClick={toggleVerticalWriting}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs ${
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all  ${
                         config.verticalWriting.enabled
                           ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
                           : 'bg-stone-300 dark:bg-stone-800 text-stone-700 dark:text-stone-300'
@@ -499,8 +504,8 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
                         className={`p-3 rounded-xl border transition-all flex items-center justify-between ${
                           sub.enabled
                             ? isLight
-                              ? 'bg-white border-emerald-300/80 shadow-2xs'
-                              : 'bg-[#18261c] border-emerald-800 shadow-2xs'
+                              ? 'bg-white border-emerald-300/80 '
+                              : 'bg-[#18261c] border-emerald-800 '
                             : isLight
                             ? 'bg-stone-50 border-stone-200/80 opacity-60'
                             : 'bg-[#131b15] border-[#1f2e22] opacity-50'
@@ -607,7 +612,7 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
 
                       <button
                         onClick={handleAddCustomLigature}
-                        className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center space-x-1 shrink-0 transition-colors shadow-xs"
+                        className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center space-x-1 shrink-0 transition-colors "
                       >
                         <Plus className="w-4 h-4" />
                         <span>追加</span>
@@ -633,8 +638,8 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
                       className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
                         lig.enabled
                           ? isLight
-                            ? 'bg-white border-emerald-300 shadow-2xs'
-                            : 'bg-[#18261c] border-emerald-800 shadow-2xs'
+                            ? 'bg-white border-emerald-300 '
+                            : 'bg-[#18261c] border-emerald-800 '
                           : isLight
                           ? 'bg-stone-50 border-stone-200 opacity-60'
                           : 'bg-[#131b15] border-[#1f2e22] opacity-50'
@@ -824,7 +829,7 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
 
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition-colors shadow-xs"
+            className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition-colors "
           >
             完了・閉じる
           </button>

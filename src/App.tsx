@@ -13,7 +13,7 @@ import {
 } from './types';
 import { createDefaultProject } from './utils/fontCompiler';
 import { DEFAULT_SAMPLE_GLYPHS, isLegacyMockGlyph } from './data/defaultSampleGlyphs';
-import { loadUserPenPresets, loadStickyBrushConfigs, saveStickyBrushConfig, DEFAULT_PRESSURE_CURVES } from './utils/presetData';
+import { loadUserPenPresets, loadStickyBrushConfigs, saveStickyBrushConfig, DEFAULT_PRESSURE_CURVES, DEFAULT_PEN_PRESETS } from './utils/presetData';
 import { Header } from './components/Header';
 import { GlyphGrid } from './components/GlyphGrid';
 import { ToolBar } from './components/ToolBar';
@@ -58,7 +58,7 @@ import {
   loadProjectFromIndexedDB,
 } from './utils/storageManager';
 import { KANA_PAIRS } from './data/unicodeTables';
-import { Grid, Paintbrush, Sliders, Eye, Undo2, Redo2, ChevronRight, Sparkles } from 'lucide-react';
+import { Grid, Paintbrush, Sliders, Eye, Undo2, Redo2, ChevronRight, Layers } from 'lucide-react';
 
 const LOCAL_STORAGE_KEY = LOCAL_STORAGE_PROJECT_KEY;
 const THEME_STORAGE_KEY = 'font_editor_theme_mode';
@@ -125,6 +125,16 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.metadata && parsed.glyphs) {
+          // Sanitize glyph structures to ensure arrays are valid
+          for (const u of Object.keys(parsed.glyphs)) {
+            const g = parsed.glyphs[u];
+            if (g) {
+              if (!Array.isArray(g.contours)) g.contours = [];
+              if (!Array.isArray(g.strokes)) g.strokes = [];
+              if (!Array.isArray(g.anchors)) g.anchors = [];
+            }
+          }
+
           // Detect legacy/deformed mock sample glyphs and seamlessly upgrade them to authentic outlines
           let upgraded = false;
           const updatedGlyphs = { ...parsed.glyphs };
@@ -273,9 +283,14 @@ export default function App() {
 
   // User Writing Presets
   const [penPresets, setPenPresets] = useState<UserPenPreset[]>(() => loadUserPenPresets());
+  const [activePenPreset, setActivePenPreset] = useState<UserPenPreset | undefined>(() => {
+    const loaded = loadUserPenPresets();
+    return loaded[0] || DEFAULT_PEN_PRESETS[0];
+  });
   const [isPenPresetsModalOpen, setIsPenPresetsModalOpen] = useState<boolean>(false);
 
   const handleApplyPenPreset = useCallback((preset: UserPenPreset) => {
+    setActivePenPreset(preset);
     setBrushStyle(preset.brushStyle);
     setBrushWidth(preset.brushWidth);
     setPressureSensitivity(preset.pressureSensitivity);
@@ -639,59 +654,102 @@ export default function App() {
     }
   }, [selectedUnicode, selectedChar, showToast]);
 
-  // Record history snapshot before mutation
+  // Record history snapshot before mutation (capturing pre-change state from projectRef)
   const commitHistory = useCallback(() => {
-    const glyphSnapshot = currentGlyphRef.current;
-    setUndoStack((prev) => [...prev.slice(-30), JSON.parse(JSON.stringify(glyphSnapshot))]);
+    const unicode = selectedUnicode;
+    const existingGlyph = projectRef.current.glyphs[unicode] || {
+      unicode,
+      char: selectedChar,
+      advanceWidth: projectRef.current.metadata.unitsPerEm || 1000,
+      lsb: 50,
+      contours: [],
+    };
+    setUndoStack((prev) => {
+      if (prev.length > 0) {
+        const last = prev[prev.length - 1];
+        if (
+          last.unicode === existingGlyph.unicode &&
+          JSON.stringify(last.contours) === JSON.stringify(existingGlyph.contours) &&
+          last.advanceWidth === existingGlyph.advanceWidth &&
+          last.lsb === existingGlyph.lsb
+        ) {
+          return prev;
+        }
+      }
+      return [...prev.slice(-30), JSON.parse(JSON.stringify(existingGlyph))];
+    });
     setRedoStack([]);
-    setProject((prev) => ({ ...prev, updatedAt: Date.now() }));
-  }, []);
+  }, [selectedUnicode, selectedChar]);
 
   // Undo action
   const handleUndo = useCallback(() => {
     setUndoStack((prevUndo) => {
-      if (prevUndo.length === 0) return prevUndo;
+      if (prevUndo.length === 0) {
+        showToast('これ以上戻す操作履歴はありません', 'info');
+        return prevUndo;
+      }
       const previous = prevUndo[prevUndo.length - 1];
       const nextUndo = prevUndo.slice(0, prevUndo.length - 1);
       
       const currentSnapshot = currentGlyphRef.current;
       setRedoStack((prevRedo) => [...prevRedo, JSON.parse(JSON.stringify(currentSnapshot))]);
 
+      if (previous.unicode !== selectedUnicode) {
+        setSelectedUnicode(previous.unicode);
+        setSelectedChar(previous.char || String.fromCodePoint(previous.unicode));
+      }
+
       setProject((prevProj) => ({
         ...prevProj,
         glyphs: {
           ...prevProj.glyphs,
-          [previous.unicode]: previous,
+          [previous.unicode]: {
+            ...previous,
+            modified: true,
+          },
         },
         updatedAt: Date.now(),
       }));
 
+      showToast(`取り消し (Undo): パス数 ${previous.contours?.length || 0} 個の状態に復元しました`, 'info');
       return nextUndo;
     });
-  }, []);
+  }, [showToast, selectedUnicode]);
 
   // Redo action
   const handleRedo = useCallback(() => {
     setRedoStack((prevRedo) => {
-      if (prevRedo.length === 0) return prevRedo;
+      if (prevRedo.length === 0) {
+        showToast('これ以上やり直す操作履歴はありません', 'info');
+        return prevRedo;
+      }
       const next = prevRedo[prevRedo.length - 1];
       const nextRedo = prevRedo.slice(0, prevRedo.length - 1);
 
       const currentSnapshot = currentGlyphRef.current;
       setUndoStack((prevUndo) => [...prevUndo, JSON.parse(JSON.stringify(currentSnapshot))]);
 
+      if (next.unicode !== selectedUnicode) {
+        setSelectedUnicode(next.unicode);
+        setSelectedChar(next.char || String.fromCodePoint(next.unicode));
+      }
+
       setProject((prevProj) => ({
         ...prevProj,
         glyphs: {
           ...prevProj.glyphs,
-          [next.unicode]: next,
+          [next.unicode]: {
+            ...next,
+            modified: true,
+          },
         },
         updatedAt: Date.now(),
       }));
 
+      showToast(`やり直し (Redo): パス数 ${next.contours?.length || 0} 個の状態に復元しました`, 'info');
       return nextRedo;
     });
-  }, []);
+  }, [showToast, selectedUnicode]);
 
   // Toggle Lock Glyph (編集保護ロック)
   const handleToggleLockGlyph = useCallback(() => {
@@ -728,10 +786,13 @@ export default function App() {
 
   // Update current glyph contours
   const handleUpdateContours = useCallback(
-    (newContours: PathContour[]) => {
+    (newContours: PathContour[], options?: { skipHistory?: boolean }) => {
       if (projectRef.current.glyphs[selectedUnicode]?.locked) {
         showToast(`文字「${selectedChar}」は編集ロックされています。ヘッダーの鍵アイコンで解除してください。`, 'warning');
         return;
+      }
+      if (!options?.skipHistory) {
+        commitHistory();
       }
       setProject((prev) => {
         const existing = prev.glyphs[selectedUnicode] || {
@@ -754,15 +815,17 @@ export default function App() {
               modified: true,
             },
           },
+          updatedAt: Date.now(),
         };
       });
     },
-    [selectedUnicode, selectedChar, showToast]
+    [selectedUnicode, selectedChar, commitHistory, showToast]
   );
 
   // Update Advance Width
   const handleUpdateAdvanceWidth = useCallback(
     (val: number) => {
+      commitHistory();
       setProject((prev) => {
         const existing = prev.glyphs[selectedUnicode] || currentGlyph;
         return {
@@ -779,12 +842,13 @@ export default function App() {
         };
       });
     },
-    [selectedUnicode, currentGlyph]
+    [selectedUnicode, currentGlyph, commitHistory]
   );
 
   // Update LSB
   const handleUpdateLsb = useCallback(
     (val: number) => {
+      commitHistory();
       setProject((prev) => {
         const existing = prev.glyphs[selectedUnicode] || currentGlyph;
         return {
@@ -801,15 +865,13 @@ export default function App() {
         };
       });
     },
-    [selectedUnicode, currentGlyph]
+    [selectedUnicode, currentGlyph, commitHistory]
   );
 
   // Select Glyph from character matrix
   const handleSelectGlyph = useCallback((unicode: number, char: string) => {
     setSelectedUnicode(unicode);
     setSelectedChar(char);
-    setUndoStack([]);
-    setRedoStack([]);
     if (isGridOverlay) {
       setShowGridDrawer(false);
     }
@@ -1226,14 +1288,14 @@ export default function App() {
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.key.toLowerCase() === 'z')) {
         e.preventDefault();
         if (e.shiftKey) {
           handleRedo();
         } else {
           handleUndo();
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      } else if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyY' || e.key.toLowerCase() === 'y')) {
         e.preventDefault();
         handleRedo();
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'g') {
@@ -1379,7 +1441,7 @@ export default function App() {
         else if (key === 'b') setToolMode('brush');
         else if (key === 'r') setToolMode('ruler');
         else if (key === 'u' || key === 's') setToolMode('rect');
-        else if (key === 'o') setToolMode('ellipse');
+        else if (key === 'o' && !e.shiftKey) setToolMode('ellipse');
         else if (key === 'e') setToolMode('eraser');
         else if (key === 'h') setToolMode('hand');
         else if (key === '[') {
@@ -1451,6 +1513,7 @@ export default function App() {
         isZenMode={isZenMode}
         onApplyHandwritingPreset={handleApplyHandwritingPreset}
         onOpenShortcutsModal={handleOpenShortcutsModal}
+        onOpenPenPresetsModal={openPenPresetsModal}
         selectedChar={selectedChar}
         selectedUnicode={selectedUnicode}
         isGlyphLocked={Boolean(currentGlyph.locked)}
@@ -1463,44 +1526,9 @@ export default function App() {
 
       {/* Main Workspace Body */}
       <div className={`flex-1 flex flex-col sm:flex-row min-h-0 min-w-0 w-full flex-grow flex-shrink grow shrink relative overflow-hidden isolate ${isAnyModalOpen ? 'pointer-events-none select-none' : ''}`}>
-        {/* Quick expand tab for GlyphGrid when closed (desktop) */}
-        {!showGridDrawer && (
-          <button
-            onClick={toggleGridDrawer}
-            className={`hidden sm:flex absolute left-13 md:left-14 top-14 z-20 px-2 py-1.5 rounded-r-xl border border-l-0 shadow-md items-center space-x-1 text-xs font-bold transition-all hover:pl-2.5 ${
-              isLight
-                ? 'bg-white text-emerald-950 border-[#d4e5dc] hover:bg-emerald-50 shadow-emerald-950/5'
-                : 'bg-[#18231c] text-emerald-200 border-[#25362b] hover:bg-[#202f26] shadow-black/40'
-            }`}
-            title="文字一覧（サイドバー）を展開 [ショートカット: []"
-          >
-            <ChevronRight className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span className="text-[11px]">文字一覧</span>
-          </button>
-        )}
-
-        {/* Character Matrix Table (Glyph Grid) */}
-        <GlyphGrid
-          project={project}
-          selectedUnicode={selectedUnicode}
-          onSelectGlyph={handleSelectGlyph}
-          onClearGlyph={handleClearGlyph}
-          onCopyGlyph={handleCopyGlyph}
-          onPasteGlyph={handlePasteGlyph}
-          onDuplicateAsSmallKana={handleDuplicateAsSmallKana}
-          onGenerateDakutenTarget={handleGenerateDakutenTarget}
-          onOpenGlyphSynthesisModal={handleOpenSynthesisModal}
-          onOpenKerningModal={handleOpenKerningModal}
-          onOpenQualityModal={handleOpenQualityModal}
-          hasClipboard={Boolean(clipboardContours)}
-          isOpen={showGridDrawer}
-          onClose={handleCloseGridDrawer}
-          theme={theme}
-          isOverlay={isGridOverlay}
-        />
-
-        {/* Vertical Tool Palette (Bottom bar on mobile, left sidebar on desktop) */}
-        <div className="order-last sm:order-none shrink-0 w-full sm:w-auto z-20">
+        
+        {/* 1. Stationary Design Dock (Leftmost): ToolBar */}
+        <div className="order-last sm:order-first shrink-0 w-full sm:w-auto z-20">
           <ToolBar
             toolMode={toolMode}
             setToolMode={setToolMode}
@@ -1522,8 +1550,29 @@ export default function App() {
           />
         </div>
 
-        {/* Central Vector Canvas (Bézier, Stylus, Touch, Guides) */}
+        {/* 2. Character Matrix Table (Glyph Grid Sidebar / Drawer) */}
+        <GlyphGrid
+          project={project}
+          selectedUnicode={selectedUnicode}
+          onSelectGlyph={handleSelectGlyph}
+          onClearGlyph={handleClearGlyph}
+          onCopyGlyph={handleCopyGlyph}
+          onPasteGlyph={handlePasteGlyph}
+          onDuplicateAsSmallKana={handleDuplicateAsSmallKana}
+          onGenerateDakutenTarget={handleGenerateDakutenTarget}
+          onOpenGlyphSynthesisModal={handleOpenSynthesisModal}
+          onOpenKerningModal={handleOpenKerningModal}
+          onOpenQualityModal={handleOpenQualityModal}
+          hasClipboard={Boolean(clipboardContours)}
+          isOpen={showGridDrawer}
+          onClose={handleCloseGridDrawer}
+          theme={theme}
+          isOverlay={isGridOverlay}
+        />
+
+        {/* 3. Central Vector Canvas (Maximized Creation Area) */}
         <div className={`flex-1 flex flex-col min-h-0 min-w-0 relative z-0 flex-grow flex-shrink grow shrink overflow-hidden ${isAnyModalOpen ? 'pointer-events-none select-none' : ''}`}>
+
           <GlyphCanvas
             contours={currentGlyph.contours || []}
             onChangeContours={handleUpdateContours}
@@ -1567,6 +1616,7 @@ export default function App() {
             canUndo={undoStack.length > 0}
             canRedo={redoStack.length > 0}
             onOpenPenPresetsModal={openPenPresetsModal}
+            activePenPreset={activePenPreset}
             isAnyModalOpen={isAnyModalOpen}
             overlaySettings={overlaySettings}
             project={project}
@@ -1574,7 +1624,7 @@ export default function App() {
           />
         </div>
 
-        {/* Metrics & Transforms Sidebar */}
+        {/* 4. Metrics & Transforms Sidebar (Collapsible Inspector) */}
         <MetricsPanel
           advanceWidth={currentGlyph.advanceWidth || 1000}
           lsb={currentGlyph.lsb ?? 50}
@@ -1598,7 +1648,7 @@ export default function App() {
           onShowToast={showToast}
         />
 
-        {/* Kanji Radicals Slide-over Drawer */}
+        {/* 5. Kanji Radicals Slide-over Drawer */}
         <RadicalsDrawer
           isOpen={showRadicals}
           onClose={handleCloseRadicalsDrawer}
@@ -1675,7 +1725,7 @@ export default function App() {
           className="flex flex-col items-center py-1 px-2 rounded-md hover:bg-emerald-50 dark:hover:bg-[#1a251e] transition-colors"
           title="部首・作字パーツ工房"
         >
-          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span className="text-[10px] mt-0.5">部首工房</span>
         </button>
 
@@ -1846,6 +1896,38 @@ export default function App() {
           smoothStrength,
           smoothPreserveCorners,
           autoUnionBrush,
+          taperStartLength: activePenPreset?.taperStartLength,
+          taperEndLength: activePenPreset?.taperEndLength,
+          taperStartWidth: activePenPreset?.taperStartWidth,
+          taperEndWidth: activePenPreset?.taperEndWidth,
+          taperStartOpacity: activePenPreset?.taperStartOpacity,
+          taperEndOpacity: activePenPreset?.taperEndOpacity,
+          taperStartTime: activePenPreset?.taperStartTime,
+          taperEndTime: activePenPreset?.taperEndTime,
+          forceTaper: activePenPreset?.forceTaper,
+          forceTaperEnd: activePenPreset?.forceTaperEnd,
+          taperTipShape: activePenPreset?.taperTipShape,
+          nibAngle: activePenPreset?.nibAngle,
+          nibAspectRatio: activePenPreset?.nibAspectRatio,
+          nibFollowDirection: activePenPreset?.nibFollowDirection,
+          nibSpacing: activePenPreset?.nibSpacing,
+          constantWidth: activePenPreset?.constantWidth,
+          antiAlias: activePenPreset?.antiAlias,
+          jitterPosition: activePenPreset?.jitterPosition,
+          jitterConstrainPerp: activePenPreset?.jitterConstrainPerp,
+          jitterSize: activePenPreset?.jitterSize,
+          jitterOpacity: activePenPreset?.jitterOpacity,
+          jitterAngle: activePenPreset?.jitterAngle,
+          jitterSpacing: activePenPreset?.jitterSpacing,
+          speedWidthFactor: activePenPreset?.speedWidthFactor,
+          speedOpacityFactor: activePenPreset?.speedOpacityFactor,
+          speedFeatherFactor: activePenPreset?.speedFeatherFactor,
+          pressureWidthFactor: activePenPreset?.pressureWidthFactor,
+          pressureOpacityFactor: activePenPreset?.pressureOpacityFactor,
+          pressureFeatherFactor: activePenPreset?.pressureFeatherFactor,
+          stabilizationMethod: activePenPreset?.stabilizationMethod,
+          speedStabilization: activePenPreset?.speedStabilization,
+          legacyStabilization: activePenPreset?.legacyStabilization,
         }}
         onApplyPreset={handleApplyPenPreset}
         onChangePressureCurve={handleChangePressureCurve}

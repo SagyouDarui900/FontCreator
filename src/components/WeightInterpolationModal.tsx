@@ -437,30 +437,30 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
 
         {/* Tab Navigation */}
         <div
-          className={`flex border-b px-3 sm:px-5 pt-2 shrink-0 gap-4 overflow-x-auto no-scrollbar whitespace-nowrap ${
+          className={`flex border-b px-3 sm:px-5 pt-2 shrink-0 gap-4 overflow-x-auto custom-scrollbar touch-scroll-x min-w-0 whitespace-nowrap ${
             isLight ? 'border-stone-200 bg-stone-50/40' : 'border-[#25362b] bg-[#101712]/50'
           }`}
         >
           <button
             onClick={() => setActiveTab('family')}
-            className={`pb-2.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+            className={`pb-2.5 text-xs font-bold border-b-2 shrink-0 flex items-center gap-1.5 transition-all ${
               activeTab === 'family'
-                ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400 font-extrabold'
                 : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
+            <Layers className="w-3.5 h-3.5 shrink-0" />
             <span>ウェイトファミリー展開 (自動太さ補正)</span>
           </button>
           <button
             onClick={() => setActiveTab('master')}
-            className={`pb-2.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+            className={`pb-2.5 text-xs font-bold border-b-2 shrink-0 flex items-center gap-1.5 transition-all ${
               activeTab === 'master'
-                ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400 font-extrabold'
                 : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
             <span>2マスター間 線形補間 (Morphing)</span>
           </button>
         </div>

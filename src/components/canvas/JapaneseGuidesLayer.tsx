@@ -1,62 +1,112 @@
 import React from 'react';
 import { ThemeMode } from '../../utils/theme';
+import { JapaneseGuidePattern, VerticalGuidePattern } from '../../types';
 
 interface JapaneseGuidesLayerProps {
-  guideType?: 'none' | 'cross' | 'tian' | 'jiugong' | 'mi';
+  guideType?: JapaneseGuidePattern;
+  verticalGuide?: VerticalGuidePattern;
   showBodyFrame?: boolean;
   showKanaFrame?: boolean;
   isLight: boolean;
   theme?: ThemeMode;
   activeChar?: string;
+  gridOpacity?: number;
 }
 
+// Pre-compiled static path strings for instant GPU-accelerated rendering
+const PATH_VERTICAL_CENTER = 'M 500 -30 L 500 1030';
+const PATH_VERTICAL_THIRDS = 'M 333.3 -30 L 333.3 1030 M 666.7 -30 L 666.7 1030';
+const PATH_VERTICAL_QUARTERS = 'M 250 -30 L 250 1030 M 500 -30 L 500 1030 M 750 -30 L 750 1030';
+const PATH_VERTICAL_EIGHTHS =
+  'M 125 -30 L 125 1030 M 250 -30 L 250 1030 M 375 -30 L 375 1030 M 500 -30 L 500 1030 M 625 -30 L 625 1030 M 750 -30 L 750 1030 M 875 -30 L 875 1030';
+
+const PATH_GRID_CROSS = 'M 500 0 L 500 1000 M 0 500 L 1000 500';
+const PATH_GRID_JIUGONG =
+  'M 333.3 0 L 333.3 1000 M 666.7 0 L 666.7 1000 M 0 333.3 L 1000 333.3 M 0 666.7 L 1000 666.7';
+const PATH_GRID_SIXTEEN_OUTER =
+  'M 250 0 L 250 1000 M 750 0 L 750 1000 M 0 250 L 1000 250 M 0 750 L 1000 750';
+const PATH_GRID_MI_DIAGONALS = 'M 0 0 L 1000 1000 M 1000 0 L 0 1000';
+
 export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.memo(
-  ({ guideType, showBodyFrame, showKanaFrame, isLight, theme = 'light', activeChar = '' }) => {
+  ({
+    guideType = 'none',
+    verticalGuide = 'none',
+    showBodyFrame,
+    showKanaFrame,
+    isLight,
+    theme = 'light',
+    activeChar = '',
+    gridOpacity = 30,
+  }) => {
+    if (
+      guideType === 'none' &&
+      verticalGuide === 'none' &&
+      !showBodyFrame &&
+      !showKanaFrame
+    ) {
+      return null;
+    }
+
     const isKana = /[ぁ-んァ-ヶー]/.test(activeChar);
     const isKanji = /[\u4e00-\u9faf\u3400-\u4dbf]/.test(activeChar);
 
+    const opacityScale = Math.min(1.2, Math.max(0.2, (gridOpacity ?? 30) / 45));
+
     const primaryColor =
       theme === 'sepia'
-        ? '#a16207'
-        : theme === 'warm'
-        ? '#ea580c'
-        : theme === 'nord'
-        ? '#88c0d0'
-        : theme === 'monochrome'
-        ? '#18181b'
-        : isLight
-        ? '#059669'
-        : '#10b981';
-
-    const secondaryColor =
-      theme === 'sepia'
-        ? '#b45309'
-        : theme === 'warm'
-        ? '#d97706'
-        : theme === 'nord'
-        ? '#81a1c1'
-        : theme === 'monochrome'
-        ? '#52525b'
-        : isLight
-        ? '#0284c7'
-        : '#38bdf8';
-
-    const kanjiFrameColor =
-      theme === 'sepia'
-        ? '#8c531b'
+        ? '#92400e'
         : theme === 'warm'
         ? '#c2410c'
         : theme === 'nord'
         ? '#88c0d0'
         : theme === 'monochrome'
-        ? '#18181b'
+        ? '#3f3f46'
+        : isLight
+        ? '#059669'
+        : '#34d399';
+
+    const secondaryColor =
+      theme === 'sepia'
+        ? '#a16207'
+        : theme === 'warm'
+        ? '#b45309'
+        : theme === 'nord'
+        ? '#81a1c1'
+        : theme === 'monochrome'
+        ? '#71717a'
+        : isLight
+        ? '#0284c7'
+        : '#38bdf8';
+
+    const verticalGuideColor =
+      theme === 'sepia'
+        ? '#78350f'
+        : theme === 'warm'
+        ? '#b45309'
+        : theme === 'nord'
+        ? '#81a1c1'
+        : theme === 'monochrome'
+        ? '#52525b'
+        : isLight
+        ? '#7c3aed'
+        : '#a78bfa';
+
+    const kanjiFrameColor =
+      theme === 'sepia'
+        ? '#8c531b'
+        : theme === 'warm'
+        ? '#b45309'
+        : theme === 'nord'
+        ? '#88c0d0'
+        : theme === 'monochrome'
+        ? '#3f3f46'
         : isLight
         ? '#059669'
         : '#34d399';
 
     const kanaFrameColor =
       theme === 'sepia'
-        ? '#b45309'
+        ? '#a16207'
         : theme === 'warm'
         ? '#ea580c'
         : theme === 'nord'
@@ -93,169 +143,131 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
         ? '#fffbeb'
         : '#78350f';
 
+    const verticalGuidePath =
+      verticalGuide === 'center'
+        ? PATH_VERTICAL_CENTER
+        : verticalGuide === 'thirds'
+        ? PATH_VERTICAL_THIRDS
+        : verticalGuide === 'quarters'
+        ? PATH_VERTICAL_QUARTERS
+        : verticalGuide === 'eighths'
+        ? PATH_VERTICAL_EIGHTHS
+        : null;
+
     return (
-      <g className="japanese-guides-layer pointer-events-none select-none">
-        {/* Center Crosshairs (+十字格) */}
-        {guideType === 'cross' && (
-          <g>
-            <line
-              x1={500}
-              y1={0}
-              x2={500}
-              y2={1000}
+      <g
+        className="japanese-guides-layer pointer-events-none select-none font-mono text-[10px]"
+        opacity={Math.min(1, 0.75 * opacityScale)}
+      >
+        {/* 1. Dedicated Vertical Guideline System (Consolidated single path) */}
+        {verticalGuidePath && (
+          <>
+            <g opacity={0.65}>
+              <path
+                d={verticalGuidePath}
+                stroke={verticalGuideColor}
+                strokeDasharray="5 3"
+                strokeWidth={1.2}
+              />
+            </g>
+            {/* High-contrast text labels for vertical markers */}
+            {verticalGuide === 'center' && (
+              <text x={500} y={-8} fill={verticalGuideColor} textAnchor="middle" fontWeight="bold" fontSize={11} opacity={1.0}>
+                X:500 (中心)
+              </text>
+            )}
+            {verticalGuide === 'thirds' && (
+              <>
+                <text x={333.3} y={-8} fill={verticalGuideColor} textAnchor="middle" fontWeight="bold" fontSize={11} opacity={1.0}>
+                  X:333 (偏)
+                </text>
+                <text x={666.7} y={-8} fill={verticalGuideColor} textAnchor="middle" fontWeight="bold" fontSize={11} opacity={1.0}>
+                  X:667 (旁)
+                </text>
+              </>
+            )}
+            {verticalGuide === 'quarters' && (
+              <>
+                <text x={250} y={-8} fill={verticalGuideColor} textAnchor="middle" fontWeight="bold" fontSize={11} opacity={1.0}>
+                  1/4
+                </text>
+                <text x={500} y={-8} fill={verticalGuideColor} textAnchor="middle" fontWeight="bold" fontSize={11} opacity={1.0}>
+                  1/2
+                </text>
+                <text x={750} y={-8} fill={verticalGuideColor} textAnchor="middle" fontWeight="bold" fontSize={11} opacity={1.0}>
+                  3/4
+                </text>
+              </>
+            )}
+          </>
+        )}
+
+        {/* 2. 和文目安ガイド (Fast consolidated paths) */}
+        {/* Cross / Tian */}
+        {(guideType === 'cross' || guideType === 'tian') && (
+          <g opacity={0.55}>
+            <path
+              d={PATH_GRID_CROSS}
               stroke={primaryColor}
               strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.6}
+              strokeWidth={1.2}
             />
-            <line
-              x1={0}
-              y1={500}
-              x2={1000}
-              y2={500}
-              stroke={primaryColor}
-              strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.6}
-            />
-            {/* Center origin badge */}
-            <circle cx={500} cy={500} r={3.5} fill={primaryColor} opacity={0.7} />
-            <text
-              x={508}
-              y={516}
-              fill={primaryColor}
-              fontSize={10}
-              fontWeight="bold"
-              fontFamily="sans-serif"
-              opacity={0.75}
-            >
-              中心
-            </text>
+            <circle cx={500} cy={500} r={3} fill={primaryColor} />
           </g>
         )}
 
-        {/* 田字格 */}
-        {guideType === 'tian' && (
-          <g>
-            <line
-              x1={500}
-              y1={0}
-              x2={500}
-              y2={1000}
-              stroke={primaryColor}
-              strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.7}
-            />
-            <line
-              x1={0}
-              y1={500}
-              x2={1000}
-              y2={500}
-              stroke={primaryColor}
-              strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.7}
-            />
-            <circle cx={500} cy={500} r={3.5} fill={primaryColor} opacity={0.7} />
-          </g>
-        )}
-
-        {/* 九宮格 (3x3 Grid: 333.3px, 666.7px) */}
+        {/* Jiugong (3x3) */}
         {guideType === 'jiugong' && (
-          <g>
-            <line
-              x1={333.3}
-              y1={0}
-              x2={333.3}
-              y2={1000}
-              stroke={secondaryColor}
+          <path
+            d={PATH_GRID_JIUGONG}
+            stroke={secondaryColor}
+            strokeDasharray="6 4"
+            strokeWidth={1.2}
+            opacity={0.55}
+          />
+        )}
+
+        {/* Sixteen (4x4) */}
+        {guideType === 'sixteen' && (
+          <g opacity={0.55}>
+            <path
+              d={PATH_GRID_CROSS}
+              stroke={primaryColor}
               strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.6}
+              strokeWidth={1.4}
             />
-            <line
-              x1={666.7}
-              y1={0}
-              x2={666.7}
-              y2={1000}
+            <path
+              d={PATH_GRID_SIXTEEN_OUTER}
               stroke={secondaryColor}
-              strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.6}
+              strokeDasharray="5 3"
+              strokeWidth={1.1}
             />
-            <line
-              x1={0}
-              y1={333.3}
-              x2={1000}
-              y2={333.3}
-              stroke={secondaryColor}
-              strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.6}
-            />
-            <line
-              x1={0}
-              y1={666.7}
-              x2={1000}
-              y2={666.7}
-              stroke={secondaryColor}
-              strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.6}
-            />
+            <circle cx={500} cy={500} r={3} fill={primaryColor} />
           </g>
         )}
 
-        {/* 米字格 (Cross + Diagonals) */}
+        {/* Mi (米字格) */}
         {guideType === 'mi' && (
-          <g>
-            <line
-              x1={500}
-              y1={0}
-              x2={500}
-              y2={1000}
-              stroke={secondaryColor}
+          <g opacity={0.55}>
+            <path
+              d={PATH_GRID_CROSS}
+              stroke={primaryColor}
               strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.6}
+              strokeWidth={1.2}
             />
-            <line
-              x1={0}
-              y1={500}
-              x2={1000}
-              y2={500}
-              stroke={secondaryColor}
-              strokeDasharray="6 4"
-              strokeWidth={1.5}
-              opacity={0.6}
-            />
-            <line
-              x1={0}
-              y1={0}
-              x2={1000}
-              y2={1000}
+            <path
+              d={PATH_GRID_MI_DIAGONALS}
               stroke={secondaryColor}
               strokeDasharray="4 4"
-              strokeWidth={1.2}
-              opacity={0.45}
-            />
-            <line
-              x1={1000}
-              y1={0}
-              x2={0}
-              y2={1000}
-              stroke={secondaryColor}
-              strokeDasharray="4 4"
-              strokeWidth={1.2}
-              opacity={0.45}
+              strokeWidth={1.0}
+              opacity={0.7}
             />
           </g>
         )}
 
         {/* 漢字字面枠 85% (850x850 body frame) */}
         {showBodyFrame && (
-          <g opacity={isKanji ? 1 : isKana ? 0.45 : 0.7}>
+          <g opacity={isKanji ? 0.9 : isKana ? 0.35 : 0.6}>
             <rect
               x={75}
               y={75}
@@ -264,18 +276,17 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               fill="none"
               stroke={kanjiFrameColor}
               strokeDasharray={isKanji ? '6 4' : '5 5'}
-              strokeWidth={isKanji ? 2.0 : 1.2}
+              strokeWidth={1.4}
             />
-            {/* Tag badge with clear explanation */}
             <rect
               x={75}
               y={56}
-              width={160}
+              width={140}
               height={18}
               rx={3}
               fill={kanjiBadgeBg}
               stroke={kanjiFrameColor}
-              strokeWidth={1}
+              strokeWidth={0.8}
             />
             <text
               x={82}
@@ -283,16 +294,15 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               fill={kanjiFrameColor}
               fontSize={10}
               fontWeight="bold"
-              fontFamily="sans-serif"
             >
-              漢字字面枠 85% {isKanji ? '(推奨)' : ''}
+              漢字字面枠 85%
             </text>
           </g>
         )}
 
         {/* 仮名字面枠 78% (780x780 kana frame) */}
         {showKanaFrame && (
-          <g opacity={isKana ? 1 : isKanji ? 0.45 : 0.7}>
+          <g opacity={isKana ? 0.9 : isKanji ? 0.35 : 0.6}>
             <rect
               x={110}
               y={110}
@@ -301,18 +311,17 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               fill="none"
               stroke={kanaFrameColor}
               strokeDasharray={isKana ? '6 4' : '4 4'}
-              strokeWidth={isKana ? 2.0 : 1.2}
+              strokeWidth={1.4}
             />
-            {/* Tag badge with clear explanation */}
             <rect
               x={110}
               y={91}
-              width={168}
+              width={140}
               height={18}
               rx={3}
               fill={kanaBadgeBg}
               stroke={kanaFrameColor}
-              strokeWidth={1}
+              strokeWidth={0.8}
             />
             <text
               x={117}
@@ -320,9 +329,8 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               fill={kanaFrameColor}
               fontSize={10}
               fontWeight="bold"
-              fontFamily="sans-serif"
             >
-              仮名字面枠 78% {isKana ? '(推奨)' : ''}
+              仮名字面枠 78%
             </text>
           </g>
         )}

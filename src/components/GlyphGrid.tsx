@@ -110,11 +110,11 @@ const GlyphGridCard = memo(
         className={`group relative flex flex-col items-center justify-between p-1 rounded-lg border w-full ${cardDimensionClass} cursor-pointer transition-all duration-150 select-none overflow-hidden ${
           isSelected
             ? isLight
-              ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-600/40 shadow-xs z-10'
-              : 'bg-emerald-950/80 border-emerald-400 ring-2 ring-emerald-500/40 shadow-xs z-10'
+              ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-600/40  z-10'
+              : 'bg-emerald-950/80 border-emerald-400 ring-2 ring-emerald-500/40  z-10'
             : hasContours
             ? isLight
-              ? 'bg-white border-emerald-300/80 text-stone-900 hover:border-emerald-500 hover:shadow-xs'
+              ? 'bg-white border-emerald-300/80 text-stone-900 hover:border-emerald-500 hover:'
               : 'bg-[#18231c] border-emerald-700/70 text-emerald-100 hover:border-emerald-400'
             : isLight
             ? 'bg-stone-50/90 border-stone-200/90 text-stone-400 hover:border-emerald-300 hover:bg-white hover:text-stone-700'
@@ -681,11 +681,11 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
 
   return (
     <>
-      {/* Mobile/Overlay Backdrop */}
+      {/* Mobile/Overlay Click-Outside Dismiss (Transparent, non-darkening) */}
       {effectiveIsOverlay && (
         <div
           onClick={onClose}
-          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-35 animate-in fade-in duration-150"
+          className="fixed inset-0 bg-transparent sm:hidden z-35 pointer-events-auto"
         />
       )}
 
@@ -717,9 +717,9 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
             }}
           >
             <div
-              className={`w-1 h-14 rounded-full transition-all shadow-xs flex items-center justify-center ${
+              className={`w-1 h-14 rounded-full transition-all  flex items-center justify-center ${
                 isResizing
-                  ? 'bg-emerald-500 scale-110 shadow-emerald-500/40'
+                  ? 'bg-emerald-500 scale-110 '
                   : 'bg-stone-300 dark:bg-stone-600 group-hover:bg-emerald-500 group-hover:scale-105'
               }`}
             >
@@ -731,7 +731,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
         {/* Header with Title, Count, Density Toggles and Close */}
         <div
           className={`p-2.5 sm:p-3 border-b flex flex-col space-y-2 shrink-0 ${
-            isLight ? 'bg-[#edf5f1] border-[#d4e5dc]' : 'bg-[#18231c] border-[#25362b]'
+            isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#141d17] border-stone-800'
           }`}
         >
           {/* Row 1: Title, Count, Density control, and Collapse button */}
@@ -739,7 +739,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
             <div className="flex items-center space-x-1.5 min-w-0">
               <span
                 className={`text-xs font-bold uppercase tracking-wider truncate ${
-                  isLight ? 'text-emerald-950' : 'text-emerald-300'
+                  isLight ? 'text-stone-900' : 'text-emerald-300'
                 }`}
               >
                 文字一覧
@@ -747,8 +747,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
               <span
                 className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
                   isLight
-                    ? 'bg-emerald-200 text-emerald-950'
-                    : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                    ? 'bg-stone-200 text-stone-800 font-mono'
+                    : 'bg-stone-800 text-emerald-300 font-mono border border-stone-700'
                 }`}
               >
                 {charList.length}字
@@ -761,7 +761,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
               {!effectiveIsOverlay && (
                 <div
                   className={`hidden sm:flex items-center p-0.5 rounded border ${
-                    isLight ? 'bg-white border-[#c8ded3]' : 'bg-[#101813] border-[#2d4034]'
+                    isLight ? 'bg-white border-stone-200' : 'bg-[#101813] border-stone-800'
                   }`}
                   title="サイドバーの幅プリセット（右端を直接ドラッグして任意幅に微調整も可能）"
                 >
@@ -774,7 +774,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
                       sidebarWidth <= 270
                         ? isLight
-                          ? 'bg-emerald-700 text-white shadow-xs'
+                          ? 'bg-emerald-700 text-white '
                           : 'bg-emerald-500 text-stone-950 font-bold'
                         : isLight
                         ? 'text-stone-600 hover:text-emerald-800'
@@ -792,7 +792,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
                       sidebarWidth > 270 && sidebarWidth < 390
                         ? isLight
-                          ? 'bg-emerald-700 text-white shadow-xs'
+                          ? 'bg-emerald-700 text-white '
                           : 'bg-emerald-500 text-stone-950 font-bold'
                         : isLight
                         ? 'text-stone-600 hover:text-emerald-800'
@@ -810,7 +810,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
                       sidebarWidth >= 390
                         ? isLight
-                          ? 'bg-emerald-700 text-white shadow-xs'
+                          ? 'bg-emerald-700 text-white '
                           : 'bg-emerald-500 text-stone-950 font-bold'
                         : isLight
                         ? 'text-stone-600 hover:text-emerald-800'
@@ -834,7 +834,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
                     gridDensity === 'large'
                       ? isLight
-                        ? 'bg-emerald-700 text-white shadow-xs'
+                        ? 'bg-emerald-700 text-white '
                         : 'bg-emerald-500 text-stone-950 font-bold'
                       : isLight
                       ? 'text-stone-600 hover:text-emerald-800'
@@ -849,7 +849,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
                     gridDensity === 'medium'
                       ? isLight
-                        ? 'bg-emerald-700 text-white shadow-xs'
+                        ? 'bg-emerald-700 text-white '
                         : 'bg-emerald-500 text-stone-950 font-bold'
                       : isLight
                       ? 'text-stone-600 hover:text-emerald-800'
@@ -864,7 +864,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
                     gridDensity === 'compact'
                       ? isLight
-                        ? 'bg-emerald-700 text-white shadow-xs'
+                        ? 'bg-emerald-700 text-white '
                         : 'bg-emerald-500 text-stone-950 font-bold'
                       : isLight
                       ? 'text-stone-600 hover:text-emerald-800'
@@ -884,7 +884,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                       ? 'text-stone-600 hover:bg-emerald-100'
                       : 'text-emerald-300 hover:bg-[#202d24]'
                     : isLight
-                    ? 'bg-emerald-100 text-emerald-950 font-bold shadow-xs'
+                    ? 'bg-emerald-100 text-emerald-950 font-bold '
                     : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
                 }`}
                 title={isSearchHeaderExpanded ? '分類・検索バーを折りたたんで一覧領域を拡大' : '分類・検索バーを展開'}
@@ -897,8 +897,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                 onClick={onClose}
                 className={`p-1.5 sm:px-2 sm:py-1 rounded text-xs font-semibold flex items-center gap-0.5 transition-all ${
                   isLight
-                    ? 'bg-emerald-800 hover:bg-emerald-900 text-white shadow-xs'
-                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs'
+                    ? 'bg-emerald-800 hover:bg-emerald-900 text-white '
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white '
                 }`}
                 title="文字一覧を収納して作図キャンバスを広げる"
               >
@@ -927,7 +927,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   <button
                     type="button"
                     onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all  cursor-pointer ${
                       isLight
                         ? isCategoryDropdownOpen
                           ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-600/30'
@@ -965,8 +965,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                     <div
                       className={`absolute top-full left-0 right-0 z-50 mt-1 max-h-72 overflow-y-auto rounded-xl shadow-2xl border backdrop-blur-md p-1.5 animate-in fade-in zoom-in-95 duration-150 ${
                         isLight
-                          ? 'bg-white/98 border-emerald-200 shadow-emerald-950/15 text-stone-800'
-                          : 'bg-[#121c15]/98 border-[#2d4034] shadow-black/80 text-emerald-100'
+                          ? 'bg-white/98 border-emerald-200  text-stone-800'
+                          : 'bg-[#121c15]/98 border-[#2d4034]  text-emerald-100'
                       }`}
                     >
                       {categoryGroups.map((group) => (
@@ -994,8 +994,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                                   className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left ${
                                     isSelected
                                       ? isLight
-                                        ? 'bg-emerald-600 text-white font-bold shadow-xs'
-                                        : 'bg-emerald-500 text-stone-950 font-bold shadow-xs'
+                                        ? 'bg-emerald-600 text-white font-bold '
+                                        : 'bg-emerald-500 text-stone-950 font-bold '
                                       : isLight
                                       ? 'hover:bg-emerald-50 text-stone-800'
                                       : 'hover:bg-[#1a281e] text-emerald-200'
@@ -1033,7 +1033,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                 </div>
 
                 {/* Quick 1-Tap Horizontal Swipeable Category Tabs (Direct Switching without any Modal/Picker) */}
-                <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar touch-pan-x text-[10px] select-none">
+                <div className="flex items-center gap-1 overflow-x-auto pb-0.5 custom-scrollbar touch-scroll-x min-w-0 text-[10px] select-none">
                   {quickCategoryTabs.map((pill) => (
                     <button
                       key={pill.id}
@@ -1047,8 +1047,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                       className={`px-2.5 py-1 rounded-full font-bold shrink-0 transition-all cursor-pointer ${
                         activeCategoryId === pill.id
                           ? isLight
-                            ? 'bg-emerald-700 text-white shadow-xs'
-                            : 'bg-emerald-500 text-stone-950 shadow-xs'
+                            ? 'bg-emerald-700 text-white '
+                            : 'bg-emerald-500 text-stone-950 '
                           : isLight
                           ? 'bg-emerald-100/70 text-emerald-900 hover:bg-emerald-200/80 active:scale-95'
                           : 'bg-[#18261e] text-emerald-300 hover:bg-[#22352a] active:scale-95'
@@ -1078,7 +1078,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                     }}
                     className={`w-full border rounded-md pl-8 pr-7 py-1 text-xs placeholder-emerald-700/40 focus:outline-none transition-colors ${
                       isLight
-                        ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 shadow-xs'
+                        ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 '
                         : 'bg-[#0f1712] border-[#2d4034] text-emerald-100 placeholder-emerald-600 focus:border-emerald-500'
                     }`}
                   />
@@ -1105,7 +1105,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                     onChange={(e) => setCustomCharInput(e.target.value)}
                     className={`w-16 border rounded-md px-1.5 py-1 text-xs text-center focus:outline-none ${
                       isLight
-                        ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 shadow-xs'
+                        ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 '
                         : 'bg-[#0f1712] border-[#2d4034] text-emerald-100 focus:border-emerald-500'
                     }`}
                     title="任意の文字を直接入力して即座に開く (例: 龍)"
@@ -1206,8 +1206,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   className={`py-1 px-1 text-[10px] font-bold rounded text-center truncate whitespace-nowrap transition-all ${
                     statusFilter === 'all'
                       ? isLight
-                        ? 'bg-stone-800 text-white shadow-xs'
-                        : 'bg-emerald-400 text-stone-950 shadow-xs'
+                        ? 'bg-stone-800 text-white '
+                        : 'bg-emerald-400 text-stone-950 '
                       : isLight
                       ? 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                       : 'bg-[#1c2921] text-emerald-400 hover:bg-[#25372c]'
@@ -1224,8 +1224,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   className={`py-1 px-1 text-[10px] font-bold rounded text-center flex items-center justify-center gap-0.5 truncate whitespace-nowrap transition-all ${
                     statusFilter === 'completed'
                       ? isLight
-                        ? 'bg-emerald-700 text-white shadow-xs'
-                        : 'bg-emerald-400 text-stone-950 shadow-xs'
+                        ? 'bg-emerald-700 text-white '
+                        : 'bg-emerald-400 text-stone-950 '
                       : isLight
                       ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                       : 'bg-emerald-950/70 text-emerald-300 hover:bg-emerald-900'
@@ -1243,8 +1243,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   className={`py-1 px-1 text-[10px] font-bold rounded text-center flex items-center justify-center gap-0.5 truncate whitespace-nowrap transition-all ${
                     statusFilter === 'pending'
                       ? isLight
-                        ? 'bg-amber-700 text-white shadow-xs'
-                        : 'bg-amber-400 text-stone-950 shadow-xs'
+                        ? 'bg-amber-700 text-white '
+                        : 'bg-amber-400 text-stone-950 '
                       : isLight
                       ? 'bg-amber-50 text-amber-900 hover:bg-amber-100'
                       : 'bg-amber-950/70 text-amber-300 hover:bg-amber-900'
@@ -1388,7 +1388,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
               {hasClipboard && (
                 <button
                   onClick={() => onPasteGlyph(currentSelectedGlyph.unicode)}
-                  className="px-1.5 py-1 rounded text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-0.5 shadow-xs"
+                  className="px-1.5 py-1 rounded text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-0.5 "
                   title="コピーした形をこの文字に貼り付け"
                 >
                   <Clipboard className="w-3 h-3" />
@@ -1558,10 +1558,10 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                           onGenerateDakutenTarget(dakuInfo.daku!, false);
                           setContextMenu(null);
                         }}
-                        className="w-full text-left px-2 py-1 rounded hover:bg-amber-100 dark:hover:bg-amber-950/60 flex items-center gap-1.5 font-medium text-amber-900 dark:text-amber-200 transition-colors"
+                        className="w-full text-left px-2 py-1 rounded hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center gap-1.5 font-medium text-stone-800 dark:text-stone-200 transition-colors"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                        <span>濁音「{dakuInfo.daku}」を自動生成</span>
+                        <Wand2 className="w-3.5 h-3.5 text-stone-600 dark:text-stone-400" />
+                        <span>濁音「{dakuInfo.daku}」を生成</span>
                       </button>
                     )}
                     {dakuInfo.handaku && (
@@ -1571,10 +1571,10 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                           onGenerateDakutenTarget(dakuInfo.handaku!, true);
                           setContextMenu(null);
                         }}
-                        className="w-full text-left px-2 py-1 rounded hover:bg-rose-100 dark:hover:bg-rose-950/60 flex items-center gap-1.5 font-medium text-rose-900 dark:text-rose-200 transition-colors"
+                        className="w-full text-left px-2 py-1 rounded hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center gap-1.5 font-medium text-stone-800 dark:text-stone-200 transition-colors"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-rose-600" />
-                        <span>半濁音「{dakuInfo.handaku}」を自動生成</span>
+                        <Wand2 className="w-3.5 h-3.5 text-stone-600 dark:text-stone-400" />
+                        <span>半濁音「{dakuInfo.handaku}」を生成</span>
                       </button>
                     )}
                   </>

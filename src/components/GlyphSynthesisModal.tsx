@@ -277,7 +277,7 @@ export const GlyphSynthesisModal: React.FC<GlyphSynthesisModalProps> = ({
           }`}
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-1.5 rounded-lg bg-emerald-700 text-white shadow-xs shrink-0">
+            <div className="p-1.5 rounded-lg bg-emerald-700 text-white shrink-0">
               <Sparkles className="w-5 h-5" />
             </div>
             <div className="min-w-0">
@@ -396,7 +396,7 @@ export const GlyphSynthesisModal: React.FC<GlyphSynthesisModalProps> = ({
                           className={`px-2.5 py-1 text-[11px] rounded font-bold transition-all whitespace-nowrap ${
                             dakuScope === s
                               ? isLight
-                                ? 'bg-emerald-700 text-white shadow-xs'
+                                ? 'bg-emerald-700 text-white '
                                 : 'bg-emerald-400 text-stone-950 font-black'
                               : isLight
                               ? 'bg-white border text-stone-600 hover:bg-stone-100'
@@ -618,7 +618,7 @@ export const GlyphSynthesisModal: React.FC<GlyphSynthesisModalProps> = ({
                     </span>
                   </div>
 
-                  <div className="w-52 h-52 sm:w-60 sm:h-60 relative rounded-lg border bg-white dark:bg-[#101712] border-stone-200 dark:border-stone-800 flex items-center justify-center overflow-hidden shadow-xs">
+                  <div className="w-52 h-52 sm:w-60 sm:h-60 relative rounded-lg border bg-white dark:bg-[#101712] border-stone-200 dark:border-stone-800 flex items-center justify-center overflow-hidden ">
                     {/* Em box crosshairs */}
                     <div className="absolute inset-0 pointer-events-none opacity-15">
                       <div className="absolute left-1/2 top-0 bottom-0 w-px border-r border-dashed border-current" />
@@ -651,7 +651,7 @@ export const GlyphSynthesisModal: React.FC<GlyphSynthesisModalProps> = ({
                 {/* Batch Action Button */}
                 <button
                   onClick={handleExecuteDakutenBatch}
-                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-2 transition-all active:scale-[0.99] ${
+                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm  flex items-center justify-center gap-2 transition-all active:scale-[0.99] ${
                     isLight
                       ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white'
@@ -688,7 +688,7 @@ export const GlyphSynthesisModal: React.FC<GlyphSynthesisModalProps> = ({
                           className={`px-2.5 py-1 text-[11px] rounded font-bold transition-all whitespace-nowrap ${
                             smallScope === s
                               ? isLight
-                                ? 'bg-emerald-700 text-white shadow-xs'
+                                ? 'bg-emerald-700 text-white '
                                 : 'bg-emerald-400 text-stone-950 font-black'
                               : isLight
                               ? 'bg-white border text-stone-600 hover:bg-stone-100'
@@ -896,7 +896,7 @@ export const GlyphSynthesisModal: React.FC<GlyphSynthesisModalProps> = ({
                     </span>
                   </div>
 
-                  <div className="w-52 h-52 sm:w-60 sm:h-60 relative rounded-lg border bg-white dark:bg-[#101712] border-stone-200 dark:border-stone-800 flex items-center justify-center overflow-hidden shadow-xs">
+                  <div className="w-52 h-52 sm:w-60 sm:h-60 relative rounded-lg border bg-white dark:bg-[#101712] border-stone-200 dark:border-stone-800 flex items-center justify-center overflow-hidden ">
                     {/* Em box crosshairs & baseline */}
                     <div className="absolute inset-0 pointer-events-none opacity-15">
                       <div className="absolute left-1/2 top-0 bottom-0 w-px border-r border-dashed border-current" />
@@ -937,7 +937,7 @@ export const GlyphSynthesisModal: React.FC<GlyphSynthesisModalProps> = ({
                 {/* Batch Action Button */}
                 <button
                   onClick={handleExecuteSmallKanaBatch}
-                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-2 transition-all active:scale-[0.99] ${
+                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm  flex items-center justify-center gap-2 transition-all active:scale-[0.99] ${
                     isLight
                       ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white'

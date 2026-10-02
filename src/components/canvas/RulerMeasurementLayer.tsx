@@ -6,16 +6,18 @@ interface RulerMeasurementLayerProps {
   zoom: number;
   onDrawLine?: () => void;
   onConvertToGuide?: () => void;
+  onClear?: () => void;
 }
 
 export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React.memo(
-  ({ rulerMeasurement, zoom, onDrawLine, onConvertToGuide }) => {
+  ({ rulerMeasurement, zoom, onDrawLine, onConvertToGuide, onClear }) => {
     if (!rulerMeasurement) return null;
 
     const { start, end, active } = rulerMeasurement;
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const dist = Math.hypot(dx, dy);
+    if (dist < 2) return null;
     const angleDeg = Math.round((Math.atan2(-dy, dx) * 180) / Math.PI);
     const midX = (start.x + end.x) / 2;
     const midY = (start.y + end.y) / 2;
@@ -104,9 +106,9 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
         {/* Measurement HUD Pill Box */}
         <g transform={`translate(${midX}, ${midY})`}>
           <rect
-            x={-60 / zoom}
+            x={-68 / zoom}
             y={-14 / zoom}
-            width={120 / zoom}
+            width={136 / zoom}
             height={28 / zoom}
             rx={14 / zoom}
             fill="#0369a1"
@@ -116,7 +118,7 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
             className="pointer-events-none"
           />
           <text
-            x={0}
+            x={-8 / zoom}
             y={-1 / zoom}
             fill="#ffffff"
             fontSize={10 / zoom}
@@ -129,7 +131,7 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
             {Math.round(dist)}px
           </text>
           <text
-            x={0}
+            x={-8 / zoom}
             y={9 / zoom}
             fill="#bae6fd"
             fontSize={7.5 / zoom}
@@ -139,6 +141,30 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
           >
             {angleDeg}°
           </text>
+
+          {/* Quick Clear 'X' icon button on the pill */}
+          {onClear && (
+            <g
+              onClick={(e) => {
+                e.stopPropagation();
+                onClear();
+              }}
+              className="cursor-pointer hover:opacity-80 active:scale-95 transition-transform pointer-events-auto"
+              transform={`translate(${52 / zoom}, 0)`}
+            >
+              <circle cx={0} cy={0} r={8 / zoom} fill="#0284c7" stroke="#ffffff" strokeWidth={0.8 / zoom} />
+              <text
+                x={0}
+                y={3.5 / zoom}
+                fill="#ffffff"
+                fontSize={10 / zoom}
+                fontWeight="bold"
+                textAnchor="middle"
+              >
+                ×
+              </text>
+            </g>
+          )}
 
           {/* Interactive Action Buttons when measurement is completed */}
           {!active && dist >= 8 && (
@@ -153,9 +179,9 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
                   className="hover:opacity-90 active:scale-95 transition-transform"
                 >
                   <rect
-                    x={-58 / zoom}
+                    x={-62 / zoom}
                     y={0}
-                    width={56 / zoom}
+                    width={58 / zoom}
                     height={18 / zoom}
                     rx={9 / zoom}
                     fill="#10b981"
@@ -163,7 +189,7 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
                     strokeWidth={0.8 / zoom}
                   />
                   <text
-                    x={-30 / zoom}
+                    x={-33 / zoom}
                     y={11.5 / zoom}
                     fill="#ffffff"
                     fontSize={8.5 / zoom}
@@ -185,9 +211,9 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
                   className="hover:opacity-90 active:scale-95 transition-transform"
                 >
                   <rect
-                    x={2 / zoom}
+                    x={4 / zoom}
                     y={0}
-                    width={56 / zoom}
+                    width={58 / zoom}
                     height={18 / zoom}
                     rx={9 / zoom}
                     fill="#0284c7"
@@ -195,7 +221,7 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
                     strokeWidth={0.8 / zoom}
                   />
                   <text
-                    x={30 / zoom}
+                    x={33 / zoom}
                     y={11.5 / zoom}
                     fill="#ffffff"
                     fontSize={8.5 / zoom}

@@ -20,6 +20,7 @@ import {
   KERNING_PRESET_GROUPS,
   batchAdjustSidebearings,
   SidebearingBatchOptions,
+  calculateAutoKernOffset,
 } from '../utils/metricsHelper';
 import { contoursToSvgPath, normalizeGlyphContoursWinding, getContoursBoundingBox } from '../utils/pathUtils';
 
@@ -213,6 +214,55 @@ export const KerningModal: React.FC<KerningModalProps> = ({
     notify(`プリセット「${group.name}」(${group.pairs.length}ペア) を一括登録しました`, 'success');
   };
 
+  // FontForge AutoKern algorithm execution across glyphs
+  const handleAutoKernAllPairs = () => {
+    const glyphEntries = Object.values(project.glyphs || {});
+    if (glyphEntries.length < 2) {
+      notify('オートカーニングを実行するには最低2文字以上の作図が必要です', 'warning');
+      return;
+    }
+
+    const nextKerning = { ...(project.kerning || {}) };
+    let autoKernedCount = 0;
+
+    const pairsToCalculate: { left: string; right: string }[] = [];
+    for (const group of KERNING_PRESET_GROUPS) {
+      for (const p of group.pairs) {
+        pairsToCalculate.push({ left: p.left, right: p.right });
+      }
+    }
+
+    for (const pair of pairsToCalculate) {
+      const leftUnicode = pair.left.codePointAt(0);
+      const rightUnicode = pair.right.codePointAt(0);
+      if (!leftUnicode || !rightUnicode) continue;
+
+      const leftGlyph = project.glyphs[leftUnicode];
+      const rightGlyph = project.glyphs[rightUnicode];
+
+      if (leftGlyph && rightGlyph) {
+        const offset = calculateAutoKernOffset(leftGlyph, rightGlyph, 40);
+        if (offset !== 0) {
+          nextKerning[`${pair.left},${pair.right}`] = offset;
+          autoKernedCount++;
+        }
+      }
+    }
+
+    if (autoKernedCount === 0) {
+      notify('作図済み文字の中で大きな光学的ズレは検出されませんでした', 'info');
+      return;
+    }
+
+    updateProject((prev) => ({
+      ...prev,
+      kerning: nextKerning,
+      updatedAt: Date.now(),
+    }));
+
+    notify(`自動カーニング: ${autoKernedCount} ペアのカーニング値を光学計算しました！`, 'success');
+  };
+
   // Execute Batch Sidebearings
   const handleExecuteSidebearingBatch = () => {
     const { updatedGlyphs, modifiedCount } = batchAdjustSidebearings(project.glyphs, {
@@ -264,7 +314,7 @@ export const KerningModal: React.FC<KerningModalProps> = ({
           }`}
         >
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-emerald-600 text-white shadow-xs">
+            <div className="p-1.5 rounded-lg bg-emerald-600 text-white ">
               <MoveHorizontal className="w-5 h-5" />
             </div>
             <div>
@@ -374,9 +424,20 @@ export const KerningModal: React.FC<KerningModalProps> = ({
                     isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#19231c] border-[#2b3e32]'
                   }`}
                 >
-                  <span className="text-xs font-bold flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>標準カーニング一括プリセット</span>
+                  <span className="text-xs font-bold flex items-center justify-between gap-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>標準カーニング一括プリセット</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleAutoKernAllPairs}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1 cursor-pointer"
+                      title="作図済みグリフの光学プロファイルからペアカーニングを自動計算"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>自動カーニング</span>
+                    </button>
                   </span>
                   <div className="flex flex-col gap-1.5 mt-1">
                     {KERNING_PRESET_GROUPS.map((group) => (
@@ -392,7 +453,7 @@ export const KerningModal: React.FC<KerningModalProps> = ({
                         </div>
                         <button
                           onClick={() => handleApplyPresetGroup(group)}
-                          className="px-2.5 py-1 text-[10px] font-bold rounded bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 shadow-xs"
+                          className="px-2.5 py-1 text-[10px] font-bold rounded bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 "
                         >
                           一括登録
                         </button>
@@ -740,7 +801,7 @@ export const KerningModal: React.FC<KerningModalProps> = ({
                         className={`px-3 py-1.5 text-xs rounded-lg font-bold transition-all ${
                           sbScope === sc.id
                             ? isLight
-                              ? 'bg-emerald-600 text-white shadow-xs'
+                              ? 'bg-emerald-600 text-white '
                               : 'bg-emerald-400 text-stone-950 font-black'
                             : isLight
                             ? 'bg-white border text-stone-600 hover:bg-stone-100'
@@ -976,7 +1037,7 @@ export const KerningModal: React.FC<KerningModalProps> = ({
                 {/* Batch Execute Button */}
                 <button
                   onClick={handleExecuteSidebearingBatch}
-                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-2 transition-all active:scale-[0.99] ${
+                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm  flex items-center justify-center gap-2 transition-all active:scale-[0.99] ${
                     isLight
                       ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white'

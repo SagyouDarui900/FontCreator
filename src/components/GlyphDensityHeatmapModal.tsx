@@ -387,8 +387,8 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
           isFullscreen ? 'h-full max-h-full rounded-none border-0' : 'max-w-6xl max-h-[94vh]'
         } ${
           isLight
-            ? 'bg-stone-50 border-stone-300 text-stone-900 shadow-stone-900/20'
-            : 'bg-[#101813] border-[#223528] text-emerald-50 shadow-black/80'
+            ? 'bg-stone-50 border-stone-300 text-stone-900 '
+            : 'bg-[#101813] border-[#223528] text-emerald-50 '
         }`}
       >
         {/* Modal Header */}
@@ -517,8 +517,8 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
                 className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
                   tolerance === 2.0
                     ? isLight
-                      ? 'bg-white text-emerald-800 shadow-xs'
-                      : 'bg-emerald-700 text-white shadow-xs'
+                      ? 'bg-white text-emerald-800 '
+                      : 'bg-emerald-700 text-white '
                     : 'text-stone-600 dark:text-stone-400 hover:text-stone-900'
                 }`}
                 title="微細（2.0px）: 形状を100%保持し、手の震え・ゴミ頂点のみを間引きます"
@@ -530,8 +530,8 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
                 className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
                   tolerance === 3.5
                     ? isLight
-                      ? 'bg-white text-emerald-800 shadow-xs'
-                      : 'bg-emerald-700 text-white shadow-xs'
+                      ? 'bg-white text-emerald-800 '
+                      : 'bg-emerald-700 text-white '
                     : 'text-stone-600 dark:text-stone-400 hover:text-stone-900'
                 }`}
                 title="標準（3.5px）: ノード数を削減し曲線を整えます"
@@ -543,8 +543,8 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
                 className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
                   tolerance === 6.0
                     ? isLight
-                      ? 'bg-white text-emerald-800 shadow-xs'
-                      : 'bg-emerald-700 text-white shadow-xs'
+                      ? 'bg-white text-emerald-800 '
+                      : 'bg-emerald-700 text-white '
                     : 'text-stone-600 dark:text-stone-400 hover:text-stone-900'
                 }`}
                 title="強力（6.0px）: 大幅にノード数を削減し、軽量な幾何ベジェにします"
@@ -589,7 +589,7 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
 
             <button
               onClick={handleSimplifyAllDense}
-              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center space-x-1.5 border shadow-xs transition-colors ${
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center space-x-1.5 border  transition-colors ${
                 isLight
                   ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700'
                   : 'bg-amber-600 hover:bg-amber-500 text-white border-amber-500'
@@ -602,7 +602,7 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
 
             <button
               onClick={handleSafeOptimizeAll}
-              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center space-x-1.5 border shadow-xs transition-colors ${
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center space-x-1.5 border  transition-colors ${
                 isLight
                   ? 'bg-emerald-700 hover:bg-emerald-800 text-white border-emerald-800'
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
@@ -622,7 +622,7 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
             {/* Floating Overlay Controls & Legend */}
             <div className="absolute top-6 left-6 z-10 flex flex-wrap items-center gap-2 pointer-events-auto">
               <div
-                className={`px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-md text-[11px] font-semibold flex items-center gap-3 ${
+ className={`px-3 py-1.5 rounded-xl border backdrop-blur-md text-[11px] font-semibold flex items-center gap-3 ${
                   isLight ? 'bg-white/90 border-stone-200 text-stone-800' : 'bg-[#101912]/90 border-[#223528] text-emerald-100'
                 }`}
               >
@@ -771,7 +771,7 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
                 <div className="flex flex-col gap-1.5">
                   <button
                     onClick={() => handleSimplifyContour(selectedNode.contourIndex)}
-                    className={`w-full py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center space-x-1 border shadow-xs ${
+                    className={`w-full py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center space-x-1 border  ${
                       isLight
                         ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700'
                         : 'bg-amber-600 hover:bg-amber-500 text-white border-amber-500'
@@ -1201,8 +1201,8 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
                     className={`p-3 rounded-xl border transition-all cursor-pointer ${
                       isSelected
                         ? isLight
-                          ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-500/20 shadow-xs'
-                          : 'bg-[#182c20] border-emerald-500 ring-2 ring-emerald-500/30 shadow-xs'
+                          ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-500/20 '
+                          : 'bg-[#182c20] border-emerald-500 ring-2 ring-emerald-500/30 '
                         : isLight
                         ? 'bg-stone-50 border-stone-200 hover:border-stone-300'
                         : 'bg-[#152219] border-[#223528] hover:border-stone-700'
@@ -1254,7 +1254,7 @@ export const GlyphDensityHeatmapModal: React.FC<GlyphDensityHeatmapModalProps> =
                         e.stopPropagation();
                         handleSimplifyContour(cIdx);
                       }}
-                      className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors border shadow-xs ${
+                      className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors border  ${
                         isOverloaded
                           ? isLight
                             ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700'

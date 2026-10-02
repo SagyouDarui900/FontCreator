@@ -15,6 +15,9 @@ function getPaperScope(): paper.PaperScope {
       paperScopeInstance.setup(canvas);
     }
   }
+  if (!paperScopeInstance.project) {
+    new paperScopeInstance.Project(null as any);
+  }
   paperScopeInstance.activate();
   return paperScopeInstance;
 }
@@ -329,6 +332,12 @@ export function subtractEraserStrokeVector(
   } catch (err) {
     console.error('Vector eraser error, falling back cleanly:', err);
     return contours;
+  } finally {
+    try {
+      scope.project?.clear();
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -338,42 +347,131 @@ export function subtractEraserStrokeVector(
  * Non-overlapping contours are left 100% bit-exact and untouched!
  */
 export function booleanUnionContours(contours: PathContour[]): PathContour[] {
-  if (!contours || contours.length <= 1) return contours || [];
+  if (!contours || contours.length === 0) return [];
 
   const scope = getPaperScope();
 
   try {
-    // Convert all closed contours to paper paths
-    const paperPaths: paper.PathItem[] = [];
+    // Separate open and closed contours
     const openContours: PathContour[] = [];
+    const closedContours: PathContour[] = [];
 
     for (const c of contours) {
+      if (!c || !c.nodes) continue;
       if (!c.closed || c.nodes.length < 3) {
         openContours.push(c);
       } else {
-        paperPaths.push(contourToPaperPath(scope, c));
+        closedContours.push(c);
       }
     }
 
-    if (paperPaths.length === 0) {
+    if (closedContours.length === 0) return contours;
+
+    // Single closed contour case:
+    // Check if it has self-intersections (一筆書きストローク交差・自己ループ).
+    if (closedContours.length === 1) {
+      const single = closedContours[0];
+      const paperPath = contourToPaperPath(scope, single);
+      const crossings = paperPath.getCrossings(paperPath);
+
+      // If no self-intersections, preserve original bit-exact contour without any alteration
+      if (!crossings || crossings.length === 0) {
+        paperPath.remove();
+        return contours;
+      }
+
+      // Self-intersections present!
+      // Unite with an empty path in Paper.js to dissolve self-overlapping regions into a solid polygon
+      const empty = new scope.Path();
+      const resolved = paperPath.unite(empty);
+      empty.remove();
+      paperPath.remove();
+
+      if (!resolved) return contours;
+
+      const result = paperItemToContours(resolved);
+      resolved.remove();
+
+      return [...openContours, ...(result.length > 0 ? result : closedContours)];
+    }
+
+    // Multiple closed contours case:
+    // Convert to Paper paths
+    const paperPaths: paper.Path[] = closedContours.map((c) => contourToPaperPath(scope, c));
+    const n = paperPaths.length;
+
+    // Determine containment hierarchy: a path is a hole if it is inside another path of larger area
+    const isHole = new Array<boolean>(n).fill(false);
+    for (let i = 0; i < n; i++) {
+      const pi = paperPaths[i];
+      const areaI = Math.abs(pi.area);
+      const centerI = pi.bounds.center;
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        const pj = paperPaths[j];
+        if (Math.abs(pj.area) > areaI && pj.contains(centerI)) {
+          isHole[i] = true;
+          break;
+        }
+      }
+    }
+
+    // Unite all outer strokes together into solid boundaries (fusing crossings & overlapping areas)
+    let outerAcc: paper.PathItem | null = null;
+    for (let i = 0; i < n; i++) {
+      if (!isHole[i]) {
+        const p = paperPaths[i];
+        const empty = new scope.Path();
+        const pClean = p.unite(empty);
+        empty.remove();
+        p.remove();
+
+        if (!outerAcc) {
+          outerAcc = pClean;
+        } else {
+          const next = outerAcc.unite(pClean);
+          outerAcc.remove();
+          pClean.remove();
+          outerAcc = next;
+        }
+      }
+    }
+
+    if (!outerAcc) {
+      // Fallback: clean all
+      for (const p of paperPaths) p.remove();
       return contours;
     }
 
-    let combined: paper.PathItem = paperPaths[0];
-    for (let i = 1; i < paperPaths.length; i++) {
-      const nextUnion = combined.unite(paperPaths[i]);
-      combined.remove();
-      paperPaths[i].remove();
-      combined = nextUnion;
+    // Subtract holes (e.g. inner cutouts of 日, 口, 目, O) from the united solid outer boundary
+    for (let i = 0; i < n; i++) {
+      if (isHole[i]) {
+        const p = paperPaths[i];
+        const empty = new scope.Path();
+        const cleanHole = p.unite(empty);
+        empty.remove();
+        p.remove();
+
+        const next = outerAcc.subtract(cleanHole);
+        outerAcc.remove();
+        cleanHole.remove();
+        outerAcc = next;
+      }
     }
 
-    const unitedContours = paperItemToContours(combined);
-    combined.remove();
+    const unitedContours = paperItemToContours(outerAcc);
+    outerAcc.remove();
 
-    return [...openContours, ...unitedContours];
+    return [...openContours, ...(unitedContours.length > 0 ? unitedContours : closedContours)];
   } catch (err) {
     console.error('Boolean union error, returning original:', err);
     return contours;
+  } finally {
+    try {
+      scope.project?.clear();
+    } catch {
+      // ignore
+    }
   }
 }
 

@@ -11,6 +11,8 @@ import {
   Star,
   Heart,
   Sparkles,
+  Sliders,
+  ChevronRight,
   Diamond,
   Hexagon,
   Hand,
@@ -213,7 +215,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
   return (
     <div
-      className={`flex sm:flex-col items-center justify-around sm:justify-start gap-1 sm:gap-1.5 px-1.5 sm:px-1.5 py-1.5 sm:py-2 border-t sm:border-t-0 sm:border-r shrink-0 z-20 select-none transition-colors w-full sm:w-13 md:w-14 sm:max-h-full sm:h-full pb-[max(env(safe-area-inset-bottom,0px),8px)] sm:pb-2 ${themeClasses.toolbarBg}`}
+      className={`flex sm:flex-col items-center justify-around sm:justify-start gap-1 sm:gap-1.5 px-1 sm:px-1.5 py-1.5 sm:py-2 border-t sm:border-t-0 sm:border-r shrink-0 z-20 select-none transition-colors w-full sm:w-14 sm:max-h-full sm:h-full pb-[max(env(safe-area-inset-bottom,0px),8px)] sm:pb-2 ${themeClasses.toolbarBg}`}
     >
       {/* Mobile Backdrop for Popups */}
       {(showBrushMenu || showShapeMenu || showGridMenu) && !isSmScreen && (
@@ -232,47 +234,47 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Select Tool (Object & Contour Transform) */}
         <button
           onClick={() => setToolMode('select')}
-          className={`group p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center relative ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             toolMode === 'select'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
           title="選択・全体移動・変形 (V)"
         >
-          <MousePointer className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110" />
-          <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60">V</span>
+          <MousePointer className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">V</span>
         </button>
 
         {/* Node / Direct Selection Tool (Path vertex & handle editor) */}
         <button
           onClick={() => setToolMode('node')}
-          className={`group p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center relative ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             toolMode === 'node'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
           title="パス・頂点編集ツール (A) - アンカーポイントとベジェ曲線の直接編集"
         >
-          <Crosshair className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110" />
-          <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60">A</span>
+          <Crosshair className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">A</span>
         </button>
 
         {/* Pen Tool (Bezier) */}
         <button
           onClick={() => setToolMode('pen')}
-          className={`group p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center relative ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             toolMode === 'pen'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
           title="ベジェ曲線ペン・パス作成 (P)"
         >
-          <PenTool className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110" />
-          <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60">P</span>
+          <PenTool className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">P</span>
         </button>
 
         {/* Brush Multi-Tool with Full Pen Types Palette */}
-        <div className="relative" ref={brushMenuRef}>
+        <div className="relative shrink-0 flex items-center justify-center" ref={brushMenuRef}>
           <button
             onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
@@ -286,15 +288,15 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                 setShowBrushMenu(true);
               }
             }}
-            className={`group p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center relative ${
+            className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
               toolMode === 'brush' || showBrushMenu
                 ? themeClasses.activeTool
                 : themeClasses.activeToolHover
             }`}
             title={`手書きペン (${currentPenPreset.name}) (B) - クリックでペンの種類を変更`}
           >
-            <CurrentPenIcon className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110" />
-            <span className="absolute bottom-0.5 right-1 text-[7px] opacity-70">▾</span>
+            <CurrentPenIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+            <span className="absolute bottom-0.5 right-0.5 text-[7px] font-mono opacity-70 leading-none pointer-events-none">▾</span>
           </button>
 
           {/* Pen Style Selection Popout Menu (Desktop & Tablet) */}
@@ -310,8 +312,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
               }
               className={`fixed inset-x-3 max-w-sm mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-80 z-50 p-2.5 pb-8 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto ${
                 isLight
-                  ? 'bg-white/98 border-stone-200 text-stone-800 shadow-emerald-950/10'
-                  : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 shadow-black/60'
+                  ? 'bg-white/98 border-stone-200 text-stone-800 '
+                  : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 '
               }`}
             >
               <div className="px-2 py-1 text-[11px] font-bold border-b mb-1.5 flex items-center justify-between border-stone-200 dark:border-[#223025]">
@@ -323,11 +325,11 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                         setShowBrushMenu(false);
                         onOpenPenPresetsModal();
                       }}
-                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-                      title="書き味プリセットの保存・適用"
+                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+                      title="ペン作成・ブラシカスタマイズを開く"
                     >
-                      <Bookmark className="w-3 h-3 fill-current opacity-80" />
-                      <span>書き味プリセット</span>
+                      <Sliders className="w-3 h-3" />
+                      <span>ペン作成・編集</span>
                     </button>
                   )}
                   <button
@@ -400,7 +402,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                     setShowBrushMenu(false);
                     onOpenPixelStudio();
                   }}
-                  className="w-full mt-1.5 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-stone-900 hover:bg-black text-emerald-300 dark:bg-[#1a2b20] dark:hover:bg-[#203628] dark:text-emerald-300 border border-emerald-500/30 flex items-center justify-center space-x-1.5 transition-all shadow-xs active:scale-95"
+                  className="w-full mt-1.5 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-stone-900 hover:bg-black text-emerald-300 dark:bg-[#1a2b20] dark:hover:bg-[#203628] dark:text-emerald-300 border border-emerald-500/30 flex items-center justify-center space-x-1.5 transition-all active:scale-95"
                   title="グリッド上でドットを配置し、ピクセルフォントを作字します"
                 >
                   <Grid className="w-3.5 h-3.5 text-emerald-300" />
@@ -415,7 +417,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                     setShowBrushMenu(false);
                     onOpenPenPresetsModal();
                   }}
-                  className="w-full mt-2 py-1.5 px-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center space-x-1.5 transition-all shadow-xs active:scale-95"
+                  className="w-full mt-2 py-1.5 px-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center space-x-1.5 transition-all active:scale-95"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>＋ カスタムブラシを新規追加・編集</span>
@@ -451,8 +453,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                       className={`py-1 px-1 rounded-lg text-center transition-all ${
                         (pressureSensitivity || 'normal') === mode.id
                           ? isLight
-                            ? 'bg-emerald-700 text-white font-bold shadow-xs'
-                            : 'bg-emerald-500 text-stone-950 font-bold shadow-xs'
+                            ? 'bg-emerald-700 text-white font-bold '
+                            : 'bg-emerald-500 text-stone-950 font-bold '
                           : isLight
                           ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
                           : 'bg-[#18231c] hover:bg-[#1f2d24] text-emerald-200/80'
@@ -513,8 +515,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                       className={`py-1 px-0.5 rounded text-[9.5px] font-bold text-center transition-all ${
                         smoothingIntensity === preset.val
                           ? isLight
-                            ? 'bg-emerald-700 text-white shadow-xs'
-                            : 'bg-emerald-500 text-stone-950 shadow-xs'
+                            ? 'bg-emerald-700 text-white '
+                            : 'bg-emerald-500 text-stone-950 '
                           : isLight
                           ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
                           : 'bg-[#18231c] hover:bg-[#1f2d24] text-emerald-200/80'
@@ -533,63 +535,40 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         </div>
 
         {/* Geometric Shapes Multi-Tool */}
-        <div className="relative" ref={shapeMenuRef}>
-          <div className="relative flex items-center">
-            <button
-              id="shape-tool-main-button"
-              type="button"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setShapeAnchorTop(Math.max(10, Math.min(window.innerHeight - 380, rect.top - 10)));
-                setShowBrushMenu(false);
-                setShowGridMenu(false);
-                if (isCurrentToolShape) {
-                  setShowShapeMenu((prev) => !prev);
-                } else {
-                  setToolMode(lastSelectedShape);
-                  setShowShapeMenu(true);
-                }
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setShapeAnchorTop(Math.max(10, Math.min(window.innerHeight - 380, rect.top - 10)));
-                setShowBrushMenu(false);
-                setShowGridMenu(false);
-                setShowShapeMenu(true);
-              }}
-              className={`p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center relative ${
-                isCurrentToolShape || showShapeMenu
-                  ? themeClasses.activeTool
-                  : themeClasses.activeToolHover
-              }`}
-              title={`幾何学図形ツール (${currentShapeTool.label}) (U) - クリックまたは▼で全20種類の図形から選択 (右クリックでも開閉可能)`}
-            >
-              <CurrentShapeIcon className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110" />
-            </button>
-            {/* Small settings chevron trigger for direct shape picker open */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setShapeAnchorTop(Math.max(10, Math.min(window.innerHeight - 380, rect.top - 10)));
-                setShowBrushMenu(false);
-                setShowGridMenu(false);
+        <div className="relative shrink-0 flex items-center justify-center" ref={shapeMenuRef}>
+          <button
+            id="shape-tool-main-button"
+            type="button"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setShapeAnchorTop(Math.max(10, Math.min(window.innerHeight - 380, rect.top - 10)));
+              setShowBrushMenu(false);
+              setShowGridMenu(false);
+              if (isCurrentToolShape) {
                 setShowShapeMenu((prev) => !prev);
-              }}
-              className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7.5px] font-bold border transition-colors ${
-                showShapeMenu
-                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                  : isLight
-                  ? 'bg-stone-100 hover:bg-emerald-100 border-stone-300 text-stone-700'
-                  : 'bg-stone-800 hover:bg-emerald-900 border-stone-700 text-emerald-300'
-              }`}
-              title="図形一覧パレットを開く"
-            >
-              ▾
-            </button>
-          </div>
+              } else {
+                setToolMode(lastSelectedShape);
+                setShowShapeMenu(true);
+              }
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setShapeAnchorTop(Math.max(10, Math.min(window.innerHeight - 380, rect.top - 10)));
+              setShowBrushMenu(false);
+              setShowGridMenu(false);
+              setShowShapeMenu(true);
+            }}
+            className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+              isCurrentToolShape || showShapeMenu
+                ? themeClasses.activeTool
+                : themeClasses.activeToolHover
+            }`}
+            title={`幾何学図形ツール (${currentShapeTool.label}) (U) - クリックで全20種類の図形パレットを開閉 (右クリックでも開閉可能)`}
+          >
+            <CurrentShapeIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+            <span className="absolute bottom-0.5 right-0.5 text-[7px] font-mono opacity-70 leading-none pointer-events-none">▾</span>
+          </button>
 
           {/* Shape Selection Popout Menu (Desktop & Tablet) */}
           {showShapeMenu && isSmScreen && (
@@ -604,8 +583,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
               }
               className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-72 z-50 p-2.5 pb-8 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto ${
                 isLight
-                  ? 'bg-white/98 border-stone-200 text-stone-800 shadow-emerald-950/10'
-                  : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 shadow-black/60'
+                  ? 'bg-white/98 border-stone-200 text-stone-800 '
+                  : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 '
               }`}
             >
               <div className="px-1 py-0.5 text-[11px] font-bold border-b mb-2 flex items-center justify-between border-stone-200 dark:border-[#223025]">
@@ -647,8 +626,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                       className={`flex items-center space-x-1.5 p-1.5 rounded-lg text-xs font-medium transition-all ${
                         isSelected
                           ? isLight
-                            ? 'bg-emerald-700 text-white font-bold shadow-xs'
-                            : 'bg-emerald-600 text-white font-bold shadow-xs'
+                            ? 'bg-emerald-700 text-white font-bold '
+                            : 'bg-emerald-600 text-white font-bold '
                           : isLight
                           ? 'hover:bg-stone-100 text-stone-700'
                           : 'hover:bg-[#1f2b23] text-emerald-200'
@@ -682,8 +661,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                       className={`flex items-center space-x-1.5 p-1.5 rounded-lg text-xs font-medium transition-all ${
                         isSelected
                           ? isLight
-                            ? 'bg-emerald-700 text-white font-bold shadow-xs'
-                            : 'bg-emerald-600 text-white font-bold shadow-xs'
+                            ? 'bg-emerald-700 text-white font-bold '
+                            : 'bg-emerald-600 text-white font-bold '
                           : isLight
                           ? 'hover:bg-stone-100 text-stone-700'
                           : 'hover:bg-[#1f2b23] text-emerald-200'
@@ -717,8 +696,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                       className={`flex items-center space-x-1.5 p-1.5 rounded-lg text-xs font-medium transition-all ${
                         isSelected
                           ? isLight
-                            ? 'bg-emerald-700 text-white font-bold shadow-xs'
-                            : 'bg-emerald-600 text-white font-bold shadow-xs'
+                            ? 'bg-emerald-700 text-white font-bold '
+                            : 'bg-emerald-600 text-white font-bold '
                           : isLight
                           ? 'hover:bg-stone-100 text-stone-700'
                           : 'hover:bg-[#1f2b23] text-emerald-200'
@@ -737,52 +716,55 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Eraser Tool */}
         <button
           onClick={() => setToolMode('eraser')}
-          className={`p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             toolMode === 'eraser'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
           title="消しゴム (E)"
         >
-          <Eraser className="w-4 h-4 sm:w-5 sm:h-5" />
+          <Eraser className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">E</span>
         </button>
 
         {/* Ruler / Straight Line & Measure Tool */}
         <button
           id="btn-toolbar-ruler"
           onClick={() => setToolMode('ruler')}
-          className={`p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center relative ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             toolMode === 'ruler'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
           title="定規・直線作図ツール (R) - ドラッグして直線を引く・距離や角度を計測 (Shiftで水平/垂直固定)"
         >
-          <Ruler className="w-4 h-4 sm:w-5 sm:h-5" />
+          <Ruler className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">R</span>
         </button>
 
         {/* Hand Tool (Desktop only in main toolbar) */}
         <button
           onClick={() => setToolMode('hand')}
-          className={`hidden sm:flex p-2 sm:p-2.5 rounded-xl transition-all items-center justify-center relative ${
+          className={`hidden sm:flex group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all items-center justify-center relative shrink-0 ${
             toolMode === 'hand'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
           title="手のひら・画面移動 (H) / Spaceドラッグでも移動可能"
         >
-          <Hand className="w-4 h-4 sm:w-5 sm:h-5" />
+          <Hand className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">H</span>
         </button>
 
         {/* Mobile Unified Grid & Guides Bottom Sheet Trigger */}
-        <div className="sm:hidden relative flex items-center">
+        <div className="sm:hidden relative flex items-center shrink-0">
           <button
             onClick={() => {
               setShowBrushMenu(false);
               setShowShapeMenu(false);
               setShowGridMenu((prev) => !prev);
             }}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center relative ${
+            className={`group w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
               gridSettings.showGrid || showGridMenu
                 ? isLight
                   ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
@@ -791,8 +773,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
             }`}
             title="方眼・ガイド・下絵・保存メニュー"
           >
-            <Grid className="w-4 h-4" />
-            <span className="absolute bottom-0.5 right-0.5 text-[6.5px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+            <Grid className="w-4 h-4 shrink-0" />
+            <span className="absolute bottom-0.5 right-0.5 text-[6.5px] font-mono font-bold text-emerald-600 dark:text-emerald-400 leading-none pointer-events-none">
               {gridSettings.gridSize || 50}
             </span>
           </button>
@@ -800,65 +782,39 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
       </div>
 
       <div
-        className={`hidden sm:block w-full h-[1px] my-2 ${
+        className={`hidden sm:block w-7 sm:w-8 h-[1px] my-1 sm:my-1.5 mx-auto opacity-70 ${
           isLight ? 'bg-stone-200' : 'bg-[#222e25]'
         }`}
       />
 
       {/* Desktop-only View / Guide Toggles */}
-      <div className="hidden sm:flex sm:flex-col items-center gap-1.5 shrink-0">
+      <div className="hidden sm:flex sm:flex-col items-center gap-1 sm:gap-1.5 shrink-0 w-full">
         {/* Grid Toggle & Settings Menu */}
-        <div className="relative flex flex-col items-center" ref={gridMenuRef}>
-          <div className="relative flex items-center">
-            <button
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setGridAnchorTop(Math.max(60, rect.top - 80));
-                setGridSettings((s) => ({ ...s, showGrid: !s.showGrid }));
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setGridAnchorTop(Math.max(60, rect.top - 80));
-                setShowGridMenu((prev) => !prev);
-              }}
-              className={`p-2 rounded-xl transition-colors relative group ${
-                gridSettings.showGrid
-                  ? isLight
-                    ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300 shadow-xs'
-                    : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
-                  : isLight
-                  ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800'
-                  : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200'
-              }`}
-              title={`方眼グリッド表示 (クリックで切替 / 右クリックまたは▼でサイズ調整スライダー開閉: 現在${gridSettings.gridSize || 50}px)`}
-            >
-              <Grid className="w-4 h-4" />
-            </button>
-            {/* Small settings chevron trigger */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setGridAnchorTop(Math.max(50, Math.min(window.innerHeight - 380, rect.top - 80)));
-                setShowBrushMenu(false);
-                setShowShapeMenu(false);
-                setShowGridMenu((prev) => !prev);
-              }}
-              className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold border transition-colors ${
-                showGridMenu
-                  ? 'bg-emerald-600 text-white border-emerald-600'
-                  : isLight
-                  ? 'bg-stone-100 hover:bg-emerald-100 border-stone-300 text-stone-600'
-                  : 'bg-stone-800 hover:bg-emerald-900 border-stone-700 text-emerald-300'
-              }`}
-              title="グリッドサイズ・スライダー設定を開く"
-            >
-              ▾
-            </button>
-          </div>
-          {gridSettings.showGrid && (
+        <div className="relative shrink-0 flex flex-col items-center" ref={gridMenuRef}>
+          <button
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setGridAnchorTop(Math.max(60, rect.top - 80));
+              setGridSettings((s) => ({ ...s, showGrid: !s.showGrid }));
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setGridAnchorTop(Math.max(60, rect.top - 80));
+              setShowGridMenu((prev) => !prev);
+            }}
+            className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+              gridSettings.showGrid
+                ? isLight
+                  ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
+                  : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
+                : isLight
+                ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
+                : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
+            }`}
+            title={`方眼グリッド表示 (クリックで切替 / 右クリックまたは▼で設定開閉: 現在${gridSettings.gridSize || 50}px)`}
+          >
+            <Grid className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
             <span
               onClick={(e) => {
                 e.stopPropagation();
@@ -868,14 +824,12 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                 setShowShapeMenu(false);
                 setShowGridMenu((prev) => !prev);
               }}
-              className={`cursor-pointer hidden sm:block text-[8px] font-mono font-bold leading-none mt-1 select-none hover:underline ${
-                isLight ? 'text-emerald-800' : 'text-emerald-400'
-              }`}
-              title="クリックしてグリッドサイズを変更"
+              className="absolute bottom-0.5 right-0.5 text-[7px] font-mono opacity-70 leading-none cursor-pointer hover:opacity-100"
+              title="グリッド設定を開く"
             >
-              {gridSettings.gridSize || 50}px
+              ▾
             </span>
-          )}
+          </button>
 
           {/* Grid Settings Popout Menu with Slider & Presets (Desktop) */}
           {showGridMenu && isSmScreen && (
@@ -890,8 +844,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
               }
               className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-72 z-50 p-3 pb-6 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto ${
                 isLight
-                  ? 'bg-white/98 border-stone-200 text-stone-800 shadow-emerald-950/10'
-                  : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 shadow-black/60'
+                  ? 'bg-white/98 border-stone-200 text-stone-800 '
+                  : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 '
               }`}
             >
               <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-stone-200 dark:border-[#223025]">
@@ -915,7 +869,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                   onClick={() => setGridSettings((s) => ({ ...s, showGrid: !s.showGrid }))}
                   className={`p-1.5 rounded-lg border text-xs font-bold flex items-center justify-between transition-colors ${
                     gridSettings.showGrid
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                      ? 'bg-emerald-600 text-white border-emerald-600 '
                       : 'bg-stone-50 dark:bg-stone-900 border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400'
                   }`}
                 >
@@ -927,7 +881,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                   onClick={() => setGridSettings((s) => ({ ...s, snapToGrid: !s.snapToGrid }))}
                   className={`p-1.5 rounded-lg border text-xs font-bold flex items-center justify-between transition-colors ${
                     gridSettings.snapToGrid
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                      ? 'bg-emerald-600 text-white border-emerald-600 '
                       : 'bg-stone-50 dark:bg-stone-900 border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400'
                   }`}
                 >
@@ -1028,7 +982,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                       }
                       className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors ${
                         (gridSettings.gridSize || 50) === size
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                          ? 'bg-emerald-600 text-white border-emerald-600 '
                           : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700'
                       }`}
                     >
@@ -1036,10 +990,182 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                     </button>
                   ))}
                 </div>
+
+                {/* Grid & Guides Opacity (濃さ・透明度) */}
+                <div className="pt-2 mt-1 border-t border-stone-200 dark:border-stone-800">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-stone-600 dark:text-stone-300">
+                      グリッド線の濃さ
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {gridSettings.gridOpacity ?? 30}%
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-mono text-stone-400 font-bold">10</span>
+                    <input
+                      type="range"
+                      min="10"
+                      max="100"
+                      step="5"
+                      value={gridSettings.gridOpacity ?? 30}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setGridSettings((prev) => ({
+                          ...prev,
+                          gridOpacity: val,
+                        }));
+                      }}
+                      className="flex-1 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-lg appearance-none cursor-pointer accent-emerald-600 focus:outline-hidden"
+                    />
+                    <span className="text-[9px] font-mono text-stone-400 font-bold">100</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-1 pt-1">
+                    {[
+                      { label: '極薄', val: 15 },
+                      { label: '淡め', val: 25 },
+                      { label: '標準', val: 35 },
+                      { label: 'くっきり', val: 60 },
+                    ].map((p) => (
+                      <button
+                        key={p.val}
+                        type="button"
+                        onClick={() =>
+                          setGridSettings((prev) => ({
+                            ...prev,
+                            gridOpacity: p.val,
+                          }))
+                        }
+                        className={`flex-1 py-0.5 rounded text-[9.5px] font-bold border transition-colors ${
+                          (gridSettings.gridOpacity ?? 30) === p.val
+                            ? 'bg-emerald-600 text-white border-emerald-600 '
+                            : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Vertical Guides Section */}
+              <div className="space-y-1.5 mb-2.5 p-2 rounded-xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200/80 dark:border-purple-900/40">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[11px] text-purple-900 dark:text-purple-300">
+                    縦グリッド・縦分割ガイド
+                  </span>
+                  <span className="text-[9px] text-purple-700 dark:text-purple-400 font-medium">偏・旁・ステム</span>
+                </div>
+                <div className="grid grid-cols-5 gap-1">
+                  {[
+                    { id: 'none', label: 'なし' },
+                    { id: 'center', label: '中心' },
+                    { id: 'thirds', label: '3分割' },
+                    { id: 'quarters', label: '4分割' },
+                    { id: 'eighths', label: '8分割' },
+                  ].map((vg) => (
+                    <button
+                      key={vg.id}
+                      type="button"
+                      onClick={() =>
+                        setGridSettings((prev) => ({
+                          ...prev,
+                          verticalGuide: vg.id as any,
+                        }))
+                      }
+                      className={`py-1 rounded text-[10px] font-bold border transition-colors ${
+                        (gridSettings.verticalGuide || 'none') === vg.id
+                          ? 'bg-purple-600 text-white border-purple-600 '
+                          : 'bg-white dark:bg-stone-800 border-purple-200 dark:border-purple-900/50 text-stone-700 dark:text-stone-300 hover:bg-purple-100 dark:hover:bg-purple-900/30'
+                      }`}
+                      title={`縦ガイド: ${vg.label}`}
+                    >
+                      {vg.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Japanese Guide Pattern Section */}
+              <div className="space-y-1.5 mb-2.5 p-2 rounded-xl bg-stone-50/80 dark:bg-stone-900/60 border border-stone-200 dark:border-stone-800">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[11px] text-stone-700 dark:text-stone-300">
+                    和文目安ガイド (作字格)
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { id: 'none', label: 'なし' },
+                    { id: 'cross', label: '十字格' },
+                    { id: 'tian', label: '田字格' },
+                    { id: 'jiugong', label: '九宮 (3x3)' },
+                    { id: 'sixteen', label: '十六宮 (4x4)' },
+                    { id: 'mi', label: '米字格' },
+                  ].map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() =>
+                        setGridSettings((prev) => ({
+                          ...prev,
+                          japaneseGuide: g.id as any,
+                        }))
+                      }
+                      className={`py-1 rounded text-[10px] font-bold border transition-colors ${
+                        (gridSettings.japaneseGuide || 'tian') === g.id
+                          ? 'bg-emerald-600 text-white border-emerald-600 '
+                          : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700'
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Frames & Center Axis Quick Toggles */}
+              <div className="grid grid-cols-3 gap-1 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setGridSettings((prev) => ({ ...prev, showBodyFrame: !prev.showBodyFrame }))}
+                  className={`py-1 px-1 rounded text-[10px] font-bold border text-center transition-colors ${
+                    gridSettings.showBodyFrame !== false
+                      ? 'bg-emerald-100 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200'
+                      : 'bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-500'
+                  }`}
+                  title="漢字字面枠 85% (850x850)"
+                >
+                  漢字枠 {gridSettings.showBodyFrame !== false ? 'ON' : 'OFF'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGridSettings((prev) => ({ ...prev, showKanaFrame: !prev.showKanaFrame }))}
+                  className={`py-1 px-1 rounded text-[10px] font-bold border text-center transition-colors ${
+                    gridSettings.showKanaFrame
+                      ? 'bg-amber-100 dark:bg-amber-950 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200'
+                      : 'bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-500'
+                  }`}
+                  title="仮名字面枠 78% (780x780)"
+                >
+                  仮名枠 {gridSettings.showKanaFrame ? 'ON' : 'OFF'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGridSettings((prev) => ({ ...prev, showVerticalCenter: prev.showVerticalCenter === false ? true : false }))}
+                  className={`py-1 px-1 rounded text-[10px] font-bold border text-center transition-colors ${
+                    gridSettings.showVerticalCenter !== false
+                      ? 'bg-purple-100 dark:bg-purple-950 border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-200'
+                      : 'bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-500'
+                  }`}
+                  title="左右中心線 (X=500)"
+                >
+                  中心線 {gridSettings.showVerticalCenter !== false ? 'ON' : 'OFF'}
+                </button>
               </div>
 
               {/* Keyboard Shortcut Footer */}
-              <div className="text-[10px] text-stone-500 dark:text-stone-400 text-center flex items-center justify-center gap-1 pt-1">
+              <div className="text-[10px] text-stone-500 dark:text-stone-400 text-center flex items-center justify-center gap-1 pt-1 border-t border-stone-200 dark:border-[#223025]">
                 <span>ショートカット:</span>
                 <kbd className="px-1 py-0.2 bg-stone-100 dark:bg-stone-800 rounded border border-stone-300 dark:border-stone-700 font-mono font-bold">Alt</kbd>
                 <span>+</span>
@@ -1052,86 +1178,86 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Snap to Grid */}
         <button
           onClick={() => setGridSettings((s) => ({ ...s, snapToGrid: !s.snapToGrid }))}
-          className={`p-2 rounded-xl transition-colors ${
+          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             gridSettings.snapToGrid
               ? isLight
                 ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
                 : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
               : isLight
-              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800'
-              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200'
+              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
+              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
           }`}
           title="グリッドにスナップ（幾何学・デザインフォント作図用）"
         >
-          <Magnet className="w-4 h-4" />
+          <Magnet className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
         </button>
 
         {/* Metrics Lines Toggle */}
         <button
           onClick={() => setGridSettings((s) => ({ ...s, showMetrics: !s.showMetrics }))}
-          className={`p-2 rounded-xl transition-colors ${
+          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             gridSettings.showMetrics
               ? isLight
                 ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
                 : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
               : isLight
-              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800'
-              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200'
+              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
+              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
           }`}
           title="メトリクスガイド線（ベースライン等）"
         >
-          <Eye className="w-4 h-4" />
+          <Eye className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
         </button>
 
         {/* Ruler Bars Toggle (Top/Left Rulers) */}
         <button
           onClick={() => setGridSettings((s) => ({ ...s, showRulers: !s.showRulers }))}
-          className={`p-2 rounded-xl transition-colors ${
+          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             gridSettings.showRulers !== false
               ? isLight
                 ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
                 : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
               : isLight
-              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800'
-              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200'
+              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
+              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
           }`}
           title="外枠の目盛定規・ルーラー表示/非表示 (ルーラーからガイド線を引き出せます)"
         >
-          <Ruler className="w-4 h-4" />
+          <Ruler className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
         </button>
 
         {/* Cursor Crosshair Reticle Toggle */}
         <button
           onClick={() => setGridSettings((s) => ({ ...s, showCursorCrosshair: !s.showCursorCrosshair }))}
-          className={`p-2 rounded-xl transition-colors ${
+          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             gridSettings.showCursorCrosshair
               ? isLight
                 ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
                 : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
               : isLight
-              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800'
-              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200'
+              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
+              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
           }`}
           title="十字ポインターガイド線"
         >
-          <Crosshair className="w-4 h-4" />
+          <Crosshair className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
         </button>
       </div>
 
       {/* Quick Actions (Desktop only) */}
-      <div className="hidden sm:flex sm:flex-col items-center gap-1 mt-auto">
+      <div className="hidden sm:flex sm:flex-col items-center gap-1 sm:gap-1.5 mt-auto shrink-0 pb-1">
         {/* Quick Save Current Glyph */}
         {onQuickSaveGlyph && (
           <button
             onClick={onQuickSaveGlyph}
-            className={`p-2 rounded-xl transition-all active:scale-90 ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 active:scale-95 ${
               isLight
                 ? 'text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 border border-transparent hover:border-emerald-300'
                 : 'text-emerald-300 hover:bg-[#1a251e] hover:text-emerald-100 border border-transparent hover:border-emerald-800'
             }`}
             title="現在の文字を保存 (即時永続化 & 単体JSONバックアップ書き出し)"
           >
-            <Save className="w-4 h-4" />
+            <Save className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           </button>
         )}
 
@@ -1139,14 +1265,14 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {onOpenTraceModal && (
           <button
             onClick={onOpenTraceModal}
-            className={`p-2 rounded-md transition-colors ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
               isLight
-                ? 'text-stone-600 hover:bg-emerald-100'
-                : 'text-emerald-300 hover:bg-[#1a251e]'
+                ? 'text-stone-600 hover:bg-emerald-100 hover:text-stone-900 border border-transparent'
+                : 'text-emerald-300 hover:bg-[#1a251e] hover:text-emerald-100 border border-transparent'
             }`}
             title="下絵・看板写真トレース設定"
           >
-            <Layers className="w-4 h-4" />
+            <Layers className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           </button>
         )}
       </div>
@@ -1166,14 +1292,63 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
             }`}
           >
             <div className="flex items-center justify-between pb-2 border-b border-stone-200 dark:border-stone-800 mb-2 shrink-0">
-              <span className="font-bold text-sm text-emerald-800 dark:text-emerald-300">手書きペンの種類を選択 (全{PEN_PRESETS.length}種類)</span>
-              <button
-                onClick={() => setShowBrushMenu(false)}
-                className="p-1 rounded-full text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <span className="font-bold text-sm text-emerald-800 dark:text-emerald-300">手書きペンの種類 (全{PEN_PRESETS.length}種)</span>
+              <div className="flex items-center space-x-1">
+                {onOpenPenPresetsModal && (
+                  <button
+                    onClick={() => {
+                      setShowBrushMenu(false);
+                      onOpenPenPresetsModal();
+                    }}
+                    className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center space-x-1 cursor-pointer transition-colors"
+                  >
+                    <Sliders className="w-3 h-3" />
+                    <span>作成</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowBrushMenu(false)}
+                  className="p-1 rounded-full text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
+
+            {/* Custom Pen Studio Button on Mobile */}
+            {onOpenPenPresetsModal && (
+              <button
+                onClick={() => {
+                  setShowBrushMenu(false);
+                  onOpenPenPresetsModal();
+                }}
+                className={`w-full mb-2.5 p-2.5 rounded-xl text-xs font-bold border transition-colors flex items-center justify-between shrink-0 text-left cursor-pointer ${
+                  isLight
+                    ? 'bg-stone-100 hover:bg-stone-200/80 border-stone-300 text-stone-900 '
+                    : 'bg-[#1b2720] hover:bg-[#23352b] border-[#2c4033] text-stone-100 '
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div
+                    className={`p-1.5 rounded-lg ${
+                      isLight ? 'bg-stone-200 text-stone-700' : 'bg-[#25392d] text-emerald-300'
+                    }`}
+                  >
+                    <Sliders className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-xs text-stone-900 dark:text-stone-100">
+                      カスタムペン作成・設定
+                    </div>
+                    <div className="text-[10px] font-normal text-stone-500 dark:text-stone-400">
+                      入り抜き・筆先形状・角度・手ブレ補正を編集
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-stone-400" />
+              </button>
+            )}
+
             <div className="space-y-1.5 overflow-y-auto pr-1 flex-1 pb-20">
               {PEN_PRESETS.map((preset) => {
                 const PIcon = PEN_ICONS[preset.id] || Paintbrush;
@@ -1264,8 +1439,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                     className={`py-1.5 px-1 rounded-lg text-xs font-bold text-center transition-all ${
                       smoothingIntensity === preset.val
                         ? isLight
-                          ? 'bg-emerald-700 text-white shadow-xs'
-                          : 'bg-emerald-500 text-stone-950 shadow-xs'
+                          ? 'bg-emerald-700 text-white '
+                          : 'bg-emerald-500 text-stone-950 '
                         : isLight
                         ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
                         : 'bg-[#18231c] hover:bg-[#1f2d24] text-emerald-200/80'
@@ -1332,8 +1507,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                         className={`flex items-center space-x-2.5 p-3 rounded-xl text-xs font-medium transition-all ${
                           isSelected
                             ? isLight
-                              ? 'bg-emerald-800 text-white font-bold shadow-md'
-                              : 'bg-emerald-600 text-white font-bold shadow-md'
+ ? 'bg-emerald-800 text-white font-bold '
+ : 'bg-emerald-600 text-white font-bold '
                             : isLight
                             ? 'bg-stone-50 hover:bg-emerald-100/80 text-stone-800 border border-stone-200/80'
                             : 'bg-[#1a261f] hover:bg-[#223328] text-emerald-100 border border-stone-800'
@@ -1368,8 +1543,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                         className={`flex items-center space-x-2.5 p-3 rounded-xl text-xs font-medium transition-all ${
                           isSelected
                             ? isLight
-                              ? 'bg-emerald-800 text-white font-bold shadow-md'
-                              : 'bg-emerald-600 text-white font-bold shadow-md'
+ ? 'bg-emerald-800 text-white font-bold '
+ : 'bg-emerald-600 text-white font-bold '
                             : isLight
                             ? 'bg-stone-50 hover:bg-emerald-100/80 text-stone-800 border border-stone-200/80'
                             : 'bg-[#1a261f] hover:bg-[#223328] text-emerald-100 border border-stone-800'
@@ -1404,8 +1579,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                         className={`flex items-center space-x-2.5 p-3 rounded-xl text-xs font-medium transition-all ${
                           isSelected
                             ? isLight
-                              ? 'bg-emerald-800 text-white font-bold shadow-md'
-                              : 'bg-emerald-600 text-white font-bold shadow-md'
+ ? 'bg-emerald-800 text-white font-bold '
+ : 'bg-emerald-600 text-white font-bold '
                             : isLight
                             ? 'bg-stone-50 hover:bg-emerald-100/80 text-stone-800 border border-stone-200/80'
                             : 'bg-[#1a261f] hover:bg-[#223328] text-emerald-100 border border-stone-800'
@@ -1431,14 +1606,14 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
             onClick={() => setShowGridMenu(false)}
           />
           <div
-            className={`relative z-10 w-full rounded-t-3xl p-4 border-t shadow-2xl max-h-[80vh] flex flex-col animate-slideUp pb-[max(env(safe-area-inset-bottom),24px)] ${
+            className={`relative z-10 w-full rounded-t-3xl p-4 border-t shadow-2xl max-h-[85vh] flex flex-col animate-slideUp pb-[max(env(safe-area-inset-bottom),16px)] overflow-hidden ${
               isLight
                 ? 'bg-white border-[#c8ded3] text-stone-800'
                 : 'bg-[#151f19] border-[#25362b] text-emerald-100'
             }`}
           >
             {/* Header */}
-            <div className="flex items-center justify-between pb-2.5 border-b border-stone-200 dark:border-stone-800 mb-3 shrink-0">
+            <div className="flex items-center justify-between pb-2.5 border-b border-stone-200 dark:border-stone-800 mb-2.5 shrink-0">
               <div className="flex items-center space-x-2">
                 <Grid className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 <span className="font-extrabold text-sm text-emerald-800 dark:text-emerald-300">方眼グリッド・ガイド設定</span>
@@ -1451,6 +1626,9 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Scrollable Body Container - Ensures all buttons and sliders are easily reachable */}
+            <div className="overflow-y-auto pr-1 flex-1 min-h-0 space-y-3 pb-8 touch-pan-y">
 
             {/* Grid ON/OFF and Snap Toggles */}
             <div className="grid grid-cols-2 gap-2 mb-3 shrink-0">
@@ -1588,6 +1766,143 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                   </button>
                 ))}
               </div>
+
+              {/* Mobile Grid Opacity (濃さ・透明度) */}
+              <div className="pt-2 mt-1 border-t border-stone-200 dark:border-stone-800">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-stone-600 dark:text-stone-300">
+                    グリッド線の濃さ
+                  </span>
+                  <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {gridSettings.gridOpacity ?? 30}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-stone-400 font-bold">10%</span>
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    step="5"
+                    value={gridSettings.gridOpacity ?? 30}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setGridSettings((prev) => ({
+                        ...prev,
+                        gridOpacity: val,
+                      }));
+                    }}
+                    className="flex-1 h-2 bg-stone-200 dark:bg-stone-700 rounded-lg appearance-none cursor-pointer accent-emerald-600 focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-stone-400 font-bold">100%</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1 pt-1.5">
+                  {[
+                    { label: '極薄', val: 15 },
+                    { label: '淡め', val: 25 },
+                    { label: '標準', val: 35 },
+                    { label: 'くっきり', val: 60 },
+                  ].map((p) => (
+                    <button
+                      key={p.val}
+                      type="button"
+                      onClick={() =>
+                        setGridSettings((prev) => ({
+                          ...prev,
+                          gridOpacity: p.val,
+                        }))
+                      }
+                      className={`py-1 rounded-lg text-xs font-bold border transition-colors ${
+                        (gridSettings.gridOpacity ?? 30) === p.val
+                          ? 'bg-emerald-600 text-white border-emerald-600 '
+                          : isLight
+                          ? 'bg-white border-stone-200 text-stone-600 hover:bg-stone-100'
+                          : 'bg-stone-800 border-stone-700 text-stone-300 hover:bg-stone-700'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Vertical Guides Section */}
+            <div className="space-y-1.5 mb-2.5 p-2 rounded-xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200/80 dark:border-purple-900/40 shrink-0">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-purple-900 dark:text-purple-300">
+                  縦グリッド・縦分割ガイド
+                </span>
+                <span className="text-[10px] text-purple-700 dark:text-purple-400 font-medium">偏・旁・ステム</span>
+              </div>
+              <div className="grid grid-cols-5 gap-1">
+                {[
+                  { id: 'none', label: 'なし' },
+                  { id: 'center', label: '中心' },
+                  { id: 'thirds', label: '3分割' },
+                  { id: 'quarters', label: '4分割' },
+                  { id: 'eighths', label: '8分割' },
+                ].map((vg) => (
+                  <button
+                    key={vg.id}
+                    type="button"
+                    onClick={() =>
+                      setGridSettings((prev) => ({
+                        ...prev,
+                        verticalGuide: vg.id as any,
+                      }))
+                    }
+                    className={`py-1 rounded text-[11px] font-bold border transition-colors ${
+                      (gridSettings.verticalGuide || 'none') === vg.id
+                        ? 'bg-purple-600 text-white border-purple-600 '
+                        : isLight
+                        ? 'bg-white border-purple-200 text-stone-700 hover:bg-purple-50'
+                        : 'bg-stone-800 border-purple-900/50 text-stone-300 hover:bg-purple-900/30'
+                    }`}
+                  >
+                    {vg.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Mobile Japanese Guide Pattern Section */}
+            <div className="space-y-1.5 mb-2.5 p-2 rounded-xl bg-stone-50/80 dark:bg-stone-900/60 border border-stone-200 dark:border-stone-800 shrink-0">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-stone-700 dark:text-stone-300">
+                  和文目安ガイド (作字格)
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {[
+                  { id: 'none', label: 'なし' },
+                  { id: 'cross', label: '十字格' },
+                  { id: 'tian', label: '田字格' },
+                  { id: 'jiugong', label: '九宮 (3x3)' },
+                  { id: 'sixteen', label: '十六宮 (4x4)' },
+                  { id: 'mi', label: '米字格' },
+                ].map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() =>
+                      setGridSettings((prev) => ({
+                        ...prev,
+                        japaneseGuide: g.id as any,
+                      }))
+                    }
+                    className={`py-1 rounded text-[11px] font-bold border transition-colors ${
+                      (gridSettings.japaneseGuide || 'tian') === g.id
+                        ? 'bg-emerald-600 text-white border-emerald-600 '
+                        : isLight
+                        ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-100'
+                        : 'bg-stone-800 border-stone-700 text-stone-300 hover:bg-stone-700'
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Guidelines & Auxiliary Displays */}
@@ -1665,16 +1980,26 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                     setShowGridMenu(false);
                     onQuickSaveGlyph();
                   }}
-                  className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
+                  className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                 >
                   <Save className="w-4 h-4" />
                   <span>文字の即時保存</span>
                 </button>
               )}
             </div>
+
+            {/* Bottom Quick Close Button */}
+            <button
+              type="button"
+              onClick={() => setShowGridMenu(false)}
+              className="w-full py-2.5 bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 rounded-xl text-xs font-bold transition-colors text-center"
+            >
+              設定を閉じて作図へ
+            </button>
           </div>
         </div>
-      )}
+      </div>
+    )}
     </div>
   );
 });

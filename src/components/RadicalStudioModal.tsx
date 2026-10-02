@@ -111,14 +111,18 @@ import {
   getContoursBoundingBox,
   unionContours,
   normalizeGlyphContoursWinding,
+  simplifyGlyphContours,
   isPointNearContour,
   flipMultipleContoursH,
   flipMultipleContoursV,
+  expandStrokeContours,
 } from '../utils/pathUtils';
 import { parseSvgStringToContours } from '../utils/svgParser';
 import { SCREEN_BASELINE_Y } from '../utils/fontCompiler';
 import { ThemeMode, isLightTheme } from '../utils/theme';
+import { loadCustomParts, saveCustomParts } from '../utils/customPartsStorage';
 import { KANJI_RADICALS } from '../data/kanjiRadicals';
+import { KANGXI_214_RADICALS } from '../data/kangxi214Radicals';
 import {
   getOrExtractRadicalContours,
   RADICAL_FONT_OPTIONS,
@@ -136,135 +140,32 @@ export interface StudioRadicalPresetItem {
   description: string;
 }
 
-// Comprehensive catalog of standard kanji radicals & stroke parts for Radical Studio
+// Complete catalog of all 214 traditional Kangxi radicals (康熙字典 全214部首) + stroke & geometric parts
 export const STUDIO_RADICAL_PRESETS: StudioRadicalPresetItem[] = [
-  // 偏 (Hen)
+  ...KANGXI_214_RADICALS.map((r) => {
+    let cat: PartCategory = 'stroke';
+    if (r.category === 'basic') {
+      cat = 'stroke';
+    } else if (r.category) {
+      cat = r.category as PartCategory;
+    }
+
+    return {
+      id: `rad_kangxi_${r.number}`,
+      char: r.displayChar || r.char,
+      name: `${r.name}`,
+      category: cat,
+      description: `康熙部首 ${r.number}番 (${r.strokes}画): ${r.description}`,
+    };
+  }),
+
+  // 偏 (Hen additional aliases)
   { id: 'rad_ninben', char: '亻', name: 'にんべん', category: 'hen', description: '人・動作に関する偏 (休, 作, 体, 信, 健)' },
   { id: 'rad_sanzui', char: '氵', name: 'さんずい', category: 'hen', description: '水・液体に関する偏 (海, 湖, 清, 河, 汁)' },
   { id: 'rad_kihen', char: '木', name: 'きへん', category: 'hen', description: '樹木・木製品に関する偏 (林, 村, 校, 板, 柱)' },
   { id: 'rad_tehen', char: '扌', name: 'てへん', category: 'hen', description: '手・動作に関する偏 (持, 打, 投, 指, 技)' },
   { id: 'rad_gonben', char: '言', name: 'ごんべん', category: 'hen', description: '言葉・話すことに関する偏 (話, 語, 読, 記, 談)' },
   { id: 'rad_itohen', char: '糸', name: 'いとへん', category: 'hen', description: '織物・糸に関する偏 (線, 細, 組, 約, 結)' },
-  { id: 'rad_nogihen', char: '禾', name: 'のぎへん', category: 'hen', description: '穀物・稲に関する偏 (秋, 科, 秒, 和, 税)' },
-  { id: 'rad_kanehen', char: '金', name: 'かねへん', category: 'hen', description: '金属・鉱物に関する偏 (鉄, 銀, 銅, 針, 鉱)' },
-  { id: 'rad_hihen_sun', char: '日', name: 'ひへん', category: 'hen', description: '太陽・時間に関する偏 (晴, 明, 時, 暗, 昨)' },
-  { id: 'rad_tsukihen', char: '月', name: 'つきへん・肉月', category: 'hen', description: '人体・肉に関する偏 (服, 胴, 腕, 脚, 脳)' },
-  { id: 'rad_kuchihen', char: '口', name: 'くちへん', category: 'hen', description: '口・発声に関する偏 (味, 叫, 吸, 呼, 鳴)' },
-  { id: 'rad_tsuchihen', char: '土', name: 'つちへん', category: 'hen', description: '土地・土壌に関する偏 (地, 坂, 場, 城, 境)' },
-  { id: 'rad_onnahen', char: '女', name: 'おんなへん', category: 'hen', description: '女性・家族に関する偏 (妹, 姉, 好, 姓, 娘)' },
-  { id: 'rad_risshinben', char: '忄', name: 'りっしんべん', category: 'hen', description: '心・感情に関する偏 (情, 快, 忙, 性, 悩)' },
-  { id: 'rad_hihen_fire', char: '火', name: 'ひへん', category: 'hen', description: '火・熱に関する偏 (灯, 炊, 焼, 煙, 燃)' },
-  { id: 'rad_kurumahen', char: '車', name: 'くるまへん', category: 'hen', description: '乗り物・輸送に関する偏 (転, 輪, 軽, 輸, 軌)' },
-  { id: 'rad_kaihen', char: '貝', name: 'かいへん', category: 'hen', description: '財貨・金銭に関する偏 (買, 販, 財, 貯, 貴)' },
-  { id: 'rad_mehen', char: '目', name: 'めへん', category: 'hen', description: '目・視覚に関する偏 (眼, 眠, 眺, 睡, 盲)' },
-  { id: 'rad_ashihen', char: '足', name: 'あしへん', category: 'hen', description: '足・歩行に関する偏 (路, 踏, 跳, 跡, 踊)' },
-  { id: 'rad_shokuhen', char: '飠', name: 'しょくへん', category: 'hen', description: '食事・食物に関する偏 (飲, 館, 飯, 飼, 飢)' },
-  { id: 'rad_mushihen', char: '虫', name: 'むしへん', category: 'hen', description: '小動物・昆虫に関する偏 (蝶, 蚊, 蛇, 蜂, 蚕)' },
-  { id: 'rad_sakanahen', char: '魚', name: 'さかなへん', category: 'hen', description: '魚類・海産物に関する偏 (鮮, 鯨, 鮭, 鮎, 鯉)' },
-  { id: 'rad_kozatohen', char: '阝', name: 'こざとへん', category: 'hen', description: '丘陵・地形に関する偏 (防, 階, 限, 陸, 隊)' },
-  { id: 'rad_yumihen', char: '弓', name: 'ゆみへん', category: 'hen', description: '弓・弾力に関する偏 (引, 張, 強, 弦, 弧)' },
-  { id: 'rad_gyoninben_preset', char: '彳', name: 'ぎょうにんべん', category: 'hen', description: '道路・歩行に関する偏 (役, 彼, 待, 律, 従)' },
-  { id: 'rad_kemonoben_preset', char: '犭', name: 'けものへん', category: 'hen', description: '獣・動物に関する偏 (犯, 狂, 狩, 独, 狼)' },
-  { id: 'rad_ouhen_preset', char: '王', name: 'おうへん・たまへん', category: 'hen', description: '玉・宝飾に関する偏 (珍, 珠, 現, 球, 理)' },
-  { id: 'rad_ishihen_preset', char: '石', name: 'いしへん', category: 'hen', description: '岩石・硬質に関する偏 (砂, 研, 砕, 破, 確)' },
-  { id: 'rad_shimesuhen_preset', char: '礻', name: 'しめすへん', category: 'hen', description: '神仏・祭祀に関する偏 (礼, 社, 祈, 祝, 神)' },
-  { id: 'rad_koromohen_preset', char: '衤', name: 'ころもへん', category: 'hen', description: '衣服・布に関する偏 (初, 袖, 被, 補, 複)' },
-  { id: 'rad_komehen_preset', char: '米', name: 'こめへん', category: 'hen', description: '米・穀粉に関する偏 (粉, 粒, 粗, 粘, 粋)' },
-  { id: 'rad_funehen_preset', char: '舟', name: 'ふねへん', category: 'hen', description: '船・航海に関する偏 (航, 船, 舶, 艇, 艦)' },
-  { id: 'rad_torihen_sake_preset', char: '酉', name: 'とりへん・ひよみ', category: 'hen', description: '酒類・醸造に関する偏 (配, 酒, 酔, 酢, 酪)' },
-  { id: 'rad_umahen_preset', char: '馬', name: 'うまへん', category: 'hen', description: '馬・騎乗に関する偏 (駅, 駆, 駐, 駒, 騎)' },
-  { id: 'rad_yahen', char: '矢', name: 'やへん', category: 'hen', description: '矢・射撃・寸法に関する偏 (知, 短, 矯, 矩)' },
-  { id: 'rad_kakuhen', char: '角', name: 'つのへん', category: 'hen', description: '角・触角に関する偏 (解, 触, 嘴)' },
-  { id: 'rad_kawahen', char: '革', name: 'かわへん', category: 'hen', description: '皮革・製革に関する偏 (靴, 鞍, 鞭, 鞄)' },
-  { id: 'rad_ushihen', char: '牛', name: 'うしへん', category: 'hen', description: '家畜・牛に関する偏 (物, 特, 牧, 牲)' },
-  { id: 'rad_mugihen', char: '麦', name: 'むぎへん', category: 'hen', description: '穀物・麺類に関する偏 (麺, 麹, 麩)' },
-  { id: 'rad_gatsuhen', char: '歹', name: 'がつへん・かばねへん', category: 'hen', description: '死傷・残骸に関する偏 (死, 残, 殉, 殖)' },
-  { id: 'rad_katahen', char: '片', name: 'かたへん', category: 'hen', description: '薄片・札に関する偏 (版, 牌, 牒)' },
-  { id: 'rad_honehen', char: '骨', name: 'ほねへん', category: 'hen', description: '骨格・身体構造に関する偏 (髄, 骸, 骼)' },
-  { id: 'rad_tanihen', char: '谷', name: 'たにへん', category: 'hen', description: '渓谷・谷間に関する偏 (谿, 豁)' },
-  { id: 'rad_kibahen', char: '牙', name: 'きばへん', category: 'hen', description: '牙・突出部に関する偏 (邪, 芽)' },
-  { id: 'rad_tahen', char: '田', name: 'たへん', category: 'hen', description: '田畑・土地に関する偏 (町, 画, 界, 略)' },
-
-  // 旁 (Tsukuri)
-  { id: 'rad_rittou', char: '刂', name: 'りっとう', category: 'tsukuri', description: '刃物・切断に関する旁 (列, 刻, 創, 割, 判)' },
-  { id: 'rad_chikara', char: '力', name: 'ちから', category: 'tsukuri', description: '力・労働に関する旁 (助, 動, 効, 勇, 勢)' },
-  { id: 'rad_nobun', char: '攵', name: 'のぶん・ぼくづくり', category: 'tsukuri', description: '動作・活動に関する旁 (改, 教, 敬, 数, 救)' },
-  { id: 'rad_furutori', char: '隹', name: 'ふるとり', category: 'tsukuri', description: '小鳥に関する旁 (集, 難, 雀, 雅, 雇)' },
-  { id: 'rad_oogai', char: '頁', name: 'おおがい', category: 'tsukuri', description: '頭部・顔に関する旁 (頭, 額, 願, 順, 頂)' },
-  { id: 'rad_oozato', char: '阝', name: 'おおざと', category: 'tsukuri', description: '村落・都市に関する旁 (都, 部, 郷, 郵, 郡)' },
-  { id: 'rad_miru', char: '見', name: 'みる', category: 'tsukuri', description: '視覚に関する旁 (視, 親, 観, 覚, 規)' },
-  { id: 'rad_tori', char: '鳥', name: 'とり', category: 'tsukuri', description: '鳥類に関する旁 (鳴, 鴎, 鶏, 鴨, 鳩)' },
-  { id: 'rad_fushizukuri_preset', char: '卩', name: 'ふしづくり', category: 'tsukuri', description: '節度・印章に関する旁 (印, 危, 卵, 却, 即)' },
-  { id: 'rad_rumata_preset', char: '殳', name: 'るまた・ほこづくり', category: 'tsukuri', description: '打撃・武器に関する旁 (段, 殺, 殿, 殴, 殻)' },
-  { id: 'rad_sun_preset', char: '寸', name: 'すん', category: 'tsukuri', description: '寸法・規則に関する旁 (対, 封, 射, 専, 導)' },
-  { id: 'rad_akubi_preset', char: '欠', name: 'あくび・かける', category: 'tsukuri', description: '呼吸・欠乏に関する旁 (次, 欲, 歌, 歓, 欺)' },
-  { id: 'rad_hoko_preset', char: '戈', name: 'ほこ', category: 'tsukuri', description: '武器・防衛に関する旁 (成, 戒, 戦, 戯, 截)' },
-  { id: 'rad_onodukuri_preset', char: '斤', name: 'おのづくり', category: 'tsukuri', description: '斧・切断に関する旁 (斧, 斬, 新, 断)' },
-  { id: 'rad_sanzukuri', char: '彡', name: 'さんづくり', category: 'tsukuri', description: '模様・光彩に関する旁 (影, 彫, 形, 彩, 彦)' },
-  { id: 'rad_houzukuri', char: '方', name: 'ほうづくり', category: 'tsukuri', description: '方向・展開に関する旁 (施, 旅, 族, 旗)' },
-  { id: 'rad_fudezukuri', char: '聿', name: 'ふでづくり', category: 'tsukuri', description: '筆記・法則に関する旁 (律, 建, 粛)' },
-  { id: 'rad_ao', char: '青', name: 'あお', category: 'tsukuri', description: '清澄・色彩に関する旁 (静, 靛)' },
-  { id: 'rad_han', char: '反', name: 'はん', category: 'tsukuri', description: '傾斜・反転に関する旁 (坂, 板, 飯, 叛)' },
-  { id: 'rad_mushizukuri', char: '虫', name: 'むしづくり', category: 'tsukuri', description: '虫・侵食に関する旁 (融, 蝕)' },
-  { id: 'rad_ozukuri', char: '巴', name: 'ともえ・おづくり', category: 'tsukuri', description: '渦巻き・屈曲に関する旁 (邑, 杷, 琶)' },
-
-  // 冠 (Kanmuri)
-  { id: 'rad_kusakanmuri', char: '艹', name: 'くさかんむり', category: 'kanmuri', description: '草木・植物に関する冠 (花, 草, 茶, 苗, 華)' },
-  { id: 'rad_ukanmuri', char: '宀', name: 'うかんむり', category: 'kanmuri', description: '屋根・家屋に関する冠 (家, 安, 室, 宿, 守)' },
-  { id: 'rad_takekanmuri', char: '⺮', name: 'たけかんむり', category: 'kanmuri', description: '竹・竹製品に関する冠 (竹, 笑, 等, 筆, 笛)' },
-  { id: 'rad_amekanmuri', char: '⻗', name: 'あめかんむり', category: 'kanmuri', description: '気象・雨に関する冠 (雪, 雲, 電, 震, 霜)' },
-  { id: 'rad_hitoyane', char: '𠆢', name: 'ひとやね', category: 'kanmuri', description: '人・覆いに関する冠 (今, 会, 合, 全, 令)' },
-  { id: 'rad_wakanmuri', char: '冖', name: 'わかんむり', category: 'kanmuri', description: '覆い布に関する冠 (冠, 冥, 冨, 冤)' },
-  { id: 'rad_nabebuta', char: '亠', name: 'なべぶた', category: 'kanmuri', description: '頭部・被せ物に関する冠 (交, 京, 亭, 亡, 夜)' },
-  { id: 'rad_anakanmuri', char: '穴', name: 'あなかんむり', category: 'kanmuri', description: '洞穴・空間に関する冠 (空, 究, 突, 窒, 窓)' },
-  { id: 'rad_hatsugashira_preset', char: '癶', name: 'はつがしら', category: 'kanmuri', description: '踏み出しに関する冠 (発, 登, 癸)' },
-  { id: 'rad_toragashira_preset', char: '虍', name: 'とらがしら', category: 'kanmuri', description: '虎・猛獣に関する冠 (虎, 虐, 処, 虚, 虜)' },
-  { id: 'rad_tsumekanmuri_preset', char: '爫', name: 'つめかんむり', category: 'kanmuri', description: '爪・手の動作に関する冠 (妥, 采, 受, 争, 愛)' },
-  { id: 'rad_amigashira_preset', char: '罒', name: 'あみがしら', category: 'kanmuri', description: '網・法規に関する冠 (罪, 置, 罰, 署, 罵)' },
-  { id: 'rad_oigashira', char: '耂', name: 'おいがしら', category: 'kanmuri', description: '長老・経験に関する冠 (考, 者, 孝, 耆)' },
-  { id: 'rad_irigashira', char: '入', name: 'いりがしら', category: 'kanmuri', description: '集合・入り口に関する冠 (全, 会, 合, 今)' },
-  { id: 'rad_keigashira', char: '彐', name: 'けいがしら', category: 'kanmuri', description: '把持・彗星に関する冠 (彗, 尋, 彙)' },
-  { id: 'rad_higashira', char: '日', name: 'ひがしら', category: 'kanmuri', description: '太陽・上部の日に関する冠 (冒, 暑, 昌)' },
-  { id: 'rad_nogigashira', char: '禾', name: 'のぎがしら', category: 'kanmuri', description: '穀物穂に関する冠 (秀, 季, 私)' },
-
-  // 脚 (Ashi)
-  { id: 'rad_kokoro', char: '心', name: 'こころ', category: 'ashi', description: '心・思考に関する脚 (思, 息, 忍, 忠, 志)' },
-  { id: 'rad_rekka', char: '灬', name: 'れっか・れんが', category: 'ashi', description: '火・熱に関する脚 (熱, 点, 然, 照, 烈)' },
-  { id: 'rad_hitoashi', char: '儿', name: 'ひとあし', category: 'ashi', description: '人の足・歩行に関する脚 (兄, 先, 光, 免, 児)' },
-  { id: 'rad_sara', char: '皿', name: 'さら', category: 'ashi', description: '器・食器に関する脚 (盆, 盛, 益, 盟, 盗)' },
-  { id: 'rad_shitagokoro_preset', char: '忄', name: 'したごころ', category: 'ashi', description: '心情に関する脚 (恭, 慕, 忝, 泰)' },
-  { id: 'rad_hane_ashi_preset', char: '羽', name: 'はね', category: 'ashi', description: '羽毛・飛翔に関する脚 (翌, 習, 翠, 翼, 翻)' },
-  { id: 'rad_shitamizu', char: '水', name: 'したみず', category: 'ashi', description: '流体・水流に関する脚 (泰, 暴, 康, 漆)' },
-  { id: 'rad_shitagi', char: '木', name: 'したぎ', category: 'ashi', description: '樹木・台座に関する脚 (柔, 某, 染, 案, 栗)' },
-  { id: 'rad_shitatsuchi', char: '土', name: 'したつち', category: 'ashi', description: '土台・建造物に関する脚 (聖, 堅, 墓, 塞, 壁)' },
-  { id: 'rad_shitaisi', char: '石', name: 'したいし', category: 'ashi', description: '硬質・基石に関する脚 (砦, 碧, 磬)' },
-  { id: 'rad_shitagai', char: '貝', name: 'したがい', category: 'ashi', description: '財貨・価値に関する脚 (買, 責, 質, 賢, 貧)' },
-  { id: 'rad_shitaonna', char: '女', name: 'したおんな', category: 'ashi', description: '女性・受容に関する脚 (姿, 妄, 妥, 妻, 妾)' },
-  { id: 'rad_shitatama', char: '玉', name: 'したたま', category: 'ashi', description: '宝玉・装飾に関する脚 (璧, 璽)' },
-
-  // 構え・繞・垂れ (Kamae, Nyo, Tare)
-  { id: 'rad_mongamae', char: '門', name: 'もんがまえ', category: 'kamae', description: '出入口・門に関する構え (開, 閉, 問, 関, 間)' },
-  { id: 'rad_kunigamae', char: '囗', name: 'くにがまえ', category: 'kamae', description: '囲い・領域に関する構え (国, 園, 回, 囲, 団)' },
-  { id: 'rad_gyougame_preset', char: '行', name: 'ぎょうがまえ', category: 'kamae', description: '街路・往来に関する構え (術, 街, 衛, 衝, 衡)' },
-  { id: 'rad_tsutsumigamae_preset', char: '勹', name: 'つつみがまえ', category: 'kamae', description: '包み・抱え込みに関する構え (包, 匂, 句, 旬)' },
-  { id: 'rad_hakogamae_preset', char: '匚', name: 'はこがまえ', category: 'kamae', description: '容器・収容に関する構え (匠, 匡, 匣, 匪)' },
-  { id: 'rad_kigamae_preset', char: '气', name: 'きがまえ', category: 'kamae', description: '気体・大気に関する構え (気, 氛, 氤)' },
-  { id: 'rad_keigamae', char: '冂', name: 'けいがまえ・けいこ', category: 'kamae', description: '領域・枠組みに関する構え (冊, 再, 同, 周, 岡)' },
-  { id: 'rad_kangamae', char: '凵', name: 'かんがまえ・うけばこ', category: 'kamae', description: 'くぼみ・受け箱に関する構え (凶, 出, 函, 幽)' },
-  { id: 'rad_kazegamae', char: '風', name: 'かぜがまえ', category: 'kamae', description: '風・空気に関する構え (嵐, 飄, 颱)' },
-  { id: 'rad_hokogamae', char: '戈', name: 'ほこがまえ', category: 'kamae', description: '武器・防衛に関する構え (成, 戒, 或, 戚)' },
-  { id: 'rad_shinnyo', char: '⻌', name: 'しんにょう', category: 'nyo', description: '道・移動に関する繞 (道, 通, 進, 近, 運)' },
-  { id: 'rad_ennyo_preset', char: '廴', name: 'えんにょう', category: 'nyo', description: '長距離の移動に関する繞 (延, 建, 廷, 廻)' },
-  { id: 'rad_sounyo_preset', char: '走', name: 'そうにょう', category: 'nyo', description: '疾走・走行に関する繞 (赴, 起, 超, 越, 趣)' },
-  { id: 'rad_kinyo_preset', char: '鬼', name: 'きにょう', category: 'nyo', description: '鬼神・霊魂に関する繞 (魅, 魄, 魁, 魔)' },
-  { id: 'rad_muginyo', char: '麦', name: 'むぎにょう', category: 'nyo', description: '麦・穀物加工に関する繞 (麺, 麩)' },
-  { id: 'rad_takenyo', char: '竹', name: 'たけにょう', category: 'nyo', description: '竹・竿に関する繞 (竿, 筍)' },
-  { id: 'rad_madare', char: '广', name: 'まだれ', category: 'tare', description: '建物・屋敷に関する垂れ (広, 店, 座, 庫, 庁)' },
-  { id: 'rad_yamaidare', char: '疒', name: 'やまいだれ', category: 'tare', description: '病気・症状に関する垂れ (病, 痛, 療, 痕, 疾)' },
-  { id: 'rad_shikabane', char: '尸', name: 'しかばね', category: 'tare', description: '身体・住まいに関する垂れ (屋, 展, 屈, 局, 居)' },
-  { id: 'rad_gandare_preset', char: '厂', name: 'がんだれ', category: 'tare', description: '崖・岩陰に関する垂れ (厄, 原, 厚, 厩, 厳)' },
-  { id: 'rad_todare_preset', char: '戸', name: 'とだれ', category: 'tare', description: '扉・出入口に関する垂れ (戻, 房, 所, 扉, 扇)' },
-  { id: 'rad_koromodare', char: '衤', name: 'ころもだれ', category: 'tare', description: '衣服・被覆に関する垂れ (表, 衰)' },
 
   // 基本筆画・ストローク (Stroke)
   { id: 'rad_stroke_h_line', char: '一', name: '横画 (水平)', category: 'stroke', description: '基本水平ストローク (一, 二, 三, 上, 下)' },
@@ -477,10 +378,18 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   // Guide Overlays
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [showKanjiGuides, setShowKanjiGuides] = useState<boolean>(true);
+  const [isWireframeMode, setIsWireframeMode] = useState<boolean>(false);
   const [showNineBoxes, setShowNineBoxes] = useState<boolean>(false);
   const [showMetrics, setShowMetrics] = useState<boolean>(true);
   const [showWatermark, setShowWatermark] = useState<boolean>(true);
   const [watermarkChar, setWatermarkChar] = useState<string>(selectedChar || '休');
+  const [watermarkOpacity, setWatermarkOpacity] = useState<number>(0.18);
+  const [watermarkScale, setWatermarkScale] = useState<number>(1.0);
+  const [showWatermarkPicker, setShowWatermarkPicker] = useState<boolean>(false);
+
+  // Magnetic Snapping States
+  const [isSnapEnabled, setIsSnapEnabled] = useState<boolean>(true);
+  const [activeSnapLines, setActiveSnapLines] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
 
   // Batch insertion states
   const [insertMode, setInsertMode] = useState<'single' | 'batch'>('single');
@@ -513,6 +422,24 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   const [activePenContour, setActivePenContour] = useState<PathContour | null>(null);
   const [penMousePos, setPenMousePos] = useState<Point | null>(null);
   const [penHudPos, setPenHudPos] = useState<{ x: number; y: number } | null>(null);
+  const [penStrokeWidth, setPenStrokeWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('glyph_pen_stroke_width');
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (val >= 2 && val <= 300) return val;
+      }
+    } catch {}
+    return 40;
+  });
+  const [penCapStyle, setPenCapStyle] = useState<'round' | 'butt' | 'square'>(() => {
+    try {
+      const saved = localStorage.getItem('glyph_pen_cap_style');
+      if (saved === 'round' || saved === 'butt' || saved === 'square') return saved;
+    } catch {}
+    return 'round';
+  });
+  const [showPenStrokeMenu, setShowPenStrokeMenu] = useState<boolean>(false);
   const isDraggingPenHudRef = useRef(false);
   const penHudDragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -551,24 +478,17 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
   const lastSavedPartsJsonRef = useRef<string>('');
 
-  // Reload custom parts from storage
-  const reloadPartsFromStorage = useCallback(() => {
+  // Reload custom parts from IndexedDB
+  const reloadPartsFromStorage = useCallback(async () => {
     try {
-      const saved = localStorage.getItem(CUSTOM_PARTS_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const sanitized = sanitizeCustomParts(parsed);
-        if (sanitized.length > 0) {
-          setParts((prev) => {
-            if (JSON.stringify(prev) === saved) return prev;
-            lastSavedPartsJsonRef.current = saved;
-            return sanitized;
-          });
-          setSelectedPartId((prevId) => {
-            if (sanitized.some((p) => p.id === prevId)) return prevId;
-            return sanitized[0]?.id || '';
-          });
-        }
+      const loaded = await loadCustomParts();
+      const sanitized = sanitizeCustomParts(loaded);
+      if (sanitized.length > 0) {
+        setParts(sanitized);
+        setSelectedPartId((prevId) => {
+          if (sanitized.some((p) => p.id === prevId)) return prevId;
+          return sanitized[0]?.id || '';
+        });
       }
     } catch {
       // ignore
@@ -589,18 +509,16 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     prevIsOpenRef.current = isOpen;
   }, [isOpen, selectedChar, reloadPartsFromStorage]);
 
-  // Save parts to localStorage whenever they change while modal is open, and notify external listeners
+  // Save parts to IndexedDB whenever they change while modal is open, and notify external listeners
   useEffect(() => {
-    if (!isOpen) return;
-    try {
-      const json = JSON.stringify(parts);
-      if (json === lastSavedPartsJsonRef.current) return;
-      lastSavedPartsJsonRef.current = json;
-      localStorage.setItem(CUSTOM_PARTS_STORAGE_KEY, json);
+    if (!isOpen || !parts || parts.length === 0) return;
+    const jsonKey = JSON.stringify(parts.map((p) => p.id));
+    if (jsonKey === lastSavedPartsJsonRef.current) return;
+    lastSavedPartsJsonRef.current = jsonKey;
+
+    saveCustomParts(parts).then(() => {
       window.dispatchEvent(new Event('font_custom_parts_updated'));
-    } catch (e) {
-      console.warn('Failed to save custom parts:', e);
-    }
+    });
   }, [parts, isOpen]);
 
   // Center editor view whenever selected part changes or on initial open
@@ -629,12 +547,131 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   }, [isOpen, resetView]);
 
   useEffect(() => {
+    const el = canvasContainerRef.current;
+    if (!el || !isOpen) return;
+
+    const handleWheelNative = (e: WheelEvent) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      let delta = e.deltaY;
+      if (e.deltaMode === 1) delta *= 16;
+      else if (e.deltaMode === 2) delta *= 800;
+
+      const zoomFactor = Math.pow(1.12, -delta / 120);
+
+      setZoom((prevZoom) => {
+        const nextZoom = Math.max(0.15, Math.min(6.0, prevZoom * zoomFactor));
+        const scale = nextZoom / prevZoom;
+
+        setPan((prevPan) => ({
+          x: mouseX - (mouseX - prevPan.x) * scale,
+          y: mouseY - (mouseY - prevPan.y) * scale,
+        }));
+
+        return nextZoom;
+      });
+    };
+
+    el.addEventListener('wheel', handleWheelNative, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheelNative);
+  }, [isOpen]);
+
+  useEffect(() => {
     setUndoStack([]);
     setRedoStack([]);
     setSelectedContourId(null);
     setSelectedNodeId(null);
     setActivePenContour(null);
   }, [selectedPartId]);
+
+  // Related Kanji list containing current radical for watermark tracing guide picker
+  const relatedKanjiList = useMemo(() => {
+    if (!activePart) return ['休', '体', '保', '信', '作', '使', '個', '倍', '値', '倶'];
+
+    const partName = activePart.name || '';
+    const matchEntry = RADICAL_KANJI_DATABASE.find(
+      (r) =>
+        (partName && (partName.includes(r.name) || r.name.includes(partName))) ||
+        (activePart.char && r.char === activePart.char) ||
+        r.id === activePart.id
+    );
+
+    if (matchEntry && matchEntry.kanjiList.length > 0) {
+      return matchEntry.kanjiList;
+    }
+
+    const categoryPresets = KANJI_PRESETS_BY_CATEGORY[activePart.category] || KANJI_PRESETS_BY_CATEGORY.other;
+    const projectChars = (Object.values(project.glyphs || {}) as GlyphData[]).map((g) => g.char);
+    const combined = Array.from(new Set([...categoryPresets, ...projectChars])).filter(Boolean);
+    return combined.length > 0 ? combined.slice(0, 20) : ['休', '体', '保', '信', '作', '使', '個', '倍'];
+  }, [activePart, project.glyphs]);
+
+  // Magnetic guide & grid snapping helper
+  const snapToGuides = useCallback(
+    (pos: Point, snapDist = 12): { point: Point; snapX: number | null; snapY: number | null } => {
+      if (!isSnapEnabled) {
+        return { point: pos, snapX: null, snapY: null };
+      }
+
+      const keyXLines = [500, 460, 540, 333, 667];
+      const keyYLines = [500, 380, 620, 333, 667];
+
+      let snappedX = pos.x;
+      let activeSnapX: number | null = null;
+      let minDistX = snapDist;
+
+      for (const lx of keyXLines) {
+        const d = Math.abs(pos.x - lx);
+        if (d < minDistX) {
+          minDistX = d;
+          snappedX = lx;
+          activeSnapX = lx;
+        }
+      }
+
+      if (activeSnapX === null && showGrid) {
+        const gridX = Math.round(pos.x / 25) * 25;
+        if (Math.abs(pos.x - gridX) < snapDist) {
+          snappedX = gridX;
+          activeSnapX = gridX;
+        }
+      }
+
+      let snappedY = pos.y;
+      let activeSnapY: number | null = null;
+      let minDistY = snapDist;
+
+      for (const ly of keyYLines) {
+        const d = Math.abs(pos.y - ly);
+        if (d < minDistY) {
+          minDistY = d;
+          snappedY = ly;
+          activeSnapY = ly;
+        }
+      }
+
+      if (activeSnapY === null && showGrid) {
+        const gridY = Math.round(pos.y / 25) * 25;
+        if (Math.abs(pos.y - gridY) < snapDist) {
+          snappedY = gridY;
+          activeSnapY = gridY;
+        }
+      }
+
+      return {
+        point: { x: snappedX, y: snappedY },
+        snapX: activeSnapX,
+        snapY: activeSnapY,
+      };
+    },
+    [isSnapEnabled, showGrid]
+  );
 
   // Global Keyboard Shortcuts within Studio Modal
   useEffect(() => {
@@ -653,7 +690,9 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       }
 
       // Undo / Redo
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      const isZ = e.code === 'KeyZ' || e.key === 'z' || e.key === 'Z';
+      const isY = e.code === 'KeyY' || e.key === 'y' || e.key === 'Y';
+      if ((e.ctrlKey || e.metaKey) && isZ) {
         e.preventDefault();
         if (e.shiftKey) {
           handleRedo();
@@ -664,27 +703,34 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
         }
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+      if ((e.ctrlKey || e.metaKey) && isY) {
         e.preventDefault();
         handleRedo();
         return;
       }
 
+      // Save shortcut
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyS' || e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        handleExportLibraryJson();
+        return;
+      }
+
       // Tool Switching Shortcuts
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        if (e.key === 'v' || e.key === 'V') {
+        if (e.code === 'KeyV' || e.key === 'v' || e.key === 'V') {
           e.preventDefault();
           setToolMode('select');
-        } else if (e.key === 'p' || e.key === 'P') {
+        } else if (e.code === 'KeyP' || e.key === 'p' || e.key === 'P') {
           e.preventDefault();
           setToolMode('pen');
-        } else if (e.key === 'b' || e.key === 'B') {
+        } else if (e.code === 'KeyB' || e.key === 'b' || e.key === 'B') {
           e.preventDefault();
           setToolMode('brush');
-        } else if (e.key === 'e' || e.key === 'E') {
+        } else if (e.code === 'KeyE' || e.key === 'e' || e.key === 'E') {
           e.preventDefault();
           setToolMode('eraser');
-        } else if (e.key === 'h' || e.key === 'H') {
+        } else if (e.code === 'KeyH' || e.key === 'h' || e.key === 'H') {
           e.preventDefault();
           setToolMode('hand');
         } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -899,6 +945,9 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   const handleDeleteSelectedContour = () => {
     if (!activePart || !selectedContourId) return;
     const updated = activePart.contours.filter((c) => c.id !== selectedContourId);
+    if (updated.length === 0 && activeBrushPathRef.current) {
+      activeBrushPathRef.current.setAttribute('d', '');
+    }
     commitPartChange(updated);
     setSelectedContourId(null);
     setSelectedNodeId(null);
@@ -1809,9 +1858,22 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       return;
     }
 
-    const pos = getCanvasCoords(e);
+    const rawPos = getCanvasCoords(e);
+    const snapped = snapToGuides(rawPos);
+
+    if (isDraggingNode || isDraggingContour || toolMode === 'pen' || shapeStartPoint) {
+      if (activeSnapLines.x !== snapped.snapX || activeSnapLines.y !== snapped.snapY) {
+        setActiveSnapLines({ x: snapped.snapX, y: snapped.snapY });
+      }
+    } else if (activeSnapLines.x !== null || activeSnapLines.y !== null) {
+      setActiveSnapLines({ x: null, y: null });
+    }
+
+    const pos = snapped.point;
     if (toolMode === 'pen') {
-      setPenMousePos(pos);
+      if (!penMousePos || Math.hypot(penMousePos.x - pos.x, penMousePos.y - pos.y) > 0.5) {
+        setPenMousePos(pos);
+      }
     }
 
     // Live Brush Stroke Engine
@@ -2007,6 +2069,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     setIsDraggingNode(false);
     setIsDraggingContour(false);
     setSelectedHandleType(null);
+    setActiveSnapLines({ x: null, y: null });
 
     // Record undo state if a node or contour drag occurred in select mode
     if (dragStartContoursRef.current && activePart) {
@@ -2046,7 +2109,23 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           brushStyle
         );
         if (rawContour && rawContour.nodes.length >= 3) {
-          const strokeContour = rawContour;
+          let strokeContour = rawContour;
+          try {
+            const selfMerged = unionContours([strokeContour], 1.2, true);
+            if (selfMerged && selfMerged.length === 1) {
+              strokeContour = selfMerged[0];
+            } else if (selfMerged && selfMerged.length > 1) {
+              commitPartChange(normalizeGlyphContoursWinding([...activePart.contours, ...selfMerged]));
+              setIsDrawingStroke(false);
+              brushStrokePointsRef.current = [];
+              if (activeBrushPathRef.current) {
+                activeBrushPathRef.current.setAttribute('d', '');
+              }
+              return;
+            }
+          } catch {
+            // ignore
+          }
 
           if (isAutoUnionMode && activePart.contours.length > 0) {
             try {
@@ -2153,8 +2232,41 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     setSelectedNodeId(null);
   };
 
-  const handleFinishPartPenContour = (closed: boolean = false) => {
+  const handleFinishPartPenContour = (closed: boolean = false, customWidth?: number) => {
     if (!activePenContour || activePenContour.nodes.length < 2 || !activePart) return;
+    setShowPenStrokeMenu(false);
+    const targetWidth = customWidth ?? penStrokeWidth;
+
+    if (!closed) {
+      try {
+        const rawContour: PathContour = {
+          ...activePenContour,
+          closed: false,
+        };
+        const expanded = expandStrokeContours([rawContour], targetWidth, penCapStyle);
+        if (expanded && expanded.length > 0) {
+          let resultContours = expanded;
+          if (isAutoUnionMode && activePart.contours.length > 0) {
+            try {
+              const unioned = unionContours([...activePart.contours, ...expanded]);
+              if (unioned && unioned.length > 0) {
+                commitPartChange(normalizeGlyphContoursWinding(unioned));
+                setActivePenContour(null);
+                setSelectedContourId(null);
+                return;
+              }
+            } catch {}
+          }
+          commitPartChange([...activePart.contours, ...resultContours]);
+          setActivePenContour(null);
+          setSelectedContourId(resultContours[0].id);
+          return;
+        }
+      } catch (err) {
+        console.warn('Part stroke expansion fallback:', err);
+      }
+    }
+
     const finished: PathContour = {
       ...activePenContour,
       closed,
@@ -2325,6 +2437,17 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     }
   };
 
+  const handleSimplifyPart = () => {
+    if (!activePart || !activePart.contours || activePart.contours.length === 0) return;
+    try {
+      const result = simplifyGlyphContours(activePart.contours, { tolerance: 2.0 });
+      commitPartChange(result.contours);
+      notify(`パスの単純化を実行しました（${result.reducedCount}頂点削減）`, 'success');
+    } catch (e) {
+      notify('パスの単純化に失敗しました', 'error');
+    }
+  };
+
   const handleCenterPartInCanvas = () => {
     if (!activePart || !activePart.contours || activePart.contours.length === 0) return;
     const bbox = getContoursBoundingBox(activePart.contours);
@@ -2348,7 +2471,16 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   };
 
   const handleClearCanvas = () => {
-    if (!activePart || !activePart.contours || activePart.contours.length === 0) return;
+    if (!activePart) return;
+    if (activeBrushPathRef.current) {
+      activeBrushPathRef.current.setAttribute('d', '');
+    }
+    brushStrokePointsRef.current = [];
+    setActivePenContour(null);
+    setSelectedContourId(null);
+    setSelectedNodeId(null);
+    setShapeStartPoint(null);
+    setShapeCurrentPoint(null);
     commitPartChange([]);
     notify('輪郭を全消去しました', 'info');
   };
@@ -2436,14 +2568,14 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               ? 'fixed inset-0 z-50 w-screen h-screen bg-[#f4f8f5] text-stone-800'
               : 'fixed inset-0 z-50 w-screen h-screen bg-[#121b15] text-emerald-100'
             : isLight
-            ? 'w-[98vw] h-[96vh] max-w-[1720px] rounded-2xl border border-[#c8ded3] shadow-2xl bg-[#f4f8f5] text-stone-800'
-            : 'w-[98vw] h-[96vh] max-w-[1720px] rounded-2xl border border-[#25362b] shadow-2xl bg-[#121b15] text-emerald-100'
+            ? 'w-full sm:w-[98vw] h-[100vh] sm:h-[96vh] max-w-[1720px] rounded-none sm:rounded-2xl border border-stone-200/60 shadow-2xl bg-[#f4f8f5] text-stone-800'
+            : 'w-full sm:w-[98vw] h-[100vh] sm:h-[96vh] max-w-[1720px] rounded-none sm:rounded-2xl border border-stone-800/60 shadow-2xl bg-[#121b15] text-emerald-100'
         }`}
       >
         {/* ================= MODAL TOP HEADER ================= */}
         <div
           className={`px-3 sm:px-4 py-2 border-b flex items-center justify-between shrink-0 gap-2 ${
-            isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#18241c] border-[#25362b]'
+            isLight ? 'bg-white border-stone-200/60' : 'bg-[#18241c] border-stone-800/60'
           }`}
         >
           <div className="flex items-center space-x-2.5 min-w-0">
@@ -2459,12 +2591,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                 <h2 className="text-sm font-bold tracking-wide truncate">
                   部首・作字パーツ工房
                 </h2>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                    isLight ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                  }`}
-                >
-                  {parts.length}パーツ
+                <span className="text-xs text-stone-500 font-mono font-medium truncate shrink-0">
+                  パーツ数 {parts.length}
                 </span>
               </div>
               <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate hidden md:block">
@@ -2582,7 +2710,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           {/* ================= LEFT COLUMN: PARTS LIBRARY & PRESETS ================= */}
           {!isLeftSidebarOpen ? (
             <div
-              className={`w-10 border-r flex flex-col items-center py-3 shrink-0 cursor-pointer select-none transition-colors ${
+              className={`hidden md:flex w-10 border-r flex-col items-center py-3 shrink-0 cursor-pointer select-none transition-colors ${
                 isLight
                   ? 'bg-white border-[#d8e6df] hover:bg-emerald-50/70 text-stone-600'
                   : 'bg-[#162119] border-[#25362b] hover:bg-[#1f2e23] text-emerald-300'
@@ -2597,27 +2725,33 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                 <ChevronRight className="w-5 h-5" />
               </button>
               <div className="mt-6 flex flex-col items-center space-y-2">
-                <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <Shapes className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span className="text-[10.5px] font-bold [writing-mode:vertical-rl] tracking-wider opacity-80">
                   {leftSidebarTab === 'presets' ? `標準部首 (${filteredPresets.length})` : `マイパーツ (${parts.length})`}
                 </span>
               </div>
             </div>
           ) : (
-            <div
-              className={`w-72 sm:w-80 xl:w-88 border-r flex flex-col shrink-0 min-h-0 relative z-10 overflow-hidden ${
-                isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#162119] border-[#25362b]'
-              }`}
-            >
+            <>
+              {/* Mobile Backdrop */}
+              <div
+                className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-40 animate-fadeIn"
+                onClick={() => setIsLeftSidebarOpen(false)}
+              />
+              <div
+                className={`fixed md:static inset-y-0 left-0 z-50 w-[88vw] max-w-sm md:w-72 sm:md:w-80 xl:w-88 border-r flex flex-col shrink-0 min-h-0 relative shadow-2xl md:shadow-none overflow-hidden transition-all ${
+                  isLight ? 'bg-white border-stone-200/60' : 'bg-[#162119] border-stone-800/60'
+                }`}
+              >
               {/* Left Column Header with collapse button */}
               <div
                 className={`p-2 px-3 border-b flex items-center justify-between shrink-0 ${
-                  isLight ? 'bg-stone-50/80 border-[#d8e6df]' : 'bg-[#131d16] border-[#25362b]'
+                  isLight ? 'bg-stone-50/80 border-stone-200/60' : 'bg-[#131d16] border-stone-800/60'
                 }`}
               >
                 <div className="flex items-center space-x-1.5">
-                  <Sparkles className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                  <span className="text-xs font-bold">部首・パーツ工房</span>
+                  <Shapes className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                  <span className="text-xs font-bold">部首・パーツライブラリ</span>
                 </div>
                 <button
                   type="button"
@@ -2630,7 +2764,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               </div>
 
               {/* Main Triple-Tab Switcher: Presets vs Kanji Database vs My Custom Parts */}
-              <div className="p-1 border-b bg-stone-100/60 dark:bg-[#111913] shrink-0 border-inherit">
+              <div className="p-1.5 border-b bg-stone-50/50 dark:bg-[#111913] shrink-0 border-stone-200/60 dark:border-stone-800/60">
                 <div className="grid grid-cols-3 gap-1 p-0.5 rounded-lg bg-stone-200/70 dark:bg-[#1b261f]">
                   <button
                     type="button"
@@ -2638,12 +2772,12 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     className={`py-1.5 px-1 rounded-md text-[11px] font-bold flex items-center justify-center space-x-1 transition-all ${
                       leftSidebarTab === 'presets'
                         ? isLight
-                          ? 'bg-white text-emerald-950 shadow-xs ring-1 ring-emerald-700/20'
-                          : 'bg-[#25362b] text-emerald-200 shadow-xs ring-1 ring-emerald-400/20'
+                          ? 'bg-white text-emerald-950  ring-1 ring-emerald-700/20'
+                          : 'bg-[#25362b] text-emerald-200  ring-1 ring-emerald-400/20'
                         : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
                     }`}
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <Shapes className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <span className="truncate">標準部首</span>
                   </button>
 
@@ -2653,8 +2787,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     className={`py-1.5 px-1 rounded-md text-[11px] font-bold flex items-center justify-center space-x-1 transition-all ${
                       leftSidebarTab === 'kanji_db'
                         ? isLight
-                          ? 'bg-white text-emerald-950 shadow-xs ring-1 ring-emerald-700/20'
-                          : 'bg-[#25362b] text-emerald-200 shadow-xs ring-1 ring-emerald-400/20'
+                          ? 'bg-white text-emerald-950  ring-1 ring-emerald-700/20'
+                          : 'bg-[#25362b] text-emerald-200  ring-1 ring-emerald-400/20'
                         : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
                     }`}
                     title="部首に紐づく常用・JIS漢字一覧データベース"
@@ -2669,8 +2803,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     className={`py-1.5 px-1 rounded-md text-[11px] font-bold flex items-center justify-center space-x-1 transition-all ${
                       leftSidebarTab === 'custom'
                         ? isLight
-                          ? 'bg-white text-emerald-950 shadow-xs ring-1 ring-emerald-700/20'
-                          : 'bg-[#25362b] text-emerald-200 shadow-xs ring-1 ring-emerald-400/20'
+                          ? 'bg-white text-emerald-950  ring-1 ring-emerald-700/20'
+                          : 'bg-[#25362b] text-emerald-200  ring-1 ring-emerald-400/20'
                         : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
                     }`}
                   >
@@ -2687,7 +2821,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         onClick={() => handleCreateNewPart(activeCategory)}
-                        className={`py-1.5 px-2 rounded-md font-bold text-xs flex items-center justify-center space-x-1 shadow-xs transition-all ${
+                        className={`py-1.5 px-2 rounded-md font-bold text-xs flex items-center justify-center space-x-1  transition-all ${
                           isLight
                             ? 'bg-emerald-800 text-white hover:bg-emerald-900'
                             : 'bg-emerald-600 text-white hover:bg-emerald-500'
@@ -2731,7 +2865,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                         }`}
                         title="初期部首パーツを高精度ベクターに刷新・更新します"
                       >
-                        <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        <RefreshCw className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                         <span>初期部首を高品質化</span>
                       </button>
                     </div>
@@ -2792,7 +2926,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                         disabled={isImportingAll}
                         className="text-emerald-700 dark:text-emerald-400 font-bold hover:underline text-[11px] disabled:opacity-50 flex items-center space-x-1"
                       >
-                        <Sparkles className="w-3 h-3" />
+                        <Download className="w-3 h-3" />
                         <span>{isImportingAll ? '取込中…' : '全部首を一括取込'}</span>
                       </button>
                     </div>
@@ -2806,8 +2940,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                           className={`py-1 px-1.5 rounded-md transition-all text-[11px] flex items-center justify-center space-x-1 ${
                             selectedFontStyle.id === style.id
                               ? isLight
-                                ? 'bg-white shadow-xs text-emerald-900 font-bold'
-                                : 'bg-[#1e2d22] text-emerald-300 shadow-xs font-bold'
+                                ? 'bg-white  text-emerald-900 font-bold'
+                                : 'bg-[#1e2d22] text-emerald-300  font-bold'
                               : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
                           }`}
                         >
@@ -2839,7 +2973,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
               {/* Category Filter Pills */}
               <div
-                className={`p-2 border-b flex space-x-1 overflow-x-auto text-[11px] shrink-0 ${
+                className={`p-2 border-b flex space-x-1 overflow-x-auto custom-scrollbar touch-scroll-x min-w-0 text-[11px] shrink-0 ${
                   isLight ? 'bg-[#f4f8f5] border-[#d8e6df]' : 'bg-[#131d16] border-[#25362b]'
                 }`}
               >
@@ -2848,7 +2982,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                       <button
                         key={cat.id}
                         onClick={() => setKanjiDbCategory(cat.id)}
-                        className={`px-2 py-0.5 rounded-full whitespace-nowrap text-[10px] transition-colors ${
+                        className={`px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 text-[10px] transition-colors ${
                           kanjiDbCategory === cat.id
                             ? isLight
                               ? 'bg-emerald-800 text-white font-bold'
@@ -2873,7 +3007,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                         <button
                           key={cat.id}
                           onClick={() => setActiveCategory(cat.id)}
-                          className={`px-2 py-0.5 rounded-full whitespace-nowrap text-[10px] transition-colors flex items-center space-x-1 ${
+                          className={`px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 text-[10px] transition-colors flex items-center space-x-1 ${
                             activeCategory === cat.id
                               ? isLight
                                 ? 'bg-emerald-800 text-white font-bold'
@@ -2938,8 +3072,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                               className={`rounded-xl border transition-all overflow-hidden ${
                                 isExpanded
                                   ? isLight
-                                    ? 'bg-white border-emerald-600 shadow-sm ring-1 ring-emerald-600/30'
-                                    : 'bg-[#16241b] border-emerald-500 shadow-sm ring-1 ring-emerald-500/30'
+ ? 'bg-white border-emerald-600 ring-1 ring-emerald-600/30'
+ : 'bg-[#16241b] border-emerald-500 ring-1 ring-emerald-500/30'
                                   : isLight
                                   ? 'bg-stone-50/60 border-stone-200 hover:border-emerald-300'
                                   : 'bg-[#121c15] border-[#223326] hover:border-emerald-700'
@@ -2951,7 +3085,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                                 className="p-2.5 flex items-center justify-between cursor-pointer select-none"
                               >
                                 <div className="flex items-center space-x-2.5 min-w-0">
-                                  <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-700 text-white font-bold text-base shadow-xs shrink-0 font-serif">
+                                  <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-700 text-white font-bold text-base shrink-0 font-serif">
                                     {radical.char}
                                   </span>
                                   <div className="min-w-0">
@@ -3013,10 +3147,10 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                                   {/* Primary 1-Click Batch Insert Action Button */}
                                   <button
                                     onClick={() => handleBatchInsertRadicalEntry(radical)}
-                                    className={`w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 shadow-xs transition-all ${
+                                    className={`w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5  transition-all ${
                                       isLight
-                                        ? 'bg-emerald-800 hover:bg-emerald-900 text-white shadow-emerald-950/20 active:scale-[0.99]'
-                                        : 'bg-emerald-700 hover:bg-emerald-600 text-white shadow-black/40 active:scale-[0.99]'
+                                        ? 'bg-emerald-800 hover:bg-emerald-900 text-white  active:scale-[0.99]'
+                                        : 'bg-emerald-700 hover:bg-emerald-600 text-white  active:scale-[0.99]'
                                     }`}
                                     title={`部首「${radical.name}」をこの部首の漢字 ${radical.kanjiList.length} 文字すべてに一括配置（既存文字は輪郭を追加合成）`}
                                   >
@@ -3041,7 +3175,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                                           }}
                                           className={`relative p-1.5 rounded-md text-base font-serif font-bold transition-all flex flex-col items-center justify-center group/k ${
                                             isWatermark
-                                              ? 'bg-emerald-700 text-white shadow-xs scale-105 ring-2 ring-emerald-500'
+                                              ? 'bg-emerald-700 text-white  scale-105 ring-2 ring-emerald-500'
                                               : isLight
                                               ? 'bg-stone-50 hover:bg-emerald-100 text-stone-800 border border-stone-200 hover:border-emerald-400'
                                               : 'bg-[#152018] hover:bg-[#203628] text-emerald-100 border border-[#25382b] hover:border-emerald-500'
@@ -3071,7 +3205,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   /* ================= RADICAL PRESETS VIEW ================= */
                   filteredPresets.length === 0 ? (
                     <div className="py-12 text-center text-xs text-stone-400 space-y-2">
-                      <Sparkles className="w-8 h-8 mx-auto opacity-40" />
+                      <Search className="w-8 h-8 mx-auto opacity-40" />
                       <p>該当する部首プリセットがありません</p>
                       <button
                         onClick={() => {
@@ -3105,7 +3239,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                           {/* High-fidelity Typographic Thumbnail Preview */}
                           <div
                             onClick={() => handleLoadPreset(radical)}
-                            className={`w-12 h-12 rounded-md border shrink-0 flex items-center justify-center cursor-pointer transition-transform hover:scale-105 shadow-2xs ${
+                            className={`w-12 h-12 rounded-md border shrink-0 flex items-center justify-center cursor-pointer transition-transform hover:scale-105  ${
                               isLoadedInCanvas
                                 ? isLight
                                   ? 'bg-emerald-100 border-emerald-500'
@@ -3212,8 +3346,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                           className={`group p-2 rounded-lg border flex items-center space-x-2.5 cursor-pointer transition-all ${
                             isSelected
                               ? isLight
-                                ? 'bg-emerald-50 border-emerald-700 shadow-xs ring-1 ring-emerald-700/30'
-                                : 'bg-[#1e2d22] border-emerald-500 shadow-xs ring-1 ring-emerald-500/30'
+                                ? 'bg-emerald-50 border-emerald-700  ring-1 ring-emerald-700/30'
+                                : 'bg-[#1e2d22] border-emerald-500  ring-1 ring-emerald-500/30'
                               : isLight
                               ? 'bg-white border-[#d8e6df] hover:border-emerald-600 hover:bg-[#fbfdfc]'
                               : 'bg-[#18231c] border-[#25362b] hover:border-emerald-600 hover:bg-[#202e25]'
@@ -3289,7 +3423,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                 )}
               </div>
             </div>
-          )}
+          </>
+        )}
 
           {/* ================= CENTER COLUMN: DEDICATED PART CANVAS ================= */}
           <div className="flex-1 flex flex-col min-w-0 min-h-0 relative overflow-hidden">
@@ -3297,13 +3432,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
             <div
               className={`px-3 py-1.5 border-b flex items-center justify-between gap-2 shrink-0 overflow-x-auto scrollbar-none z-20 ${
                 isLight
-                  ? 'bg-emerald-50/80 border-emerald-200/90 text-emerald-950'
-                  : 'bg-[#152319] border-[#223627] text-emerald-100'
+                  ? 'bg-white border-stone-200/60 text-stone-800'
+                  : 'bg-[#141d16] border-stone-800/60 text-emerald-100'
               }`}
             >
               {/* Placement Insertion Buttons */}
               <div className="flex items-center space-x-1 shrink-0">
-                <span className="text-[11px] font-bold shrink-0 mr-1 text-emerald-800 dark:text-emerald-300 hidden sm:inline">
+                <span className="text-[11px] font-bold shrink-0 mr-1 text-stone-600 dark:text-stone-300 hidden sm:inline">
                   文字「{selectedChar}」へ即時挿入:
                 </span>
                 <button
@@ -3311,8 +3446,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
                   className={`px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 transition-all active:scale-95 disabled:opacity-40 ${
                     isLight
-                      ? 'bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-950 shadow-xs'
-                      : 'bg-[#1c2e22] border border-emerald-700/80 hover:bg-emerald-500 hover:text-stone-950 text-emerald-200 shadow-xs'
+                      ? 'bg-white border border-stone-200 hover:bg-emerald-600 hover:text-white text-stone-800 '
+                      : 'bg-[#1c2e22] border border-stone-700 hover:bg-emerald-500 hover:text-stone-950 text-emerald-200 '
                   }`}
                   title="偏（左側・幅46%）の枠に合わせて文字に挿入"
                 >
@@ -3323,8 +3458,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
                   className={`px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 transition-all active:scale-95 disabled:opacity-40 ${
                     isLight
-                      ? 'bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-950 shadow-xs'
-                      : 'bg-[#1c2e22] border border-emerald-700/80 hover:bg-emerald-500 hover:text-stone-950 text-emerald-200 shadow-xs'
+                      ? 'bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-950 '
+                      : 'bg-[#1c2e22] border border-emerald-700/80 hover:bg-emerald-500 hover:text-stone-950 text-emerald-200 '
                   }`}
                   title="旁（右側・幅46%）の枠に合わせて文字に挿入"
                 >
@@ -3335,8 +3470,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
                   className={`px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 transition-all active:scale-95 disabled:opacity-40 ${
                     isLight
-                      ? 'bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-950 shadow-xs'
-                      : 'bg-[#1c2e22] border border-emerald-700/80 hover:bg-emerald-500 hover:text-stone-950 text-emerald-200 shadow-xs'
+                      ? 'bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-950 '
+                      : 'bg-[#1c2e22] border border-emerald-700/80 hover:bg-emerald-500 hover:text-stone-950 text-emerald-200 '
                   }`}
                   title="冠（上側・高さ36%）の枠に合わせて文字に挿入"
                 >
@@ -3347,8 +3482,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
                   className={`px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 transition-all active:scale-95 disabled:opacity-40 ${
                     isLight
-                      ? 'bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-950 shadow-xs'
-                      : 'bg-[#1c2e22] border border-emerald-700/80 hover:bg-emerald-500 hover:text-stone-950 text-emerald-200 shadow-xs'
+                      ? 'bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-950 '
+                      : 'bg-[#1c2e22] border border-emerald-700/80 hover:bg-emerald-500 hover:text-stone-950 text-emerald-200 '
                   }`}
                   title="脚（下側・高さ36%）の枠に合わせて文字に挿入"
                 >
@@ -3359,8 +3494,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
                   className={`px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 transition-all active:scale-95 disabled:opacity-40 ${
                     isLight
-                      ? 'bg-emerald-800 text-white hover:bg-emerald-900 shadow-xs'
-                      : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-xs'
+                      ? 'bg-emerald-800 text-white hover:bg-emerald-900 '
+                      : 'bg-emerald-600 text-white hover:bg-emerald-500 '
                   }`}
                   title="原寸位置のまま現在の文字に挿入"
                 >
@@ -3423,7 +3558,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
             {/* Canvas Toolbar */}
             <div
               className={`px-2 sm:px-3 py-1.5 border-b flex items-center justify-between gap-1.5 sm:gap-2 shrink-0 overflow-x-auto scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-700 min-w-0 relative z-10 ${
-                isLight ? 'bg-[#f4f8f5] border-[#d8e6df]' : 'bg-[#162119] border-[#25362b]'
+                isLight ? 'bg-white border-stone-200/60' : 'bg-[#141d16] border-stone-800/60'
               }`}
             >
               {/* Primary Tool Buttons */}
@@ -3433,8 +3568,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   className={`p-1.5 px-2 rounded text-xs font-semibold flex items-center space-x-1 transition-all shrink-0 ${
                     toolMode === 'select'
                       ? isLight
-                        ? 'bg-emerald-800 text-white font-bold shadow-xs'
-                        : 'bg-emerald-600 text-white font-bold shadow-xs'
+                        ? 'bg-emerald-800 text-white font-bold '
+                        : 'bg-emerald-600 text-white font-bold '
                       : isLight
                       ? 'hover:bg-emerald-100 text-stone-700'
                       : 'hover:bg-[#202d24] text-emerald-200'
@@ -3450,8 +3585,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   className={`p-1.5 px-2 rounded text-xs font-semibold flex items-center space-x-1 transition-all shrink-0 ${
                     toolMode === 'pen'
                       ? isLight
-                        ? 'bg-emerald-800 text-white font-bold shadow-xs'
-                        : 'bg-emerald-600 text-white font-bold shadow-xs'
+                        ? 'bg-emerald-800 text-white font-bold '
+                        : 'bg-emerald-600 text-white font-bold '
                       : isLight
                       ? 'hover:bg-emerald-100 text-stone-700'
                       : 'hover:bg-[#202d24] text-emerald-200'
@@ -3467,8 +3602,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   className={`p-1.5 px-2 rounded text-xs font-semibold flex items-center space-x-1 transition-all shrink-0 ${
                     toolMode === 'brush'
                       ? isLight
-                        ? 'bg-emerald-800 text-white font-bold shadow-xs'
-                        : 'bg-emerald-600 text-white font-bold shadow-xs'
+                        ? 'bg-emerald-800 text-white font-bold '
+                        : 'bg-emerald-600 text-white font-bold '
                       : isLight
                       ? 'hover:bg-emerald-100 text-stone-700'
                       : 'hover:bg-[#202d24] text-emerald-200'
@@ -3505,8 +3640,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                         'crescent',
                       ].includes(toolMode)
                         ? isLight
-                          ? 'bg-emerald-800 text-white border-emerald-900 shadow-xs'
-                          : 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                          ? 'bg-emerald-800 text-white border-emerald-900 '
+                          : 'bg-emerald-600 text-white border-emerald-700 '
                         : isLight
                         ? 'bg-white border-stone-200 hover:bg-emerald-50 text-stone-700'
                         : 'bg-[#18261e] border-[#283e2f] hover:bg-[#203428] text-emerald-200'
@@ -3555,8 +3690,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     <div
                       className={`absolute top-full left-0 mt-1.5 p-1 rounded-lg border shadow-xl z-50 grid grid-cols-4 sm:grid-cols-6 gap-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 ${
                         isLight
-                          ? 'bg-white/95 border-stone-200 shadow-stone-900/10'
-                          : 'bg-[#152219]/95 border-[#283e2f] shadow-black/40'
+                          ? 'bg-white/95 border-stone-200 '
+                          : 'bg-[#152219]/95 border-[#283e2f] '
                       }`}
                     >
                       {[
@@ -3588,7 +3723,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                           }}
                           className={`p-1.5 rounded flex items-center justify-center transition-all ${
                             toolMode === s.id
-                              ? 'bg-emerald-800 text-white shadow-xs'
+                              ? 'bg-emerald-800 text-white '
                               : isLight
                               ? 'hover:bg-emerald-100 text-stone-700'
                               : 'hover:bg-[#203225] text-emerald-200'
@@ -3607,8 +3742,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   className={`p-1.5 px-2 rounded text-xs font-semibold flex items-center space-x-1 transition-all shrink-0 ${
                     toolMode === 'eraser'
                       ? isLight
-                        ? 'bg-emerald-800 text-white font-bold shadow-xs'
-                        : 'bg-emerald-600 text-white font-bold shadow-xs'
+                        ? 'bg-emerald-800 text-white font-bold '
+                        : 'bg-emerald-600 text-white font-bold '
                       : isLight
                       ? 'hover:bg-emerald-100 text-stone-700'
                       : 'hover:bg-[#202d24] text-emerald-200'
@@ -3624,8 +3759,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   className={`p-1.5 px-2 rounded text-xs font-semibold flex items-center space-x-1 transition-all shrink-0 ${
                     toolMode === 'hand'
                       ? isLight
-                        ? 'bg-emerald-800 text-white font-bold shadow-xs'
-                        : 'bg-emerald-600 text-white font-bold shadow-xs'
+                        ? 'bg-emerald-800 text-white font-bold '
+                        : 'bg-emerald-600 text-white font-bold '
                       : isLight
                       ? 'hover:bg-emerald-100 text-stone-700'
                       : 'hover:bg-[#202d24] text-emerald-200'
@@ -3654,8 +3789,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   className={`p-1.5 px-2 rounded text-xs font-semibold flex items-center space-x-1.5 transition-all shrink-0 border ${
                     isAutoUnionMode
                       ? isLight
-                        ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs ring-1 ring-emerald-500/40 font-bold'
-                        : 'bg-emerald-600 text-white border-emerald-500 shadow-xs ring-1 ring-emerald-400/40 font-bold'
+                        ? 'bg-emerald-700 text-white border-emerald-800  ring-1 ring-emerald-500/40 font-bold'
+                        : 'bg-emerald-600 text-white border-emerald-500  ring-1 ring-emerald-400/40 font-bold'
                       : isLight
                       ? 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
                       : 'bg-[#18261e] border-[#283e2f] text-emerald-300 hover:bg-[#203428]'
@@ -3692,6 +3827,20 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span className="hidden xl:inline">向き統一</span>
+                </button>
+
+                <button
+                  onClick={handleSimplifyPart}
+                  disabled={!activePart || activePart.contours.length === 0}
+                  className={`p-1.5 px-2 rounded text-xs font-semibold flex items-center space-x-1 transition-all shrink-0 ${
+                    isLight
+                      ? 'bg-white border border-stone-300 text-stone-700 hover:bg-stone-50 disabled:opacity-30'
+                      : 'bg-[#18241c] border border-[#25362b] text-emerald-200 hover:bg-[#202e24] disabled:opacity-30'
+                  }`}
+                  title="【パス単純化】余分なアンカーポイントを削減して滑らかな曲線に最適化"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="hidden xl:inline">単純化</span>
                 </button>
 
                 <button
@@ -3814,6 +3963,22 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                 </button>
 
                 <button
+                  onClick={() => setIsWireframeMode(!isWireframeMode)}
+                  className={`p-1 px-1.5 sm:px-2 rounded text-[11px] font-bold border transition-colors shrink-0 ${
+                    isWireframeMode
+                      ? isLight
+                        ? 'bg-emerald-100 border-emerald-400 text-emerald-900'
+                        : 'bg-emerald-950 border-emerald-600 text-emerald-300'
+                      : isLight
+                      ? 'bg-white border-[#d8e6df] text-stone-500 hover:bg-stone-50'
+                      : 'bg-[#1a261f] border-[#25362b] text-stone-400 hover:bg-[#223328]'
+                  }`}
+                  title="パス輪郭のみ表示（ワイヤーフレーム表示 / 塗りつぶし切替）"
+                >
+                  輪郭のみ
+                </button>
+
+                <button
                   onClick={() => setShowNineBoxes(!showNineBoxes)}
                   className={`p-1 px-1.5 sm:px-2 rounded text-[11px] font-bold border transition-colors shrink-0 ${
                     showNineBoxes
@@ -3829,8 +3994,26 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   九宮
                 </button>
 
-                {/* Target Character Watermark Guide */}
-                <div className="flex items-center space-x-1 shrink-0">
+                {/* Magnetic Snapping Toggle */}
+                <button
+                  onClick={() => setIsSnapEnabled(!isSnapEnabled)}
+                  className={`p-1 px-1.5 sm:px-2 rounded text-[11px] font-bold border transition-colors shrink-0 flex items-center space-x-1 ${
+                    isSnapEnabled
+                      ? isLight
+                        ? 'bg-cyan-100 border-cyan-400 text-cyan-950'
+                        : 'bg-cyan-950 border-cyan-600 text-cyan-200'
+                      : isLight
+                      ? 'bg-white border-[#d8e6df] text-stone-500 hover:bg-stone-50'
+                      : 'bg-[#1a261f] border-[#25362b] text-stone-400 hover:bg-[#223328]'
+                  }`}
+                  title="ガイド線・グリッド交点への磁気自動スナップ吸着 (ON/OFF)"
+                >
+                  <CircleDot className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
+                  <span>吸着</span>
+                </button>
+
+                {/* Target Character Watermark Guide & Related Kanji Picker */}
+                <div className="relative flex items-center space-x-1 shrink-0">
                   <button
                     onClick={() => setShowWatermark(!showWatermark)}
                     className={`p-1 px-1.5 sm:px-2 rounded text-[11px] font-bold border transition-colors shrink-0 ${
@@ -3847,18 +4030,125 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     透かし
                   </button>
                   {showWatermark && (
-                    <input
-                      type="text"
-                      maxLength={1}
-                      value={watermarkChar || ''}
-                      onChange={(e) => setWatermarkChar(e.target.value.slice(-1) || selectedChar)}
-                      className={`w-6 h-6 text-center text-xs font-bold rounded border outline-hidden transition-colors ${
-                        isLight
-                          ? 'bg-white border-emerald-300 text-emerald-950 focus:border-emerald-600'
-                          : 'bg-[#121c15] border-emerald-700 text-emerald-100 focus:border-emerald-500'
-                      }`}
-                      title="透かし表示する参照文字（例: 休）"
-                    />
+                    <>
+                      <input
+                        type="text"
+                        maxLength={1}
+                        value={watermarkChar || ''}
+                        onChange={(e) => setWatermarkChar(e.target.value.slice(-1) || selectedChar)}
+                        className={`w-6 h-6 text-center text-xs font-bold rounded border outline-hidden transition-colors ${
+                          isLight
+                            ? 'bg-white border-emerald-300 text-emerald-950 focus:border-emerald-600'
+                            : 'bg-[#121c15] border-emerald-700 text-emerald-100 focus:border-emerald-500'
+                        }`}
+                        title="透かし表示する参照文字（例: 休）"
+                      />
+                      <button
+                        onClick={() => setShowWatermarkPicker(!showWatermarkPicker)}
+                        className={`px-1.5 py-0.5 rounded text-[11px] font-semibold border transition-colors flex items-center space-x-1 ${
+                          showWatermarkPicker
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : isLight
+                            ? 'bg-white border-stone-300 text-stone-700 hover:bg-emerald-50'
+                            : 'bg-[#18261e] border-emerald-800 text-emerald-200 hover:bg-[#22382b]'
+                        }`}
+                        title="この部首が含まれる漢字を選んで下絵に設定・濃さスケール調整"
+                      >
+                        <span>下絵設定</span>
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+
+                      {/* Floating Watermark Related Kanji Picker Panel */}
+                      {showWatermarkPicker && (
+                        <div
+                          className={`absolute top-full right-0 mt-1.5 z-40 p-3 rounded-xl border shadow-2xl w-72 sm:w-80 space-y-2.5 backdrop-blur-md animate-in fade-in zoom-in-95 ${
+                            isLight
+                              ? 'bg-white/95 border-emerald-300 text-stone-800 '
+                              : 'bg-[#121d15]/95 border-emerald-700 text-emerald-100 '
+                          }`}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-between border-b pb-1.5 border-stone-200 dark:border-stone-800">
+                            <span className="text-xs font-bold flex items-center space-x-1 text-emerald-800 dark:text-emerald-300">
+                              <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>参照下絵（透かし漢字）の選択</span>
+                            </span>
+                            <button
+                              onClick={() => setShowWatermarkPicker(false)}
+                              className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 p-0.5 rounded"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div>
+                            <label className="text-[10.5px] font-bold block mb-1 text-stone-600 dark:text-stone-300">
+                              「{activePart?.name || '部首'}」を含む漢字から下絵を選択:
+                            </label>
+                            <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto p-1.5 rounded-lg border bg-stone-50 dark:bg-[#0c140e] border-stone-200 dark:border-stone-800">
+                              {relatedKanjiList.map((kanji, idx) => (
+                                <button
+                                  key={`wm_kanji_${kanji}_${idx}`}
+                                  onClick={() => {
+                                    setWatermarkChar(kanji);
+                                    setShowWatermark(true);
+                                  }}
+                                  className={`w-7 h-7 rounded-md font-bold text-xs flex items-center justify-center transition-all ${
+                                    watermarkChar === kanji
+                                      ? 'bg-emerald-700 text-white  scale-105 ring-2 ring-emerald-400'
+                                      : isLight
+                                      ? 'bg-white border border-stone-200 text-stone-800 hover:border-emerald-400'
+                                      : 'bg-[#1a2820] border border-stone-800 text-stone-200 hover:border-emerald-600'
+                                  }`}
+                                  title={`「${kanji}」を下絵文字に設定`}
+                                >
+                                  {kanji}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-stone-200 dark:border-stone-800 text-[11px]">
+                            <div>
+                              <label className="block text-[10px] font-bold text-stone-500 dark:text-stone-400 mb-0.5">
+                                下絵不透明度: {Math.round(watermarkOpacity * 100)}%
+                              </label>
+                              <input
+                                type="range"
+                                min={0.05}
+                                max={0.6}
+                                step={0.05}
+                                value={watermarkOpacity}
+                                onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
+                                className="w-full accent-emerald-600"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-stone-500 dark:text-stone-400 mb-0.5">
+                                倍率: {Math.round(watermarkScale * 100)}%
+                              </label>
+                              <div className="flex items-center space-x-1">
+                                <button
+                                  onClick={() => setWatermarkScale((s) => Math.max(0.5, Number((s - 0.1).toFixed(1))))}
+                                  className="px-1.5 py-0.5 rounded border text-[10px] font-bold bg-stone-100 dark:bg-[#1a2820] hover:bg-emerald-100"
+                                >
+                                  -
+                                </button>
+                                <span className="font-mono text-[11px] px-1 text-center font-bold">
+                                  {Math.round(watermarkScale * 100)}%
+                                </span>
+                                <button
+                                  onClick={() => setWatermarkScale((s) => Math.min(1.8, Number((s + 0.1).toFixed(1))))}
+                                  className="px-1.5 py-0.5 rounded border text-[10px] font-bold bg-stone-100 dark:bg-[#1a2820] hover:bg-emerald-100"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -3913,7 +4203,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                           onClick={() => setBrushStyle(b.id)}
                           className={`px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap transition-all ${
                             brushStyle === b.id
-                              ? 'bg-emerald-800 text-white font-bold shadow-xs'
+                              ? 'bg-emerald-800 text-white font-bold '
                               : 'text-stone-600 dark:text-stone-300 hover:text-emerald-800 dark:hover:text-white'
                           }`}
                         >
@@ -4193,10 +4483,10 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   onPointerDown={(e) => e.stopPropagation()}
                 >
                   <div
-                    className={`px-2 py-1 rounded-full border shadow-xl backdrop-blur-md flex items-center space-x-1.5 text-xs ${
+                    className={`px-2 py-1 rounded-full border shadow-xl backdrop-blur-md flex items-center space-x-1.5 text-xs whitespace-nowrap ${
                       isLight
-                        ? 'bg-white/95 border-emerald-300/80 text-stone-800 shadow-emerald-950/10'
-                        : 'bg-[#121c15]/95 border-emerald-700/60 text-emerald-100 shadow-black/50'
+                        ? 'bg-white/95 border-emerald-300/80 text-stone-800 '
+                        : 'bg-[#121c15]/95 border-emerald-700/60 text-emerald-100 '
                     }`}
                   >
                     {/* Drag Handle */}
@@ -4212,50 +4502,156 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     </div>
 
                     {/* Active Points Count */}
-                    <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-300 font-bold font-mono text-[11px] shrink-0">
+                    <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-300 font-bold font-mono text-[11px] shrink-0 whitespace-nowrap">
                       <PenTool className="w-3 h-3 text-emerald-700 dark:text-emerald-400" />
                       <span>{activePenContour.nodes.length}点</span>
                     </div>
 
-                    <div className="h-3.5 w-[1px] bg-stone-200 dark:bg-emerald-800/80" />
+                    <div className="h-3.5 w-[1px] bg-stone-200 dark:bg-emerald-800/80 shrink-0" />
 
                     {/* Undo Last Point */}
                     <button
+                      type="button"
                       onClick={handleUndoPartPenNode}
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center space-x-1 transition-all active:scale-95 ${
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center space-x-1 transition-all active:scale-95 whitespace-nowrap ${
                         isLight
                           ? 'bg-stone-100 hover:bg-emerald-100 text-stone-700 hover:text-emerald-900'
                           : 'bg-[#1e2d23] hover:bg-[#283d30] text-emerald-200'
                       }`}
                       title="直前の頂点を取り消す (Backspace)"
                     >
-                      <RotateCcw className="w-3 h-3 text-stone-500 dark:text-stone-300" />
+                      <RotateCcw className="w-3 h-3 text-stone-500 dark:text-stone-300 shrink-0" />
                       <span>1点戻す</span>
                     </button>
 
-                    {/* Finalize as open path */}
-                    <button
-                      onClick={() => handleFinishPartPenContour(false)}
-                      disabled={activePenContour.nodes.length < 2}
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center space-x-1 transition-all disabled:opacity-30 active:scale-95 ${
-                        isLight
-                          ? 'bg-sky-50 hover:bg-sky-100 text-sky-800'
-                          : 'bg-sky-950/70 hover:bg-sky-900/80 text-sky-200'
-                      }`}
-                      title="開いた線として確定する"
-                    >
-                      <CornerDownLeft className="w-3 h-3 text-sky-600 dark:text-sky-400" />
-                      <span>線で確定</span>
-                    </button>
+                    {/* Finalize as open path / stroke with configurable line thickness */}
+                    <div className="relative flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => handleFinishPartPenContour(false)}
+                        disabled={activePenContour.nodes.length < 2}
+                        className={`px-2 py-0.5 rounded-l-full text-[11px] font-semibold flex items-center space-x-1 transition-all disabled:opacity-30 active:scale-95 whitespace-nowrap ${
+                          isLight
+                            ? 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-r border-sky-200'
+                            : 'bg-sky-950/70 hover:bg-sky-900/80 text-sky-200 border-r border-sky-800'
+                        }`}
+                        title={`開いた線を太さ ${penStrokeWidth}px で確定する`}
+                      >
+                        <CornerDownLeft className="w-3 h-3 text-sky-600 dark:text-sky-400 shrink-0" />
+                        <span>線で確定</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowPenStrokeMenu((prev) => !prev)}
+                        className={`px-1.5 py-0.5 rounded-r-full text-[10px] font-mono font-bold flex items-center space-x-0.5 transition-all active:scale-95 ${
+                          isLight
+                            ? 'bg-sky-100 hover:bg-sky-200 text-sky-900'
+                            : 'bg-sky-900/90 hover:bg-sky-800 text-sky-100'
+                        }`}
+                        title="線の太さを変更"
+                      >
+                        <span>{penStrokeWidth}px</span>
+                        <ChevronDown className="w-2.5 h-2.5 opacity-70" />
+                      </button>
+
+                      {showPenStrokeMenu && (
+                        <div
+                          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent pointer-events-auto"
+                          onClick={() => setShowPenStrokeMenu(false)}
+                        >
+                          <div
+                            className={`p-3 rounded-2xl shadow-2xl border flex flex-col space-y-2.5 min-w-[240px] text-xs pointer-events-auto animate-in fade-in zoom-in-95 duration-100 ${
+                              isLight
+                                ? 'bg-white/95 border-sky-200 text-stone-800 backdrop-blur-md'
+                                : 'bg-[#0f1b14]/95 border-sky-800/80 text-sky-100 backdrop-blur-md'
+                            }`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200 dark:border-stone-800">
+                              <span className="font-bold flex items-center space-x-1.5 text-sky-700 dark:text-sky-300">
+                                <PenTool className="w-3.5 h-3.5" />
+                                <span>線の太さ設定</span>
+                              </span>
+                              <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 text-xs">
+                                {penStrokeWidth} px
+                              </span>
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              <button
+                                type="button"
+                                onClick={() => setPenStrokeWidth((prev) => Math.max(2, prev - 5))}
+                                disabled={penStrokeWidth <= 2}
+                                className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 font-bold text-sm flex items-center justify-center disabled:opacity-30 cursor-pointer"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="range"
+                                min={4}
+                                max={160}
+                                step={2}
+                                value={penStrokeWidth}
+                                onChange={(e) => setPenStrokeWidth(parseInt(e.target.value, 10))}
+                                className="flex-1 h-2 accent-sky-600 dark:accent-sky-500 cursor-pointer"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setPenStrokeWidth((prev) => Math.min(300, prev + 5))}
+                                disabled={penStrokeWidth >= 300}
+                                className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 font-bold text-sm flex items-center justify-center disabled:opacity-30 cursor-pointer"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <div>
+                              <span className="text-[10px] text-stone-500 dark:text-stone-400 mb-1 block">クイック太さ:</span>
+                              <div className="grid grid-cols-5 gap-1 font-mono text-[11px]">
+                                {[15, 25, 40, 60, 80].map((w) => (
+                                  <button
+                                    key={w}
+                                    type="button"
+                                    onClick={() => setPenStrokeWidth(w)}
+                                    className={`py-1 rounded text-center transition-all cursor-pointer ${
+                                      penStrokeWidth === w
+                                        ? 'bg-sky-600 text-white font-bold ring-1 ring-sky-400'
+                                        : 'bg-stone-100 dark:bg-stone-800/80 hover:bg-sky-100 dark:hover:bg-sky-950 text-stone-700 dark:text-stone-300'
+                                    }`}
+                                  >
+                                    {w}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowPenStrokeMenu(false);
+                                handleFinishPartPenContour(false);
+                              }}
+                              disabled={activePenContour.nodes.length < 2}
+                              className="mt-1 w-full py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-30 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md active:scale-98 transition-all cursor-pointer"
+                            >
+                              <CornerDownLeft className="w-3.5 h-3.5" />
+                              <span>この太さ ({penStrokeWidth}px) で線確定</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Finalize as closed path */}
                     <button
+                      type="button"
                       onClick={() => handleFinishPartPenContour(true)}
                       disabled={activePenContour.nodes.length < 3}
-                      className="px-2.5 py-0.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center space-x-1 shadow-sm transition-all disabled:opacity-30 active:scale-95"
+                      className="px-2.5 py-0.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center space-x-1 transition-all disabled:opacity-30 active:scale-95 whitespace-nowrap"
                       title="パスを閉じて輪郭として確定する (Enter)"
                     >
-                      <Check className="w-3 h-3" />
+                      <Check className="w-3 h-3 shrink-0" />
                       <span>閉じて確定</span>
                     </button>
 
@@ -4291,8 +4687,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   <div
                     className={`px-2.5 py-1.5 rounded-full border shadow-xl backdrop-blur-md flex items-center space-x-1.5 text-xs ${
                       isLight
-                        ? 'bg-white/95 border-emerald-300 text-stone-800 shadow-emerald-950/10'
-                        : 'bg-[#121c15]/95 border-emerald-700 text-emerald-100 shadow-black/50'
+                        ? 'bg-white/95 border-emerald-300 text-stone-800 '
+                        : 'bg-[#121c15]/95 border-emerald-700 text-emerald-100 '
                     }`}
                   >
                     {selectedNodeId && (
@@ -4354,7 +4750,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                           className="px-2 py-0.5 rounded-full bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/70 dark:hover:bg-amber-900 text-amber-900 dark:text-amber-200 font-semibold flex items-center space-x-1 transition-all"
                           title="パスの頂点数を減らしてなめらかにする"
                         >
-                          <Sparkles className="w-3 h-3 text-amber-500" />
+                          <Wand2 className="w-3 h-3 text-stone-600 dark:text-stone-300" />
                           <span>滑らか化</span>
                         </button>
                         <button
@@ -4545,38 +4941,77 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
                   {/* Target Character Watermark Background */}
                   {showWatermark && (
-                    (() => {
-                      const allGlyphs = Object.values(project.glyphs || {}) as GlyphData[];
-                      const bgGlyph = allGlyphs.find((g) => g.char === watermarkChar || (watermarkChar && g.unicode === watermarkChar.codePointAt(0)));
-                      if (bgGlyph && bgGlyph.contours && bgGlyph.contours.length > 0) {
-                        return (
-                          <path
-                            d={contoursToSvgPath(bgGlyph.contours)}
-                            fill={isLight ? '#047857' : '#34d399'}
-                            fillOpacity={0.12}
-                            stroke={isLight ? '#059669' : '#10b981'}
-                            strokeWidth={1.5}
-                            strokeDasharray="4 4"
-                            pointerEvents="none"
-                          />
-                        );
+                    <g
+                      transform={
+                        watermarkScale !== 1.0
+                          ? `translate(${500 * (1 - watermarkScale)}, ${500 * (1 - watermarkScale)}) scale(${watermarkScale})`
+                          : undefined
                       }
-                      return (
-                        <text
-                          x={500}
-                          y={720}
-                          textAnchor="middle"
-                          fill={isLight ? '#10b981' : '#34d399'}
-                          fillOpacity={0.08}
-                          fontSize={680}
-                          fontWeight="bold"
-                          pointerEvents="none"
-                          style={{ fontFamily: 'sans-serif' }}
-                        >
-                          {watermarkChar}
-                        </text>
-                      );
-                    })()
+                    >
+                      {(() => {
+                        const allGlyphs = Object.values(project.glyphs || {}) as GlyphData[];
+                        const bgGlyph = allGlyphs.find((g) => g.char === watermarkChar || (watermarkChar && g.unicode === watermarkChar.codePointAt(0)));
+                        if (bgGlyph && bgGlyph.contours && bgGlyph.contours.length > 0) {
+                          return (
+                            <path
+                              d={contoursToSvgPath(bgGlyph.contours)}
+                              fill={isLight ? '#047857' : '#34d399'}
+                              fillOpacity={watermarkOpacity}
+                              fillRule="evenodd"
+                              stroke={isLight ? '#059669' : '#10b981'}
+                              strokeWidth={1.5}
+                              strokeDasharray="4 4"
+                              pointerEvents="none"
+                            />
+                          );
+                        }
+                        return (
+                          <text
+                            x={500}
+                            y={720}
+                            textAnchor="middle"
+                            fill={isLight ? '#10b981' : '#34d399'}
+                            fillOpacity={watermarkOpacity}
+                            fontSize={680}
+                            fontWeight="bold"
+                            pointerEvents="none"
+                            style={{ fontFamily: 'sans-serif' }}
+                          >
+                            {watermarkChar}
+                          </text>
+                        );
+                      })()}
+                    </g>
+                  )}
+
+                  {/* Active Magnetic Snap Lines Overlay */}
+                  {isSnapEnabled && activeSnapLines.x !== null && (
+                    <g pointerEvents="none">
+                      <line
+                        x1={activeSnapLines.x}
+                        y1={0}
+                        x2={activeSnapLines.x}
+                        y2={1000}
+                        stroke="#06b6d4"
+                        strokeWidth={2}
+                        strokeDasharray="4 2"
+                      />
+                      <circle cx={activeSnapLines.x} cy={500} r={5} fill="#06b6d4" />
+                    </g>
+                  )}
+                  {isSnapEnabled && activeSnapLines.y !== null && (
+                    <g pointerEvents="none">
+                      <line
+                        x1={0}
+                        y1={activeSnapLines.y}
+                        x2={1000}
+                        y2={activeSnapLines.y}
+                        stroke="#06b6d4"
+                        strokeWidth={2}
+                        strokeDasharray="4 2"
+                      />
+                      <circle cx={500} cy={activeSnapLines.y} r={5} fill="#06b6d4" />
+                    </g>
                   )}
 
                   {/* ================= DRAWN GLYPH PATHS ================= */}
@@ -4584,10 +5019,10 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   {mainSvgPath && (
                     <path
                       d={mainSvgPath}
-                      fill={isLight ? '#1c2920' : '#ecfdf5'}
-                      fillRule="nonzero"
-                      stroke={isLight ? '#1c2920' : '#ecfdf5'}
-                      strokeWidth={1}
+                      fill={isWireframeMode ? 'none' : (isLight ? '#1c2920' : '#ecfdf5')}
+                      fillRule="evenodd"
+                      stroke={isLight ? '#047857' : '#34d399'}
+                      strokeWidth={isWireframeMode ? 2.5 : 1}
                     />
                   )}
 
@@ -4847,7 +5282,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           {/* ================= RIGHT COLUMN: PART INSPECTOR & COMPOSITION ================= */}
           {!isRightSidebarOpen ? (
             <div
-              className={`w-10 border-l flex flex-col items-center py-3 shrink-0 cursor-pointer select-none transition-colors ${
+              className={`hidden md:flex w-10 border-l flex-col items-center py-3 shrink-0 cursor-pointer select-none transition-colors ${
                 isLight
                   ? 'bg-white border-[#d8e6df] hover:bg-emerald-50/70 text-stone-600'
                   : 'bg-[#162119] border-[#25362b] hover:bg-[#1f2e23] text-emerald-300'
@@ -4869,11 +5304,17 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               </div>
             </div>
           ) : (
-            <div
-              className={`w-72 sm:w-80 lg:w-88 xl:w-96 border-l flex flex-col shrink-0 min-h-0 relative z-10 overflow-hidden ${
-                isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#162119] border-[#25362b]'
-              }`}
-            >
+            <>
+              {/* Mobile Backdrop */}
+              <div
+                className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-40 animate-fadeIn"
+                onClick={() => setIsRightSidebarOpen(false)}
+              />
+              <div
+                className={`fixed md:static inset-y-0 right-0 z-50 w-[88vw] max-w-sm md:w-80 lg:w-88 xl:w-96 border-l flex flex-col shrink-0 min-h-0 relative shadow-2xl md:shadow-none overflow-hidden transition-all ${
+                  isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#162119] border-[#25362b]'
+                }`}
+              >
               {/* Right Column Header with Tab Switcher & Collapse */}
               <div
                 className={`p-2 px-3 border-b flex items-center justify-between gap-2 shrink-0 ${
@@ -4890,8 +5331,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     className={`px-2.5 sm:px-3 py-1 rounded-md transition-all whitespace-nowrap ${
                       rightTab === 'transform'
                         ? isLight
-                          ? 'bg-white text-emerald-950 font-bold shadow-xs'
-                          : 'bg-[#25362b] text-emerald-200 font-bold shadow-xs'
+                          ? 'bg-white text-emerald-950 font-bold '
+                          : 'bg-[#25362b] text-emerald-200 font-bold '
                         : 'text-stone-500 hover:text-stone-900 dark:text-stone-400'
                     }`}
                   >
@@ -4902,8 +5343,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     className={`px-2.5 sm:px-3 py-1 rounded-md transition-all whitespace-nowrap ${
                       rightTab === 'compose'
                         ? isLight
-                          ? 'bg-white text-emerald-950 font-bold shadow-xs'
-                          : 'bg-[#25362b] text-emerald-200 font-bold shadow-xs'
+                          ? 'bg-white text-emerald-950 font-bold '
+                          : 'bg-[#25362b] text-emerald-200 font-bold '
                         : 'text-stone-500 hover:text-stone-900 dark:text-stone-400'
                     }`}
                   >
@@ -5007,27 +5448,21 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Overlap & White Gap Resolver Card */}
-                      <div
-                        className={`p-3 rounded-xl border space-y-2 ${
-                          isLight
-                            ? 'bg-emerald-50/80 border-emerald-300 shadow-xs'
-                            : 'bg-[#15231a] border-emerald-800'
-                        }`}
-                      >
+                      {/* Overlap & White Gap Resolver Section */}
+                      <div className="border-t border-stone-200/60 dark:border-stone-800/60 pt-3 space-y-2">
                         <div className="flex items-center space-x-1.5">
                           <Layers className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                          <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                          <span className="text-xs font-bold text-stone-800 dark:text-stone-200">
                             重なり・白抜け防止ツール
                           </span>
                         </div>
-                        <p className="text-[10.5px] text-stone-600 dark:text-stone-300 leading-relaxed">
-                          手書き筆ストロークやパーツ同士が交差した際にフォントで発生する「白抜け」を、ブール演算合体で防止します。
+                        <p className="text-[10.5px] text-stone-500 dark:text-stone-400 leading-relaxed">
+                          手書き筆ストロークやパーツ交差時の白抜けを、ブール演算合体で防止します。
                         </p>
                         <div className="space-y-1.5 pt-1">
                           <button
                             onClick={handleUnionPart}
-                            className={`w-full py-2 px-2.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 shadow-xs transition-all ${
+                            className={`w-full py-2 px-2.5 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5  transition-all ${
                               isLight
                                 ? 'bg-emerald-800 text-white hover:bg-emerald-900'
                                 : 'bg-emerald-600 text-white hover:bg-emerald-500'
@@ -5040,8 +5475,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                             onClick={handleNormalizeWinding}
                             className={`w-full py-1.5 px-2.5 rounded-lg font-semibold text-xs flex items-center justify-center space-x-1.5 border transition-all ${
                               isLight
-                                ? 'bg-white border-emerald-300 text-emerald-900 hover:bg-emerald-100'
-                                : 'bg-[#1b2b20] border-emerald-700 text-emerald-300 hover:bg-[#23382a]'
+                                ? 'bg-white border-stone-300 text-stone-800 hover:bg-stone-50'
+                                : 'bg-[#1b2b20] border-stone-700 text-stone-200 hover:bg-[#23382a]'
                             }`}
                           >
                             <RefreshCw className="w-3.5 h-3.5" />
@@ -5050,12 +5485,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Transform & Geometry Manipulation */}
-                      <div
-                        className={`p-3 rounded-xl border space-y-3 ${
-                          isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#152018] border-[#25362b]'
-                        }`}
-                      >
+                      {/* Transform & Geometry Manipulation Section */}
+                      <div className="border-t border-stone-200/60 dark:border-stone-800/60 pt-3 space-y-3">
                         <span className="text-xs font-bold block text-stone-800 dark:text-stone-200">
                           形状・位置の精密変形
                         </span>
@@ -5298,7 +5729,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                       {/* Spacious Live Kanji Composition Simulator */}
                       <div
                         className={`p-3.5 rounded-xl border space-y-2.5 ${
-                          isLight ? 'bg-white border-[#d8e6df] shadow-xs' : 'bg-[#131d16] border-[#25362b]'
+                          isLight ? 'bg-white border-[#d8e6df] ' : 'bg-[#131d16] border-[#25362b]'
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -5363,7 +5794,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                                 )
                               )}
                               fill={isLight ? '#064e3b' : '#34d399'}
-                              fillRule="nonzero"
+                              fillRule="evenodd"
                             />
                           </svg>
                         </div>
@@ -5379,8 +5810,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                           className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
                             insertMode === 'single'
                               ? isLight
-                                ? 'bg-white text-emerald-950 shadow-xs'
-                                : 'bg-emerald-700 text-white shadow-xs'
+                                ? 'bg-white text-emerald-950 '
+                                : 'bg-emerald-700 text-white '
                               : 'text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'
                           }`}
                         >
@@ -5391,8 +5822,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                           className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
                             insertMode === 'batch'
                               ? isLight
-                                ? 'bg-white text-emerald-950 shadow-xs'
-                                : 'bg-emerald-700 text-white shadow-xs'
+                                ? 'bg-white text-emerald-950 '
+                                : 'bg-emerald-700 text-white '
                               : 'text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'
                           }`}
                         >
@@ -5424,8 +5855,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                               className={`py-2 rounded-lg text-center font-bold border transition-all ${
                                 insertPlacement === p.id
                                   ? isLight
-                                    ? 'bg-emerald-800 text-white border-emerald-800 shadow-xs'
-                                    : 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                    ? 'bg-emerald-800 text-white border-emerald-800 '
+                                    : 'bg-emerald-600 text-white border-emerald-600 '
                                   : isLight
                                   ? 'bg-stone-50 border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
                                   : 'bg-[#1a2820] border-[#25362b] text-stone-300 hover:bg-[#223328]'
@@ -5444,8 +5875,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                             onClick={() => handleInsertToGlyph(true)}
                             className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center space-x-2 shadow-lg transition-all ${
                               isLight
-                                ? 'bg-emerald-800 text-white hover:bg-emerald-900 shadow-emerald-950/20 active:scale-[0.99]'
-                                : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-black/40 active:scale-[0.99]'
+                                ? 'bg-emerald-800 text-white hover:bg-emerald-900  active:scale-[0.99]'
+                                : 'bg-emerald-600 text-white hover:bg-emerald-500  active:scale-[0.99]'
                             }`}
                           >
                             <BookmarkPlus className="w-4 h-4" />
@@ -5551,7 +5982,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                                   }}
                                   className={`w-7 h-7 rounded-md font-bold text-xs flex items-center justify-center transition-all ${
                                     isSelected
-                                      ? 'bg-emerald-700 text-white shadow-xs scale-105'
+                                      ? 'bg-emerald-700 text-white  scale-105'
                                       : isLight
                                       ? 'bg-white border border-stone-200 text-stone-700 hover:border-emerald-400'
                                       : 'bg-[#18261e] border border-stone-800 text-stone-300 hover:border-emerald-600'
@@ -5587,8 +6018,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                               onClick={() => handleBatchInsertToGlyphs(true)}
                               className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center space-x-2 shadow-lg transition-all ${
                                 isLight
-                                  ? 'bg-emerald-800 text-white hover:bg-emerald-900 shadow-emerald-950/20 active:scale-[0.99]'
-                                  : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-black/40 active:scale-[0.99]'
+                                  ? 'bg-emerald-800 text-white hover:bg-emerald-900  active:scale-[0.99]'
+                                  : 'bg-emerald-600 text-white hover:bg-emerald-500  active:scale-[0.99]'
                               }`}
                             >
                               <BookmarkPlus className="w-4 h-4" />
@@ -5619,8 +6050,81 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   <p>左側のライブラリからパーツを選択するか、新規パーツを作成してください</p>
                 </div>
               )}
-            </div>
+              </div>
+            </>
           )}
+        </div>
+
+        {/* ================= MOBILE BOTTOM NAVIGATION BAR ================= */}
+        <div
+          className={`flex md:hidden items-center justify-around h-14 shrink-0 border-t z-30 ${
+            isLight
+              ? 'bg-white/98 border-stone-300'
+              : 'bg-[#0a0f0c]/98 border-[#25362b]'
+          }`}
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 2px)' }}
+        >
+          <button
+            onClick={() => {
+              setIsLeftSidebarOpen(true);
+              setIsRightSidebarOpen(false);
+            }}
+            className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 transition-all ${
+              isLeftSidebarOpen
+                ? 'text-emerald-700 dark:text-emerald-400 font-extrabold'
+                : 'text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'
+            }`}
+          >
+            <Shapes className={`w-4 h-4 ${isLeftSidebarOpen ? 'scale-110' : ''}`} />
+            <span className="text-[10px] mt-0.5">部首ライブラリ</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setIsLeftSidebarOpen(false);
+              setIsRightSidebarOpen(false);
+            }}
+            className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 transition-all ${
+              !isLeftSidebarOpen && !isRightSidebarOpen
+                ? 'text-emerald-700 dark:text-emerald-400 font-extrabold'
+                : 'text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'
+            }`}
+          >
+            <PenTool className={`w-4 h-4 ${!isLeftSidebarOpen && !isRightSidebarOpen ? 'scale-110' : ''}`} />
+            <span className="text-[10px] mt-0.5">作図キャンバス</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setRightTab('transform');
+              setIsRightSidebarOpen(true);
+              setIsLeftSidebarOpen(false);
+            }}
+            className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 transition-all ${
+              isRightSidebarOpen && rightTab === 'transform'
+                ? 'text-emerald-700 dark:text-emerald-400 font-extrabold'
+                : 'text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'
+            }`}
+          >
+            <Sliders className={`w-4 h-4 ${isRightSidebarOpen && rightTab === 'transform' ? 'scale-110' : ''}`} />
+            <span className="text-[10px] mt-0.5">詳細・変形</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setRightTab('compose');
+              setIsRightSidebarOpen(true);
+              setIsLeftSidebarOpen(false);
+            }}
+            className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 transition-all ${
+              isRightSidebarOpen && rightTab === 'compose'
+                ? 'text-emerald-700 dark:text-emerald-400 font-extrabold'
+                : 'text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'
+            }`}
+          >
+            <BookmarkPlus className={`w-4 h-4 ${isRightSidebarOpen && rightTab === 'compose' ? 'scale-110' : ''}`} />
+            <span className="text-[10px] mt-0.5">漢字合成</span>
+          </button>
         </div>
       </div>
 
@@ -5634,7 +6138,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           >
             <div className="p-3.5 border-b flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Sparkles className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                <BookOpen className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                 <h3 className="text-sm font-bold">部首工房 ショートカット・操作ガイド</h3>
               </div>
               <button

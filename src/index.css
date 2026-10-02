@@ -20,6 +20,10 @@ html, body, #root {
   user-select: none;
 }
 
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* Ensure smooth touch scrolling on iOS / iPad / Android scrollable containers */
 .overflow-y-auto,
 .overflow-y-scroll {
@@ -51,10 +55,115 @@ body {
   text-wrap: pretty;
 }
 
-/* Ensure badges, chips, buttons don't wrap awkwardly mid-word */
-button, .badge, .chip, [role="button"] {
+/* Ensure badges, chips, and single-line pill buttons don't wrap awkwardly mid-word */
+.badge, .chip, .btn-nowrap {
   white-space: nowrap;
 }
+
+/* Custom subtle, clean scrollbars for all scrollable containers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 150, 140, 0.45);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 135, 120, 0.7);
+}
+.dark ::-webkit-scrollbar-thumb,
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+}
+.dark ::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+/* Helper for smooth touch and mouse horizontal scrollable tab bars */
+.touch-scroll-x {
+  overflow-x: auto;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(140, 150, 140, 0.45) transparent;
+}
+.dark .custom-scrollbar,
+[data-theme="dark"] .custom-scrollbar {
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+/* Custom high-contrast, prominent range sliders for superior accessibility */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Webkit Track */
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.35);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+.dark input[type="range"]::-webkit-slider-runnable-track,
+[data-theme="dark"] input[type="range"]::-webkit-slider-runnable-track {
+  background: rgba(16, 185, 129, 0.4);
+  border: 1px solid rgba(16, 185, 129, 0.6);
+}
+
+/* Webkit Thumb */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px; /* Centers thumb on 8px track */
+  background-color: #059669;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.18);
+  background-color: #10b981;
+}
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.25);
+  background-color: #047857;
+}
+
+/* Firefox Track & Thumb */
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.35);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+input[type="range"]::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background-color: #059669;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* Modal header and description responsive typography */
 
 /* Modal header and description responsive typography */
 p {

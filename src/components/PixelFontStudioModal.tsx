@@ -19,6 +19,9 @@ import {
   Sparkles,
   Layers,
   Check,
+  Plus,
+  Minus,
+  RotateCcw,
   ChevronLeft,
   ChevronRight,
   ZoomIn,
@@ -529,7 +532,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
   const [currentUnicode, setCurrentUnicode] = useState<number>(selectedUnicode);
   const [glyphSearchQuery, setGlyphSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [showGlyphDrawer, setShowGlyphDrawer] = useState<boolean>(true);
+  const [showGlyphDrawer, setShowGlyphDrawer] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   // Pixel data grid buffer
@@ -1782,10 +1785,19 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
           isFullscreen ? 'h-full max-h-none' : 'max-w-7xl h-full sm:h-[95vh] sm:max-h-[920px]'
         } rounded-none border-0 sm:border-2 shadow-2xl flex flex-col overflow-hidden select-none transition-colors ${
           isLight
-            ? 'bg-white border-stone-400 text-stone-900 shadow-stone-900/20'
-            : 'bg-[#0c130f] border-[#294232] text-emerald-100 shadow-black/90'
+            ? 'bg-white border-stone-400 text-stone-900 '
+            : 'bg-[#0c130f] border-[#294232] text-emerald-100 '
         }`}
       >
+        {/* Persistent Hidden File Input for Image Underlay / Trace (Shared across Mobile & Desktop) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          className="hidden"
+        />
+
         {/* ========================================================================= */}
         {/* 1. DESKTOP TOP HEADER (hidden on mobile, visible on md+)                  */}
         {/* ========================================================================= */}
@@ -1796,7 +1808,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
         >
           {/* Studio Brand & Current Project Status */}
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-none bg-emerald-600 text-white flex items-center justify-center font-mono font-bold text-sm shadow-xs border border-emerald-400">
+            <div className="w-8 h-8 rounded-none bg-emerald-600 text-white flex items-center justify-center font-mono font-bold text-sm border border-emerald-400">
               <Grid className="w-4 h-4 text-white" />
             </div>
             <div>
@@ -1835,7 +1847,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
             {/* Direct OTF Font Export Button */}
             <button
               onClick={() => handleExportFontFile('otf')}
-              className="px-2.5 py-1 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white flex items-center space-x-1.5 shadow-xs border border-emerald-400 active:scale-95 transition-all"
+              className="px-2.5 py-1 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white flex items-center space-x-1.5 border border-emerald-400 active:scale-95 transition-all"
               title="作成したピクセルフォントを直接OTF形式でダウンロード (.otf)"
             >
               <Download className="w-3.5 h-3.5" />
@@ -1847,7 +1859,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
               onClick={() => setShowGlyphDrawer(!showGlyphDrawer)}
               className={`px-2.5 py-1 text-xs font-bold border flex items-center space-x-1 transition-all ${
                 showGlyphDrawer
-                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  ? 'bg-emerald-600 text-white border-emerald-600 '
                   : isLight
                   ? 'bg-white border-stone-300 text-stone-700 hover:bg-stone-50'
                   : 'bg-[#18261f] border-stone-700 text-stone-300 hover:bg-[#203429]'
@@ -1866,7 +1878,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
               }}
               className={`px-2.5 py-1 text-xs font-bold border flex items-center space-x-1 transition-all ${
                 showTrace
-                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  ? 'bg-emerald-600 text-white border-emerald-600 '
                   : isLight
                   ? 'bg-white border-stone-300 text-stone-700 hover:bg-stone-50'
                   : 'bg-[#18261f] border-stone-700 text-stone-300 hover:bg-[#203429]'
@@ -1926,7 +1938,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
         >
           {/* Left: Brand Icon + Quick Prev/Next Glyph Picker */}
           <div className="flex items-center space-x-2 min-w-0">
-            <div className="w-7 h-7 bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs border border-emerald-400">
+            <div className="w-7 h-7 bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-400">
               <Grid className="w-3.5 h-3.5 text-white" />
             </div>
             <div className="flex items-center border border-stone-300 dark:border-stone-700 bg-white dark:bg-[#18261f]">
@@ -2009,7 +2021,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                   onClick={() => handlePresetSelect(p.id)}
                   className={`px-2 py-0.5 font-mono font-bold text-xs border transition-all flex items-center space-x-1 ${
                     isSelected
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      ? 'bg-emerald-600 text-white border-emerald-600 '
                       : isLight
                       ? 'bg-white text-stone-700 hover:bg-stone-100 border-stone-300'
                       : 'bg-[#142018] text-emerald-200 hover:bg-[#1c2c22] border-stone-800'
@@ -2149,7 +2161,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                         onClick={() => handleSelectGlyphItem(item.unicode)}
                         className={`aspect-square flex flex-col items-center justify-center border relative transition-all ${
                           isSelected
-                            ? 'bg-emerald-600 text-white border-emerald-400 font-extrabold shadow-xs'
+                            ? 'bg-emerald-600 text-white border-emerald-400 font-extrabold '
                             : isLight
                             ? 'bg-white border-stone-300 text-stone-800 hover:bg-stone-100 hover:border-emerald-500'
                             : 'bg-[#0a0f0c] border-stone-800 text-emerald-100 hover:bg-[#16251b] hover:border-emerald-600'
@@ -2212,7 +2224,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                   onClick={() => setTool(t.id as PixelDrawTool)}
                   className={`p-2 border transition-all relative ${
                     isSelected
-                      ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
+                      ? 'bg-emerald-600 text-white border-emerald-500 '
                       : isLight
                       ? 'bg-white text-stone-700 hover:bg-stone-200 border-stone-300'
                       : 'bg-[#142018] text-stone-300 hover:bg-[#1f3126] border-stone-800'
@@ -2316,7 +2328,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
           >
             {/* Top Transform & Quick FX Toolbar (Desktop & Mobile) */}
             <div
-              className={`w-full z-10 flex items-center justify-between p-1 sm:p-1.5 border shadow-xs backdrop-blur-md overflow-x-auto no-scrollbar gap-1 ${
+              className={`w-full z-10 flex items-center justify-between p-1 sm:p-1.5 border  backdrop-blur-md overflow-x-auto no-scrollbar gap-1 ${
                 isLight
                   ? 'bg-white/95 border-stone-300 text-stone-800'
                   : 'bg-[#101812]/95 border-[#294232] text-emerald-200'
@@ -2434,13 +2446,14 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
             {/* Trace / Underlay Reference Settings Panel (Collapsible Overlay) */}
             {showTracePanel && (
               <div
-                className={`absolute top-12 left-2 right-2 z-20 p-3 border-2 shadow-xl backdrop-blur-md transition-all ${
+                className={`absolute top-12 left-2 right-2 z-20 p-3 border-2 shadow-xl backdrop-blur-md transition-all overflow-x-auto max-h-[85vh] overflow-y-auto ${
                   isLight
                     ? 'bg-white/98 border-stone-400 text-stone-900'
                     : 'bg-[#101812]/98 border-[#294232] text-emerald-100'
                 }`}
               >
-                <div className="flex items-center justify-between border-b pb-2 mb-2 border-stone-200 dark:border-stone-800">
+                <div className="min-w-[520px] md:min-w-0">
+                  <div className="flex items-center justify-between border-b pb-2 mb-2 border-stone-200 dark:border-stone-800">
                   <div className="flex items-center space-x-2 font-bold text-xs">
                     <ImageIcon className="w-4 h-4 text-emerald-600" />
                     <span>下絵・トレース参照レイヤー設定</span>
@@ -2482,13 +2495,6 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                         画像読込
                       </button>
                     </div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
                   </div>
 
                   {/* Character / Image input */}
@@ -2548,7 +2554,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                     </div>
                     <button
                       onClick={handleAutoBinarizeTrace}
-                      className="w-full py-1.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs flex items-center justify-center space-x-1 shadow-xs active:scale-95"
+                      className="w-full py-1.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs flex items-center justify-center space-x-1 active:scale-95"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
                       <span>下絵から自動ドット化</span>
@@ -2556,16 +2562,17 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                   </div>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
             {/* The Pixel Canvas: Strict CRISP Sharp Square Box */}
-            <div className="flex-1 flex items-center justify-center w-full min-h-0 py-1 sm:py-2">
+            <div className="flex-1 flex items-center justify-center w-full h-full min-h-0 p-2 sm:p-4">
               <div
-                className="relative rounded-none overflow-hidden border-2 shadow-2xl touch-none max-w-[92vw] sm:max-w-none"
+                className="relative rounded-lg overflow-hidden border-2 shadow-2xl touch-none flex items-center justify-center"
                 style={{
-                  borderColor: isLight ? '#064e3b' : '#34d399',
-                  maxHeight: '100%',
-                  maxWidth: '100%',
+                  borderColor: isLight ? '#047857' : '#34d399',
+                  maxHeight: 'calc(100vh - 180px)',
+                  maxWidth: 'calc(100vw - 200px)',
                   aspectRatio: `${gridWidth} / ${gridHeight}`,
                 }}
               >
@@ -2593,7 +2600,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
             <div className="flex md:hidden flex-col w-full gap-1 pt-1 z-10">
               {/* Row 1: Primary Drawing Tools Strip */}
               <div
-                className={`flex items-center justify-between px-1 py-1 border shadow-xs overflow-x-auto no-scrollbar gap-1 ${
+                className={`flex items-center justify-between px-1 py-1 border  overflow-x-auto no-scrollbar gap-1 ${
                   isLight ? 'bg-white/98 border-stone-300' : 'bg-[#101812]/98 border-[#294232]'
                 }`}
               >
@@ -2614,7 +2621,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                       onClick={() => setTool(t.id as PixelDrawTool)}
                       className={`flex-1 min-w-[42px] min-h-[40px] flex flex-col items-center justify-center p-1 border transition-all ${
                         isSelected
-                          ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs scale-105'
+                          ? 'bg-emerald-600 text-white border-emerald-500  scale-105'
                           : isLight
                           ? 'bg-stone-50 text-stone-700 border-stone-300'
                           : 'bg-[#142018] text-stone-300 border-stone-800'
@@ -2629,7 +2636,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
 
               {/* Row 2: Brush Settings (Stamp shape, Size, Symmetry, Trace) */}
               <div
-                className={`flex items-center justify-between px-2 py-1 border shadow-xs text-xs overflow-x-auto no-scrollbar gap-1.5 ${
+                className={`flex items-center justify-between px-2 py-1 border  text-xs overflow-x-auto no-scrollbar gap-1.5 ${
                   isLight ? 'bg-stone-50 border-stone-300' : 'bg-[#101812] border-[#294232]'
                 }`}
               >
@@ -2853,25 +2860,69 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
           {/* ----------------------------------------------------------------------- */}
           {mobileTab === 'presets' && (
             <div
-              className={`flex md:hidden flex-1 overflow-y-auto p-3 space-y-4 ${
+              className={`flex md:hidden flex-1 flex-col overflow-y-auto overflow-x-auto p-3 sm:p-4 pb-24 touch-pan-x touch-pan-y ${
                 isLight ? 'bg-stone-50 text-stone-900' : 'bg-[#0c130f] text-emerald-100'
               }`}
             >
+              <div className="w-full min-w-[320px] sm:min-w-[360px] max-w-2xl mx-auto space-y-3.5">
+                {/* Top Quick Status & Return to Canvas Bar */}
+                <div
+                  className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 shrink-0 ${
+                    isLight ? 'bg-white border-stone-200' : 'bg-[#142018] border-[#25382b]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono font-extrabold text-xs text-emerald-700 dark:text-emerald-400 shrink-0">
+                      {gridWidth}×{gridHeight}
+                    </span>
+                  <span className="text-[11px] opacity-60 shrink-0">|</span>
+                  <span className="text-[11px] font-bold truncate">
+                    {dotShape === 'square'
+                      ? '■ 正方形'
+                      : dotShape === 'round'
+                      ? '● 円形'
+                      : dotShape === 'squircle'
+                      ? '▢ 角丸'
+                      : '◆ 菱形'}
+                  </span>
+                  <span className="text-[11px] opacity-60 shrink-0">|</span>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
+                      showTrace
+                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+                        : 'bg-stone-100 dark:bg-stone-800 text-stone-500'
+                    }`}
+                  >
+                    {showTrace ? '下絵ON' : '下絵OFF'}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setMobileTab('canvas')}
+                  className="px-2.5 py-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1 shrink-0 active:scale-95 transition-all"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>作図へ</span>
+                </button>
+              </div>
+
               {/* 1. Resolution Presets */}
               <div
-                className={`p-3 border space-y-2.5 ${
-                  isLight ? 'bg-white border-stone-300' : 'bg-[#101812] border-[#294232]'
+                className={`p-3 rounded-xl border space-y-2.5 ${
+                  isLight ? 'bg-white border-stone-200 text-stone-900' : 'bg-[#142018] border-[#25382b] text-emerald-100'
                 }`}
               >
                 <div className="flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400">
                   <span className="flex items-center gap-1.5">
-                    <Grid className="w-4 h-4" />
+                    <Grid className="w-4 h-4 shrink-0" />
                     <span>制作グリッド規格プリセット</span>
                   </span>
-                  <span className="font-mono text-[11px]">現在: {gridWidth}×{gridHeight}</span>
+                  <span className="font-mono text-[11px] shrink-0 font-bold">
+                    現在: {gridWidth}×{gridHeight} ({gridWidth * gridHeight}px)
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {PRESET_SIZES.map((p) => {
                     const isSelected = preset === p.id;
                     return (
@@ -2881,54 +2932,131 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                           handlePresetSelect(p.id);
                           onShowToast(`解像度を ${p.label} に変更しました`, 'info');
                         }}
-                        className={`p-2.5 border text-left flex flex-col justify-between min-h-[64px] transition-all active:scale-95 ${
+                        className={`p-2.5 border text-left flex flex-col justify-between min-h-[58px] rounded-xl transition-all active:scale-95 cursor-pointer ${
                           isSelected
-                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
+                            ? 'bg-emerald-600 text-white border-emerald-500 font-bold'
                             : isLight
-                            ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
-                            : 'bg-[#142018] hover:bg-[#1a2c21] border-stone-800 text-emerald-200'
+                            ? 'bg-stone-50 hover:bg-stone-100 border-stone-200 text-stone-800'
+                            : 'bg-[#18271e] hover:bg-[#203427] border-stone-800 text-emerald-200'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-xs">{p.label}</span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                          <span className="font-mono font-black text-xs sm:text-sm">{p.label}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-white shrink-0" />}
                         </div>
-                        <span className="text-[10px] opacity-75 truncate">{p.desc}</span>
+                        <span className="text-[10px] opacity-75 truncate mt-1">{p.desc}</span>
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Custom Resolution Form */}
+                {/* Custom Resolution Controls */}
                 {preset === 'custom' && (
-                  <div className="pt-2 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between">
-                    <span className="text-xs font-bold">カスタム寸法:</span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="3"
-                        max="128"
-                        value={gridWidth}
-                        onChange={(e) => {
-                          const val = Math.max(3, Math.min(128, parseInt(e.target.value, 10) || 12));
-                          setGridWidth(val);
-                          loadGlyphPixelGrid(currentUnicode, val, gridHeight);
-                        }}
-                        className="w-14 text-center font-mono font-bold text-xs py-1 border border-stone-300 dark:border-stone-700 bg-white dark:bg-[#142018]"
-                      />
-                      <span>×</span>
-                      <input
-                        type="number"
-                        min="3"
-                        max="128"
-                        value={gridHeight}
-                        onChange={(e) => {
-                          const val = Math.max(3, Math.min(128, parseInt(e.target.value, 10) || 12));
-                          setGridHeight(val);
-                          loadGlyphPixelGrid(currentUnicode, gridWidth, val);
-                        }}
-                        className="w-14 text-center font-mono font-bold text-xs py-1 border border-stone-300 dark:border-stone-700 bg-white dark:bg-[#142018]"
-                      />
+                  <div className="pt-2.5 border-t border-stone-200 dark:border-stone-800 space-y-2.5">
+                    <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                      カスタム寸法指定 (幅 × 高さ)
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Width Stepper */}
+                      <div className="p-2 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#101812] space-y-1">
+                        <span className="text-[10.5px] font-bold opacity-70">幅 (Width):</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              const val = Math.max(3, gridWidth - 1);
+                              setGridWidth(val);
+                              loadGlyphPixelGrid(currentUnicode, val, gridHeight);
+                            }}
+                            className="w-7 h-7 flex items-center justify-center rounded bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-xs font-bold active:scale-95"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <input
+                            type="number"
+                            min="3"
+                            max="128"
+                            value={gridWidth}
+                            onChange={(e) => {
+                              const val = Math.max(3, Math.min(128, parseInt(e.target.value, 10) || 12));
+                              setGridWidth(val);
+                              loadGlyphPixelGrid(currentUnicode, val, gridHeight);
+                            }}
+                            className="flex-1 text-center font-mono font-bold text-xs py-1 rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-[#18261f]"
+                          />
+                          <button
+                            onClick={() => {
+                              const val = Math.min(128, gridWidth + 1);
+                              setGridWidth(val);
+                              loadGlyphPixelGrid(currentUnicode, val, gridHeight);
+                            }}
+                            className="w-7 h-7 flex items-center justify-center rounded bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-xs font-bold active:scale-95"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Height Stepper */}
+                      <div className="p-2 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#101812] space-y-1">
+                        <span className="text-[10.5px] font-bold opacity-70">高さ (Height):</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              const val = Math.max(3, gridHeight - 1);
+                              setGridHeight(val);
+                              loadGlyphPixelGrid(currentUnicode, gridWidth, val);
+                            }}
+                            className="w-7 h-7 flex items-center justify-center rounded bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-xs font-bold active:scale-95"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <input
+                            type="number"
+                            min="3"
+                            max="128"
+                            value={gridHeight}
+                            onChange={(e) => {
+                              const val = Math.max(3, Math.min(128, parseInt(e.target.value, 10) || 12));
+                              setGridHeight(val);
+                              loadGlyphPixelGrid(currentUnicode, gridWidth, val);
+                            }}
+                            className="flex-1 text-center font-mono font-bold text-xs py-1 rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-[#18261f]"
+                          />
+                          <button
+                            onClick={() => {
+                              const val = Math.min(128, gridHeight + 1);
+                              setGridHeight(val);
+                              loadGlyphPixelGrid(currentUnicode, gridWidth, val);
+                            }}
+                            className="w-7 h-7 flex items-center justify-center rounded bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-xs font-bold active:scale-95"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Fast Custom Size Presets */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[10.5px] opacity-70 font-bold mr-1">クイック正方形:</span>
+                      {[8, 12, 16, 20, 24, 32, 48, 64].map((sz) => (
+                        <button
+                          key={sz}
+                          onClick={() => {
+                            setGridWidth(sz);
+                            setGridHeight(sz);
+                            loadGlyphPixelGrid(currentUnicode, sz, sz);
+                          }}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold border transition-colors ${
+                            gridWidth === sz && gridHeight === sz
+                              ? 'bg-emerald-600 text-white border-emerald-500'
+                              : 'bg-white dark:bg-[#18261f] border-stone-300 dark:border-stone-700 hover:bg-emerald-50 dark:hover:bg-emerald-950'
+                          }`}
+                        >
+                          {sz}×{sz}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -2936,8 +3064,8 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
 
               {/* 2. Dot Shape */}
               <div
-                className={`p-3 border space-y-2.5 ${
-                  isLight ? 'bg-white border-stone-300' : 'bg-[#101812] border-[#294232]'
+                className={`p-3 rounded-xl border space-y-2.5 ${
+                  isLight ? 'bg-white border-stone-200 text-stone-900' : 'bg-[#142018] border-[#25382b] text-emerald-100'
                 }`}
               >
                 <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
@@ -2957,19 +3085,19 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                         autoSaveGlyph(grid, currentUnicode);
                         onShowToast(`ドット形状を「${shape.label}」に設定しました`, 'info');
                       }}
-                      className={`p-2.5 border text-left transition-all active:scale-95 ${
+                      className={`p-2.5 border text-left rounded-xl transition-all active:scale-95 cursor-pointer ${
                         dotShape === shape.id
-                          ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
+                          ? 'bg-emerald-600 text-white border-emerald-500 font-bold'
                           : isLight
-                          ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
-                          : 'bg-[#142018] hover:bg-[#1a2c21] border-stone-800 text-emerald-200'
+                          ? 'bg-stone-50 hover:bg-stone-100 border-stone-200 text-stone-800'
+                          : 'bg-[#18271e] hover:bg-[#203427] border-stone-800 text-emerald-200'
                       }`}
                     >
                       <div className="flex items-center space-x-2">
-                        <span className="text-base font-bold">{shape.icon}</span>
-                        <span className="font-bold text-xs">{shape.label}</span>
+                        <span className="text-base font-bold shrink-0">{shape.icon}</span>
+                        <span className="font-bold text-xs truncate">{shape.label}</span>
                       </div>
-                      <div className="text-[10px] opacity-75 mt-1">{shape.desc}</div>
+                      <div className="text-[10px] opacity-75 mt-1 truncate">{shape.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -2977,251 +3105,475 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
 
               {/* 3. Trace & Underlay Reference */}
               <div
-                className={`p-3 border space-y-3 ${
-                  isLight ? 'bg-white border-stone-300' : 'bg-[#101812] border-[#294232]'
+                className={`p-3 rounded-xl border space-y-3 ${
+                  isLight ? 'bg-white border-stone-200 text-stone-900' : 'bg-[#142018] border-[#25382b] text-emerald-100'
                 }`}
               >
+                {/* Header with Master Toggle */}
                 <div className="flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                  <span className="flex items-center gap-1.5">
-                    <ImageIcon className="w-4 h-4" />
-                    <span>下絵・トレース参照レイヤー</span>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <ImageIcon className="w-4 h-4 shrink-0" />
+                    <span className="truncate">下絵・トレース参照レイヤー</span>
                   </span>
-                  <label className="flex items-center gap-1 cursor-pointer font-bold text-[11px]">
+                  <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs shrink-0 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
                     <input
                       type="checkbox"
                       checked={showTrace}
                       onChange={(e) => setShowTrace(e.target.checked)}
-                      className="accent-emerald-600"
+                      className="accent-emerald-600 cursor-pointer w-4 h-4"
                     />
                     <span>下絵を表示</span>
                   </label>
                 </div>
 
-                {/* Source Mode */}
+                {/* Source Mode Selector */}
                 <div className="flex gap-2">
                   <button
                     onClick={() => setTraceSource('font')}
-                    className={`flex-1 py-2 text-xs font-bold border transition-colors ${
+                    className={`flex-1 py-2 px-2 text-xs font-bold border rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                       traceSource === 'font'
                         ? 'bg-emerald-600 text-white border-emerald-600'
-                        : 'border-stone-300 dark:border-stone-700'
+                        : isLight
+                        ? 'bg-stone-50 border-stone-300 hover:bg-stone-100 text-stone-700'
+                        : 'bg-[#18261f] border-stone-700 hover:bg-[#203429] text-stone-300'
                     }`}
                   >
-                    システム文字
+                    <Type className="w-3.5 h-3.5" />
+                    <span>システム文字</span>
                   </button>
                   <button
                     onClick={() => {
                       setTraceSource('image');
                       fileInputRef.current?.click();
                     }}
-                    className={`flex-1 py-2 text-xs font-bold border transition-colors ${
+                    className={`flex-1 py-2 px-2 text-xs font-bold border rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                       traceSource === 'image'
                         ? 'bg-emerald-600 text-white border-emerald-600'
-                        : 'border-stone-300 dark:border-stone-700'
+                        : isLight
+                        ? 'bg-stone-50 border-stone-300 hover:bg-stone-100 text-stone-700'
+                        : 'bg-[#18261f] border-stone-700 hover:bg-[#203429] text-stone-300'
                     }`}
                   >
-                    画像ファイル読込
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>画像ファイル読込</span>
                   </button>
                 </div>
 
-                {/* Sliders */}
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="font-bold opacity-75">下絵の透明度:</span>
-                    <span className="font-mono font-bold">{traceOpacity}%</span>
+                {/* Source-specific controls */}
+                {traceSource === 'font' ? (
+                  <div className="space-y-2 p-2.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#101812]">
+                    <span className="text-[11px] font-bold opacity-75">参照文字 & フォント書体:</span>
+                    <div className="flex gap-2">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={traceChar}
+                          onChange={(e) => setTraceChar(e.target.value)}
+                          placeholder={currentGlyph.char || 'A'}
+                          className="w-14 text-center font-bold text-sm py-1.5 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900"
+                        />
+                      </div>
+                      <select
+                        value={traceFontFamily}
+                        onChange={(e) => setTraceFontFamily(e.target.value)}
+                        className="flex-1 text-xs py-1.5 px-2 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 font-medium"
+                      >
+                        <option value="sans-serif">ゴシック体 (Sans-serif)</option>
+                        <option value="serif">明朝体 (Serif)</option>
+                        <option value="monospace">等幅フォント (Monospace)</option>
+                        <option value="cursive">筆記・手書き風 (Cursive)</option>
+                      </select>
+                      {traceChar && (
+                        <button
+                          onClick={() => setTraceChar('')}
+                          className="px-2 py-1 text-[11px] font-bold border border-stone-300 dark:border-stone-700 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800"
+                          title="現在の作図文字に戻す"
+                        >
+                          リセット
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min="10"
-                    max="100"
-                    value={traceOpacity}
-                    onChange={(e) => setTraceOpacity(parseInt(e.target.value, 10))}
-                    className="w-full accent-emerald-600"
-                  />
+                ) : (
+                  <div className="p-2.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#101812] space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold opacity-75">読み込み中の画像:</span>
+                      <span
+                        className={`text-[10.5px] font-bold px-2 py-0.5 rounded-md ${
+                          traceImageSrc
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        }`}
+                      >
+                        {traceImageSrc ? '画像セット済み' : '未選択'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex-1 py-1.5 px-2.5 text-xs font-bold border border-emerald-600 bg-emerald-600 text-white rounded-lg flex items-center justify-center gap-1 active:scale-95"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>画像を変更・再選択</span>
+                      </button>
+                      {traceImageSrc && (
+                        <button
+                          onClick={() => {
+                            setTraceImageSrc(null);
+                            traceImageRef.current = null;
+                            onShowToast('下絵画像をクリアしました', 'info');
+                          }}
+                          className="px-2.5 py-1.5 text-xs font-bold border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg active:scale-95"
+                        >
+                          クリア
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sliders Grid: Opacity & Scale */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Opacity Slider */}
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold opacity-75">下絵の透明度:</span>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {traceOpacity}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="100"
+                      value={traceOpacity}
+                      onChange={(e) => setTraceOpacity(parseInt(e.target.value, 10))}
+                      className="w-full accent-emerald-600 cursor-pointer h-2"
+                    />
+                  </div>
+
+                  {/* Scale Slider */}
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold opacity-75">下絵の拡大率:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          {traceScale}%
+                        </span>
+                        {traceScale !== 100 && (
+                          <button
+                            onClick={() => setTraceScale(100)}
+                            className="text-[10px] text-stone-500 hover:text-stone-800 underline"
+                          >
+                            100%
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="150"
+                      value={traceScale}
+                      onChange={(e) => setTraceScale(parseInt(e.target.value, 10))}
+                      className="w-full accent-emerald-600 cursor-pointer h-2"
+                    />
+                  </div>
                 </div>
 
-                {/* Auto Binarize Button */}
-                <button
-                  onClick={() => {
-                    handleAutoBinarizeTrace();
-                    setMobileTab('canvas');
-                  }}
-                  className="w-full py-2.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs flex items-center justify-center space-x-2 shadow-xs active:scale-95 border border-emerald-500"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>下絵から自動ドット化してキャンバスへ</span>
-                </button>
+                {/* Position Offset Controls */}
+                <div className="p-2.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#101812] space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold opacity-75">下絵位置の微調整 (X/Y):</span>
+                    <span className="font-mono text-[11px]">
+                      X: {traceOffsetX > 0 ? `+${traceOffsetX}` : traceOffsetX}, Y:{' '}
+                      {traceOffsetY > 0 ? `+${traceOffsetY}` : traceOffsetY}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setTraceOffsetX((prev) => prev - 1)}
+                        className="w-8 h-8 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 flex items-center justify-center font-bold text-xs active:scale-95"
+                        title="左へ移動"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setTraceOffsetX((prev) => prev + 1)}
+                        className="w-8 h-8 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 flex items-center justify-center font-bold text-xs active:scale-95"
+                        title="右へ移動"
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setTraceOffsetY((prev) => prev - 1)}
+                        className="w-8 h-8 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 flex items-center justify-center font-bold text-xs active:scale-95"
+                        title="上へ移動"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setTraceOffsetY((prev) => prev + 1)}
+                        className="w-8 h-8 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 flex items-center justify-center font-bold text-xs active:scale-95"
+                        title="下へ移動"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {(traceOffsetX !== 0 || traceOffsetY !== 0) && (
+                      <button
+                        onClick={() => {
+                          setTraceOffsetX(0);
+                          setTraceOffsetY(0);
+                        }}
+                        className="px-2 py-1 text-xs font-bold border border-stone-300 dark:border-stone-700 rounded-lg hover:bg-stone-200 dark:hover:bg-stone-800 flex items-center gap-1 active:scale-95"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>中央揃え</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Binarization Threshold & Auto Convert Action */}
+                <div className="space-y-2 pt-1">
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold opacity-75">自動ドット化の抽出感度 (閾値):</span>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {traceThreshold} / 255
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="245"
+                      value={traceThreshold}
+                      onChange={(e) => setTraceThreshold(parseInt(e.target.value, 10))}
+                      className="w-full accent-emerald-600 cursor-pointer h-2"
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      handleAutoBinarizeTrace();
+                      setMobileTab('canvas');
+                      onShowToast('下絵から自動ドット化して作図キャンバスに配置しました', 'success');
+                    }}
+                    className="w-full py-3 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl flex items-center justify-center space-x-2 active:scale-95 cursor-pointer border border-emerald-500 transition-all"
+                  >
+                    <Sparkles className="w-4 h-4 shrink-0" />
+                    <span>下絵から自動ドット化してキャンバスへ</span>
+                  </button>
+                </div>
               </div>
 
-              {/* 4. Canvas Visual Guides */}
+              {/* 4. Canvas Visual Guides & Symmetry */}
               <div
-                className={`p-3 border space-y-2 text-xs ${
-                  isLight ? 'bg-white border-stone-300' : 'bg-[#101812] border-[#294232]'
+                className={`p-3 rounded-xl border space-y-2.5 text-xs ${
+                  isLight ? 'bg-white border-stone-200 text-stone-900' : 'bg-[#142018] border-[#25382b] text-emerald-100'
                 }`}
               >
                 <div className="font-bold text-emerald-700 dark:text-emerald-400">
-                  ガイド線の表示設定
+                  ガイド線 & 対称描画設定
                 </div>
-                <div className="flex items-center space-x-4">
-                  <label className="flex items-center space-x-1.5 cursor-pointer">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center space-x-2 p-2 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#101812] cursor-pointer">
                     <input
                       type="checkbox"
                       checked={showGridLines}
                       onChange={(e) => setShowGridLines(e.target.checked)}
-                      className="accent-emerald-600"
+                      className="accent-emerald-600 cursor-pointer w-4 h-4"
                     />
-                    <span>方眼グリッド線</span>
+                    <span className="font-bold text-xs">方眼グリッド線</span>
                   </label>
-                  <label className="flex items-center space-x-1.5 cursor-pointer">
+
+                  <label className="flex items-center space-x-2 p-2 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#101812] cursor-pointer">
                     <input
                       type="checkbox"
                       checked={showSubdivisions}
                       onChange={(e) => setShowSubdivisions(e.target.checked)}
-                      className="accent-emerald-600"
+                      className="accent-emerald-600 cursor-pointer w-4 h-4"
                     />
-                    <span>中心分割線</span>
+                    <span className="font-bold text-xs">中心分割線</span>
+                  </label>
+
+                  <label className="flex items-center space-x-2 p-2 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#101812] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={symmetryH}
+                      onChange={(e) => setSymmetryH(e.target.checked)}
+                      className="accent-emerald-600 cursor-pointer w-4 h-4"
+                    />
+                    <span className="font-bold text-xs">左右対称描画</span>
+                  </label>
+
+                  <label className="flex items-center space-x-2 p-2 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#101812] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={symmetryV}
+                      onChange={(e) => setSymmetryV(e.target.checked)}
+                      className="accent-emerald-600 cursor-pointer w-4 h-4"
+                    />
+                    <span className="font-bold text-xs">上下対称描画</span>
                   </label>
                 </div>
               </div>
+
+              {/* 5. Bottom Return to Canvas Action */}
+              <button
+                onClick={() => setMobileTab('canvas')}
+                className="w-full py-3 bg-stone-800 hover:bg-stone-900 text-white dark:bg-stone-700 dark:hover:bg-stone-600 font-bold text-xs rounded-xl flex items-center justify-center space-x-2 active:scale-95 transition-all"
+              >
+                <Pencil className="w-4 h-4" />
+                <span>作図キャンバスに戻る</span>
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
           {/* ----------------------------------------------------------------------- */}
           {/* F. MOBILE EXPORT & TEST TAB (visible only when mobileTab === 'export')  */}
           {/* ----------------------------------------------------------------------- */}
           {mobileTab === 'export' && (
             <div
-              className={`flex md:hidden flex-1 overflow-y-auto p-3 space-y-4 ${
+              className={`flex md:hidden flex-1 flex-col overflow-y-auto overflow-x-auto p-3 pb-24 touch-pan-x touch-pan-y ${
                 isLight ? 'bg-stone-50 text-stone-900' : 'bg-[#0c130f] text-emerald-100'
               }`}
             >
-              {/* Real-time Typing Sandbox */}
-              <div
-                className={`p-3 border space-y-2.5 ${
-                  isLight ? 'bg-white border-stone-300' : 'bg-[#101812] border-[#294232]'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                  <span className="flex items-center gap-1.5">
-                    <Type className="w-4 h-4" />
-                    <span>リアルタイム文字列テスト</span>
-                  </span>
-                </div>
-
-                <input
-                  type="text"
-                  value={previewText}
-                  onChange={(e) => setPreviewText(e.target.value)}
-                  placeholder="テスト文字列を入力"
-                  className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-800 bg-stone-50 dark:bg-stone-900 focus:outline-hidden"
-                />
-
-                <div className="p-3 bg-stone-950 text-emerald-400 font-mono text-center tracking-widest min-h-[60px] flex items-center justify-center overflow-x-auto border border-stone-800">
-                  <div className="text-lg font-bold select-none">{previewText || 'ABC 123'}</div>
-                </div>
-              </div>
-
-              {/* Game Engine & Embed Export Hub */}
-              <div
-                className={`p-3 border space-y-3 ${
-                  isLight ? 'bg-white border-stone-300' : 'bg-[#101812] border-[#294232]'
-                }`}
-              >
-                <div className="flex items-center space-x-1.5 text-xs font-extrabold text-emerald-900 dark:text-emerald-300">
-                  <Gamepad2 className="w-4 h-4 text-emerald-600" />
-                  <span>ゲーム & 開発向け一括出力 Hub</span>
-                </div>
-                <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
-                  Unity, Godot, Unreal, Phaser や Arduino/ESP32 マイコン用の各種形式で出力します。
-                </p>
-
-                {/* 1. Direct OTF Font Export */}
-                <button
-                  onClick={() => handleExportFontFile('otf')}
-                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-between active:scale-95 shadow-xs border border-emerald-400 min-h-[44px]"
-                  title="作成したピクセルフォントを直接OTF形式でダウンロード (.otf)"
+              <div className="w-full min-w-[320px] sm:min-w-[360px] max-w-2xl mx-auto space-y-4">
+                {/* Real-time Typing Sandbox */}
+                <div
+                  className={`p-3 border space-y-2.5 ${
+                    isLight ? 'bg-white border-stone-300' : 'bg-[#101812] border-[#294232]'
+                  }`}
                 >
-                  <span className="flex items-center space-x-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                    <span className="flex items-center gap-1.5">
+                      <Type className="w-4 h-4" />
+                      <span>リアルタイム文字列テスト</span>
+                    </span>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={previewText}
+                    onChange={(e) => setPreviewText(e.target.value)}
+                    placeholder="テスト文字列を入力"
+                    className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-800 bg-stone-50 dark:bg-stone-900 focus:outline-hidden"
+                  />
+
+                  <div className="p-3 bg-stone-950 text-emerald-400 font-mono text-center tracking-widest min-h-[60px] flex items-center justify-center overflow-x-auto border border-stone-800">
+                    <div className="text-lg font-bold select-none">{previewText || 'ABC 123'}</div>
+                  </div>
+                </div>
+
+                {/* Game Engine & Embed Export Hub */}
+                <div
+                  className={`p-3 border space-y-3 ${
+                    isLight ? 'bg-white border-stone-300' : 'bg-[#101812] border-[#294232]'
+                  }`}
+                >
+                  <div className="flex items-center space-x-1.5 text-xs font-extrabold text-emerald-900 dark:text-emerald-300">
+                    <Gamepad2 className="w-4 h-4 text-emerald-600" />
+                    <span>ゲーム & 開発向け一括出力 Hub</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
+                    Unity, Godot, Unreal, Phaser や Arduino/ESP32 マイコン用の各種形式で出力します。
+                  </p>
+
+                  {/* 1. Direct OTF Font Export */}
+                  <button
+                    onClick={() => handleExportFontFile('otf')}
+                    className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-between active:scale-95 border border-emerald-400 min-h-[44px]"
+                    title="作成したピクセルフォントを直接OTF形式でダウンロード (.otf)"
+                  >
+                    <span className="flex items-center space-x-2">
+                      <Download className="w-4 h-4" />
+                      <span>OTFフォント書き出し (.otf)</span>
+                    </span>
+                    <span className="text-[10px] font-mono uppercase bg-emerald-700/80 px-1.5 py-0.5 rounded-xs">OTF</span>
+                  </button>
+
+                  {/* 2. Direct TTF Font Export */}
+                  <button
+                    onClick={() => handleExportFontFile('ttf')}
+                    className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
+                      isLight
+                        ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
+                        : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
+                    }`}
+                    title="作成したピクセルフォントをTTF形式でダウンロード (.ttf)"
+                  >
+                    <span className="flex items-center space-x-2">
+                      <Download className="w-4 h-4" />
+                      <span>TTFフォント書き出し (.ttf)</span>
+                    </span>
+                    <span className="text-[10px] font-mono uppercase opacity-75">TTF</span>
+                  </button>
+
+                  {/* 3. Spritesheet */}
+                  <button
+                    onClick={handleExportSpritesheet}
+                    className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
+                      isLight
+                        ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
+                        : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
+                    }`}
+                  >
+                    <span className="flex items-center space-x-2">
+                      <LayoutGrid className="w-4 h-4" />
+                      <span>スプライトシート (PNG + JSON)</span>
+                    </span>
                     <Download className="w-4 h-4" />
-                    <span>OTFフォント書き出し (.otf)</span>
-                  </span>
-                  <span className="text-[10px] font-mono uppercase bg-emerald-700/80 px-1.5 py-0.5 rounded-xs">OTF</span>
-                </button>
+                  </button>
 
-                {/* 2. Direct TTF Font Export */}
-                <button
-                  onClick={() => handleExportFontFile('ttf')}
-                  className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
-                    isLight
-                      ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
-                      : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
-                  }`}
-                  title="作成したピクセルフォントをTTF形式でダウンロード (.ttf)"
-                >
-                  <span className="flex items-center space-x-2">
-                    <Download className="w-4 h-4" />
-                    <span>TTFフォント書き出し (.ttf)</span>
-                  </span>
-                  <span className="text-[10px] font-mono uppercase opacity-75">TTF</span>
-                </button>
+                  {/* 4. C/C++ Header */}
+                  <button
+                    onClick={handleExportCHeader}
+                    className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
+                      isLight
+                        ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
+                        : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
+                    }`}
+                  >
+                    <span className="flex items-center space-x-2">
+                      <Cpu className="w-4 h-4" />
+                      <span>組込み用 Cヘッダー (.h)</span>
+                    </span>
+                    <FileCode className="w-4 h-4" />
+                  </button>
 
-                {/* 3. Spritesheet */}
-                <button
-                  onClick={handleExportSpritesheet}
-                  className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
-                    isLight
-                      ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
-                      : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
-                  }`}
-                >
-                  <span className="flex items-center space-x-2">
-                    <LayoutGrid className="w-4 h-4" />
-                    <span>スプライトシート (PNG + JSON)</span>
-                  </span>
-                  <Download className="w-4 h-4" />
-                </button>
-
-                {/* 4. C/C++ Header */}
-                <button
-                  onClick={handleExportCHeader}
-                  className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
-                    isLight
-                      ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
-                      : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
-                  }`}
-                >
-                  <span className="flex items-center space-x-2">
-                    <Cpu className="w-4 h-4" />
-                    <span>組込み用 Cヘッダー (.h)</span>
-                  </span>
-                  <FileCode className="w-4 h-4" />
-                </button>
-
-                {/* 5. Single PNG */}
-                <button
-                  onClick={handleExportSinglePng}
-                  className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
-                    isLight
-                      ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
-                      : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
-                  }`}
-                >
-                  <span className="flex items-center space-x-2">
-                    <Download className="w-4 h-4" />
-                    <span>現在の文字「{currentGlyph.char}」をPNG出力</span>
-                  </span>
-                  <span className="text-[10px] opacity-75 font-mono">{gridWidth}×{gridHeight}</span>
-                </button>
-              </div>
-
-              {/* Real-time Project Stats */}
-              <div className="p-3 border border-emerald-500/20 bg-emerald-500/5 text-xs text-emerald-700 dark:text-emerald-400 space-y-1.5">
-                <div className="flex items-center space-x-1 font-bold">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>リアルタイム自動同期中</span>
+                  {/* 5. Single PNG */}
+                  <button
+                    onClick={handleExportSinglePng}
+                    className={`w-full py-2.5 px-3 border text-xs font-bold flex items-center justify-between active:scale-95 min-h-[44px] ${
+                      isLight
+                        ? 'bg-stone-50 hover:bg-stone-100 border-stone-300 text-stone-800'
+                        : 'bg-[#142018] hover:bg-[#1c2e22] border-stone-700 text-emerald-300'
+                    }`}
+                  >
+                    <span className="flex items-center space-x-2">
+                      <Download className="w-4 h-4" />
+                      <span>現在の文字「{currentGlyph.char}」をPNG出力</span>
+                    </span>
+                    <span className="text-[10px] opacity-75 font-mono">{gridWidth}×{gridHeight}</span>
+                  </button>
                 </div>
-                <div className="text-[11px] leading-snug opacity-85">
-                  全作図文字数: <strong className="font-bold">{totalDrawnPixelGlyphs} 文字</strong> / 現在の点灯ピクセル: <strong className="font-bold">{activePixelCount} px</strong>
+
+                {/* Real-time Project Stats */}
+                <div className="p-3 border border-emerald-500/20 bg-emerald-500/5 text-xs text-emerald-700 dark:text-emerald-400 space-y-1.5">
+                  <div className="flex items-center space-x-1 font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>リアルタイム自動同期中</span>
+                  </div>
+                  <div className="text-[11px] leading-snug opacity-85">
+                    全作図文字数: <strong className="font-bold">{totalDrawnPixelGlyphs} 文字</strong> / 現在の点灯ピクセル: <strong className="font-bold">{activePixelCount} px</strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3280,7 +3632,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
                 {/* 1. Direct OTF Font Export */}
                 <button
                   onClick={() => handleExportFontFile('otf')}
-                  className="w-full py-2 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-between transition-all active:scale-95 shadow-xs border border-emerald-400"
+                  className="w-full py-2 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-between transition-all active:scale-95 border border-emerald-400"
                   title="作成したピクセルフォントを直接OTF形式でダウンロード (.otf)"
                 >
                   <span className="flex items-center space-x-1.5">
@@ -3368,7 +3720,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
           className={`flex md:hidden items-center justify-around h-14 shrink-0 border-t z-30 ${
             isLight
               ? 'bg-white/98 border-stone-300 shadow-lg'
-              : 'bg-[#0a0f0c]/98 border-[#294232] shadow-black/80'
+              : 'bg-[#0a0f0c]/98 border-[#294232] '
           }`}
           style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 2px)' }}
         >

@@ -584,7 +584,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
         >
           <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
             <div
-              className={`hidden sm:flex w-9 h-9 sm:w-10 sm:h-10 rounded-xl items-center justify-center border shadow-xs shrink-0 ${
+              className={`hidden sm:flex w-9 h-9 sm:w-10 sm:h-10 rounded-xl items-center justify-center border  shrink-0 ${
                 isLight ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-amber-950/60 border-amber-800 text-amber-400'
               }`}
             >
@@ -608,7 +608,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
           <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
             <button
               onClick={handleApplyToCurrentGlyph}
-              className={`hidden sm:flex px-3.5 py-2 rounded-xl text-xs font-bold items-center space-x-1.5 transition-all shadow-sm active:scale-98 ${
+ className={`hidden sm:flex px-3.5 py-2 rounded-xl text-xs font-bold items-center space-x-1.5 transition-all active:scale-98 ${
                 isLight
                   ? 'bg-amber-600 hover:bg-amber-700 text-white'
                   : 'bg-amber-600 hover:bg-amber-500 text-white'
@@ -621,7 +621,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
 
             <button
               onClick={handleBatchApplyHinting}
-              className={`hidden sm:flex px-3.5 py-2 rounded-xl text-xs font-bold items-center space-x-1.5 transition-all shadow-sm active:scale-98 ${
+ className={`hidden sm:flex px-3.5 py-2 rounded-xl text-xs font-bold items-center space-x-1.5 transition-all active:scale-98 ${
                 isLight
                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white'
@@ -661,7 +661,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
                   onClick={() => setSelectedPpem(sz)}
                   className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg transition-all font-mono text-[10px] sm:text-[11px] ${
                     selectedPpem === sz
-                      ? 'bg-amber-600 text-white font-black shadow-xs'
+                      ? 'bg-amber-600 text-white font-black '
                       : isLight
                       ? 'bg-white text-stone-700 hover:bg-stone-200 border border-stone-200'
                       : 'bg-[#1a291f] text-stone-300 hover:bg-[#24392b] border border-[#233829]'
@@ -688,7 +688,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
                   onClick={() => setRenderingMode(mode.id)}
                   className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-[9px] sm:text-[10px] font-bold transition-all ${
                     renderingMode === mode.id
-                      ? 'bg-emerald-600 text-white shadow-xs'
+                      ? 'bg-emerald-600 text-white '
                       : 'text-stone-500 hover:text-stone-900 dark:hover:text-white'
                   }`}
                 >
@@ -701,7 +701,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
               onClick={() => setEnablePreview((prev) => !prev)}
               className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-xl border text-[10px] sm:text-[11px] font-bold flex items-center space-x-1 transition-all shrink-0 ${
                 enablePreview
-                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  ? 'bg-emerald-600 text-white border-emerald-600 '
                   : isLight
                   ? 'bg-white text-stone-600 border-stone-300'
                   : 'bg-[#18261c] text-stone-300 border-[#25382b]'
@@ -751,7 +751,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
         <div className="flex-1 min-h-0 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-stone-200 dark:divide-[#223326]">
           {/* Left Sidebar: Glyph List & Stem Inspector */}
           <div
-            className={`w-full md:w-72 shrink-0 p-3 sm:p-4 space-y-3 sm:space-y-4 overflow-y-auto ${
+            className={`w-full md:w-72 shrink-0 p-3 sm:p-4 pb-24 sm:pb-4 space-y-3 sm:space-y-4 overflow-y-auto ${
               activeTab !== 'stems' ? 'hidden sm:block' : ''
             }`}
           >
@@ -808,7 +808,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
                     onClick={() => setSelectedUnicode(g.unicode)}
                     className={`h-9 rounded-lg font-bold text-sm flex items-center justify-center transition-all ${
                       selectedUnicode === g.unicode
-                        ? 'bg-amber-600 text-white shadow-xs'
+                        ? 'bg-amber-600 text-white '
                         : isLight
                         ? 'bg-white border border-stone-200 hover:bg-stone-100 text-stone-800'
                         : 'bg-[#152219] border border-[#223628] hover:bg-[#1f3326] text-stone-200'
@@ -882,7 +882,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
 
           {/* Center Canvas View: Vector Contour Overlay & Low-Res Raster Canvas */}
           <div
-            className={`flex-1 p-3 sm:p-5 flex flex-col space-y-3 sm:space-y-4 overflow-y-auto ${
+            className={`flex-1 p-3 sm:p-5 pb-24 sm:pb-5 flex flex-col space-y-3 sm:space-y-4 overflow-y-auto ${
               activeTab !== 'preview' ? 'hidden sm:flex' : ''
             }`}
           >
@@ -904,7 +904,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
                 onClick={() => setMobilePreviewDisplay('raster')}
                 className={`flex-1 py-1 text-[10px] font-bold rounded-lg ${
                   mobilePreviewDisplay === 'raster'
-                    ? 'bg-amber-600 text-white shadow-xs'
+                    ? 'bg-amber-600 text-white '
                     : 'text-stone-500'
                 }`}
               >
@@ -914,7 +914,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
                 onClick={() => setMobilePreviewDisplay('vector')}
                 className={`flex-1 py-1 text-[10px] font-bold rounded-lg ${
                   mobilePreviewDisplay === 'vector'
-                    ? 'bg-amber-600 text-white shadow-xs'
+                    ? 'bg-amber-600 text-white '
                     : 'text-stone-500'
                 }`}
               >
@@ -924,7 +924,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
                 onClick={() => setMobilePreviewDisplay('both')}
                 className={`flex-1 py-1 text-[10px] font-bold rounded-lg ${
                   mobilePreviewDisplay === 'both'
-                    ? 'bg-amber-600 text-white shadow-xs'
+                    ? 'bg-amber-600 text-white '
                     : 'text-stone-500'
                 }`}
               >
@@ -1070,7 +1070,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
 
           {/* Right Controls Panel: Hinting Parameters & Configuration */}
           <div
-            className={`w-full md:w-80 shrink-0 p-3 sm:p-4 space-y-3 sm:space-y-4 overflow-y-auto ${
+            className={`w-full md:w-80 shrink-0 p-3 sm:p-4 pb-24 sm:pb-4 space-y-3 sm:space-y-4 overflow-y-auto ${
               activeTab !== 'settings' ? 'hidden sm:block' : ''
             }`}
           >
@@ -1120,7 +1120,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
                     onClick={() => setConfig((prev) => ({ ...prev, minStemWidthPx: opt.value }))}
                     className={`py-1.5 rounded-lg text-xs font-bold border transition-all ${
                       config.minStemWidthPx === opt.value
-                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        ? 'bg-amber-600 text-white border-amber-600 '
                         : isLight
                         ? 'bg-white border-stone-200 hover:bg-stone-100 text-stone-800'
                         : 'bg-[#18261c] border-[#223628] hover:bg-[#1f3326] text-stone-200'
@@ -1190,7 +1190,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
             <div className="pt-4 space-y-2 border-t border-stone-200 dark:border-[#223326] hidden sm:block">
               <button
                 onClick={handleApplyToCurrentGlyph}
-                className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-all shadow-sm flex items-center justify-center space-x-2"
+ className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-all flex items-center justify-center space-x-2"
               >
                 <Check className="w-4 h-4" />
                 <span>「{currentGlyph.char}」に整列適用</span>
@@ -1198,7 +1198,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
 
               <button
                 onClick={handleBatchApplyHinting}
-                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-sm flex items-center justify-center space-x-2"
+ className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all flex items-center justify-center space-x-2"
               >
                 <Sparkles className="w-4 h-4 text-emerald-200" />
                 <span>全文字一括ヒンティング適用</span>
@@ -1211,14 +1211,14 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
         <div className="flex sm:hidden items-center justify-between gap-2 px-3 py-2 border-t bg-stone-100/90 dark:bg-[#121c15] border-stone-200 dark:border-[#223326] shrink-0">
           <button
             onClick={handleApplyToCurrentGlyph}
-            className="flex-1 py-2 rounded-xl bg-amber-600 active:bg-amber-700 text-white font-bold text-xs flex items-center justify-center space-x-1 shadow-sm"
+ className="flex-1 py-2 rounded-xl bg-amber-600 active:bg-amber-700 text-white font-bold text-xs flex items-center justify-center space-x-1 "
           >
             <Check className="w-3.5 h-3.5" />
             <span>「{currentGlyph.char}」に適用</span>
           </button>
           <button
             onClick={handleBatchApplyHinting}
-            className="flex-1 py-2 rounded-xl bg-emerald-600 active:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center space-x-1 shadow-sm"
+ className="flex-1 py-2 rounded-xl bg-emerald-600 active:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center space-x-1 "
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
             <span>全文字一括適用</span>
@@ -1240,7 +1240,7 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
 
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 font-bold text-xs transition-colors shadow-xs"
+            className="px-5 py-2 rounded-xl bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 font-bold text-xs transition-colors "
           >
             完了・閉じる
           </button>

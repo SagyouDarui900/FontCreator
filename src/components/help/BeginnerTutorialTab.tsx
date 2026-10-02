@@ -13,6 +13,7 @@ import {
   HelpCircle,
   Zap,
   SlidersHorizontal,
+  BookOpen,
 } from 'lucide-react';
 
 interface BeginnerTutorialTabProps {
@@ -49,6 +50,8 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
         </div>
       </div>
 
+
+
       {/* 3 Reassuring Facts for Beginners */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
         <div
@@ -72,10 +75,10 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
         >
           <div className="text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center space-x-1.5">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>未作成文字の自動補完</span>
+            <span>未作成文字のフォールバック表示</span>
           </div>
           <p className="text-[11px] text-stone-600 dark:text-stone-300 leading-snug">
-            未作成の文字が入力された場合でも、OSの標準フォントが自動で代替表示（フォールバック）されます。
+            未作成の文字が入力された場合でも、OSの標準フォントによる代替表示（フォールバック）が適用されます。
           </p>
         </div>
 
@@ -223,7 +226,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
                 <h5 className="text-xs font-bold">筆またはペンで描画</h5>
               </div>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                <strong>筆ツール [B]</strong> によるフリーハンド描画、または <strong>ペンツール [P]</strong> でアンカーポイントを配置して描きます。中央の薄緑の枠（900×900）を目安に収めます。
+                <strong>筆ツール [B]</strong> によるフリーハンド描画、または <strong>ペンツール [P]</strong> でアンカーポイントを配置して描きます。中央の薄緑の枠（850×850）を目安に収めます。
               </p>
             </div>
             <div className="mt-2 text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
@@ -242,14 +245,14 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
                 <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-extrabold flex items-center justify-center">
                   3
                 </span>
-                <h5 className="text-xs font-bold">自動設定・自動合成の活用</h5>
+                <h5 className="text-xs font-bold">余白計算とグリフ合成の適用</h5>
               </div>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                <strong>Shift + Alt + S</strong> を押すと文字の左右余白（サイドベアリング）が自動設定されます。「か」を作成しておけば「が」を濁点自動合成機能で生成可能です。
+                <strong>Shift + Alt + S</strong> を押すと文字の左右余白（サイドベアリング）が数値計算され適用されます。「か」の輪郭データから濁点付き文字を生成する合成処理も可能です。
               </p>
             </div>
             <div className="mt-2 text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
-              上部「機能」メニューから濁点・小書きを自動合成できます
+              上部「機能」メニューから濁点・小書き文字の合成処理を実行できます
             </div>
           </div>
 
@@ -314,7 +317,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
           </div>
           <button
             onClick={onOpenGlossary}
-            className="text-xs text-amber-800 dark:text-amber-300 underline font-bold hover:opacity-80 flex items-center space-x-1"
+            className="text-xs text-amber-800 dark:text-amber-300 underline font-bold hover:opacity-80 flex items-center space-x-1 cursor-pointer"
           >
             <span>用語・概念辞典を見る</span>
           </button>
