@@ -102,7 +102,7 @@ export function contoursToOpenTypePath(
       }
     }
 
-    if (contour.closed || nodes.length >= 3) {
+    if (contour.closed !== false) {
       path.close();
     }
   }
@@ -344,7 +344,7 @@ export function compileFont(
         : (g.unicode > 255 ? (project.metadata.unitsPerEm || DEFAULT_UPM) : Math.round((project.metadata.unitsPerEm || DEFAULT_UPM) / 2))
     );
 
-    const scaleFactor = options?.scaleFactor !== undefined ? options.scaleFactor : 1.0;
+    const scaleFactor = options?.scaleFactor !== undefined ? options.scaleFactor : 1.35;
     const shouldBalance = options?.balanceSideBearings !== false;
     const shouldMerge = options?.mergeOverlaps === true;
 
@@ -500,13 +500,15 @@ export function compileFont(
     if (!addedUnicodes.has(deriv.targetUnicode) && project.glyphs[deriv.sourceUnicode]) {
       const srcGlyph = project.glyphs[deriv.sourceUnicode];
       if (srcGlyph.contours && srcGlyph.contours.length > 0) {
+        const upm = project.metadata.unitsPerEm || DEFAULT_UPM;
+        const emCenter = upm / 2;
         let derivedContours: PathContour[] = [];
         if (deriv.action === 'rotate90') {
-          derivedContours = rotateContours(srcGlyph.contours, 90, 500, 500);
+          derivedContours = rotateContours(srcGlyph.contours, 90, emCenter, emCenter);
         } else if (deriv.action === 'shiftTopRight') {
           const bbox = getContoursBoundingBox(srcGlyph.contours);
-          const targetX = 750;
-          const targetY = 250;
+          const targetX = Math.round(upm * 0.75);
+          const targetY = Math.round(upm * 0.25);
           const dx = targetX - bbox.centerX;
           const dy = targetY - bbox.centerY;
           derivedContours = transformContours(srcGlyph.contours, (p) => ({

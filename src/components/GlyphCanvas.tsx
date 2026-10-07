@@ -4970,43 +4970,46 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
             {/* Pen Tool options in Header */}
             {toolMode === 'pen' && (
-              <div className="flex items-center flex-wrap gap-1.5 ml-1 pl-1.5 border-l border-stone-200 dark:border-stone-700">
-                <button
-                  onClick={() => setPenMode('bezier')}
-                  className={`px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 transition-colors ${
-                    penMode === 'bezier'
-                      ? 'bg-emerald-700 text-white'
-                      : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300'
-                  }`}
-                  title="ベジェ曲線"
-                >
-                  <Spline className="w-3 h-3" />
-                  <span>曲線</span>
-                </button>
-                <button
-                  onClick={() => setPenMode('corner')}
-                  className={`px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 transition-colors ${
-                    penMode === 'corner'
-                      ? 'bg-emerald-700 text-white'
-                      : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300'
-                  }`}
-                  title="折れ線"
-                >
-                  <Square className="w-3 h-3" />
-                  <span>折れ線</span>
-                </button>
+              <div className="flex items-center gap-1 ml-1 pl-1.5 border-l border-stone-200 dark:border-stone-700 shrink-0">
+                {/* Curve / Corner Toggle */}
+                <div className="flex items-center bg-stone-100 dark:bg-stone-800 p-0.5 rounded-lg border border-stone-200 dark:border-stone-700">
+                  <button
+                    onClick={() => setPenMode('bezier')}
+                    className={`px-1.5 py-0.5 rounded text-xs font-bold flex items-center space-x-1 transition-colors ${
+                      penMode === 'bezier'
+                        ? 'bg-emerald-700 text-white'
+                        : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                    }`}
+                    title="ベジェ曲線モード (滑らかな曲線を描画)"
+                  >
+                    <Spline className="w-3 h-3" />
+                    <span className="hidden xs:inline">曲線</span>
+                  </button>
+                  <button
+                    onClick={() => setPenMode('corner')}
+                    className={`px-1.5 py-0.5 rounded text-xs font-bold flex items-center space-x-1 transition-colors ${
+                      penMode === 'corner'
+                        ? 'bg-emerald-700 text-white'
+                        : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                    }`}
+                    title="折れ線モード (直線的な角を描画)"
+                  >
+                    <Square className="w-3 h-3" />
+                    <span className="hidden xs:inline">折線</span>
+                  </button>
+                </div>
 
-                {/* Pen Stroke Width Controls for "線で確定" */}
+                {/* Pen Stroke Width Controls */}
                 <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-lg bg-stone-100/90 dark:bg-stone-800/90 border border-stone-200 dark:border-stone-700">
-                  <span className="text-[11px] font-semibold text-stone-600 dark:text-stone-300 whitespace-nowrap">
-                    線の太さ:
+                  <span className="text-[10px] font-semibold text-stone-500 dark:text-stone-400 whitespace-nowrap hidden sm:inline">
+                    太さ:
                   </span>
 
                   {/* Stepper Down */}
                   <button
                     onClick={() => handleSetPenStrokeWidth(penStrokeWidth - (penStrokeWidth > 20 ? 5 : 2))}
                     disabled={penStrokeWidth <= 2}
-                    className="w-5 h-5 rounded bg-white dark:bg-stone-700 text-stone-700 dark:text-stone-200 font-bold text-xs flex items-center justify-center hover:bg-stone-200 dark:hover:bg-stone-600 disabled:opacity-30 transition-colors"
+                    className="w-5 h-5 rounded bg-white dark:bg-stone-700 text-stone-700 dark:text-stone-200 font-bold text-xs flex items-center justify-center hover:bg-stone-200 dark:hover:bg-stone-600 disabled:opacity-30 transition-colors cursor-pointer"
                     title="線の太さを減らす (-5px)"
                   >
                     -
@@ -5023,84 +5026,59 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                         const val = parseInt(e.target.value, 10);
                         if (!isNaN(val)) handleSetPenStrokeWidth(val);
                       }}
-                      className="w-11 h-5 text-center text-xs font-mono font-bold bg-white dark:bg-stone-700 rounded border border-stone-300 dark:border-stone-600 text-stone-900 dark:text-stone-100 focus:outline-emerald-500"
+                      className="w-10 h-5 text-center text-xs font-mono font-bold bg-white dark:bg-stone-700 rounded border border-stone-300 dark:border-stone-600 text-stone-900 dark:text-stone-100 focus:outline-emerald-500"
                     />
-                    <span className="text-[10px] text-stone-500 dark:text-stone-400 font-mono ml-0.5">px</span>
+                    <span className="text-[9px] text-stone-400 font-mono ml-0.5">px</span>
                   </div>
 
                   {/* Stepper Up */}
                   <button
                     onClick={() => handleSetPenStrokeWidth(penStrokeWidth + (penStrokeWidth >= 20 ? 5 : 2))}
                     disabled={penStrokeWidth >= 300}
-                    className="w-5 h-5 rounded bg-white dark:bg-stone-700 text-stone-700 dark:text-stone-200 font-bold text-xs flex items-center justify-center hover:bg-stone-200 dark:hover:bg-stone-600 disabled:opacity-30 transition-colors"
+                    className="w-5 h-5 rounded bg-white dark:bg-stone-700 text-stone-700 dark:text-stone-200 font-bold text-xs flex items-center justify-center hover:bg-stone-200 dark:hover:bg-stone-600 disabled:opacity-30 transition-colors cursor-pointer"
                     title="線の太さを増やす (+5px)"
                   >
                     +
                   </button>
 
-                  {/* Quick Presets */}
-                  <div className="hidden md:flex items-center space-x-0.5 ml-1 border-l border-stone-300 dark:border-stone-600 pl-1">
+                  {/* Quick Preset Dropdown (replaces 5 wide buttons) */}
+                  <select
+                    value={[15, 30, 45, 60, 80].includes(penStrokeWidth) ? penStrokeWidth : ''}
+                    onChange={(e) => {
+                      const w = parseInt(e.target.value, 10);
+                      if (!isNaN(w)) handleSetPenStrokeWidth(w);
+                    }}
+                    className="text-[10px] font-mono font-bold px-1 py-0.5 bg-white dark:bg-stone-700 rounded border border-stone-300 dark:border-stone-600 text-stone-700 dark:text-stone-200 cursor-pointer outline-none ml-0.5"
+                    title="太さプリセット選択"
+                  >
+                    <option value="" disabled hidden>プリセット</option>
                     {[15, 30, 45, 60, 80].map((w) => (
-                      <button
-                        key={w}
-                        onClick={() => handleSetPenStrokeWidth(w)}
-                        className={`px-1.5 py-0.5 text-[10px] font-mono rounded transition-colors ${
-                          penStrokeWidth === w
-                            ? 'bg-emerald-600 text-white font-bold'
-                            : 'hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300'
-                        }`}
-                      >
-                        {w}
-                      </button>
+                      <option key={w} value={w}>{w}px</option>
                     ))}
-                  </div>
+                  </select>
 
-                  {/* Cap Style: Round / Butt / Square */}
-                  <div className="flex items-center space-x-0.5 ml-1 border-l border-stone-300 dark:border-stone-600 pl-1">
-                    <button
-                      onClick={() => handleSetPenCapStyle('round')}
-                      className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors ${
-                        penCapStyle === 'round'
-                          ? 'bg-sky-600 text-white font-bold'
-                          : 'hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300'
-                      }`}
-                      title="端点を丸くする (Round Cap)"
-                    >
-                      丸
-                    </button>
-                    <button
-                      onClick={() => handleSetPenCapStyle('butt')}
-                      className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors ${
-                        penCapStyle === 'butt'
-                          ? 'bg-sky-600 text-white font-bold'
-                          : 'hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300'
-                      }`}
-                      title="端点を直角・フラットにする (Butt Cap)"
-                    >
-                      平
-                    </button>
-                    <button
-                      onClick={() => handleSetPenCapStyle('square')}
-                      className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors ${
-                        penCapStyle === 'square'
-                          ? 'bg-sky-600 text-white font-bold'
-                          : 'hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300'
-                      }`}
-                      title="端点を角型に延長する (Square Cap)"
-                    >
-                      角
-                    </button>
-                  </div>
+                  {/* Single Cyclic Cap Style Toggle Button (Round -> Butt -> Square) */}
+                  <button
+                    onClick={() => {
+                      const next = penCapStyle === 'round' ? 'butt' : penCapStyle === 'butt' ? 'square' : 'round';
+                      handleSetPenCapStyle(next);
+                    }}
+                    className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800 hover:bg-sky-200 transition-colors cursor-pointer flex items-center gap-0.5"
+                    title={`端点の形状: 現在「${penCapStyle === 'round' ? '丸 (Round)' : penCapStyle === 'butt' ? '平 (Butt)' : '角 (Square)'}」（クリックで切替）`}
+                  >
+                    <span>端:</span>
+                    <span>{penCapStyle === 'round' ? '丸' : penCapStyle === 'butt' ? '平' : '角'}</span>
+                  </button>
                 </div>
 
+                {/* Studio Launch Icon Button */}
                 {onOpenPenPresetsModal && (
                   <button
                     onClick={onOpenPenPresetsModal}
-                    className="ml-1 px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 border border-stone-300 dark:border-stone-700 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg text-xs font-bold flex items-center bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 border border-stone-300 dark:border-stone-700 transition-colors cursor-pointer"
                     title="ペン作成・ブラシカスタマイズスタジオを開く"
                   >
-                    <Sliders className="w-3 h-3" />
-                    <span className="hidden sm:inline">ペン作成・編集</span>
+                    <Sliders className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
@@ -5575,7 +5553,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
               onClick={() =>
                 onChangeGridSettings?.((prev) => ({ ...prev, showBodyFrame: !prev.showBodyFrame }))
               }
-              className={`hidden sm:inline-flex px-1.5 py-1 rounded text-[11px] font-bold border transition-all ${
+              className={`hidden lg:inline-flex px-1.5 py-1 rounded text-[11px] font-bold border transition-all ${
                 gridSettings.showBodyFrame
                   ? isLight
                     ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
@@ -5592,7 +5570,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
               onClick={() =>
                 onChangeGridSettings?.((prev) => ({ ...prev, showKanaFrame: !prev.showKanaFrame }))
               }
-              className={`hidden sm:inline-flex px-1.5 py-1 rounded text-[11px] font-bold border transition-all ${
+              className={`hidden lg:inline-flex px-1.5 py-1 rounded text-[11px] font-bold border transition-all ${
                 gridSettings.showKanaFrame
                   ? isLight
                     ? 'bg-amber-50 border-amber-300 text-amber-900'

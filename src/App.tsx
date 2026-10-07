@@ -657,6 +657,13 @@ export default function App() {
     }
   }, [selectedUnicode, selectedChar, showToast]);
 
+  // Helper for fast deep clone
+  const cloneGlyph = (g: GlyphData): GlyphData => {
+    return typeof structuredClone === 'function'
+      ? structuredClone(g)
+      : JSON.parse(JSON.stringify(g));
+  };
+
   // Record history snapshot before mutation (capturing pre-change state from projectRef)
   const commitHistory = useCallback(() => {
     const unicode = selectedUnicode;
@@ -672,15 +679,16 @@ export default function App() {
         const last = prev[prev.length - 1];
         if (
           last.unicode === existingGlyph.unicode &&
-          JSON.stringify(last.contours) === JSON.stringify(existingGlyph.contours) &&
           last.advanceWidth === existingGlyph.advanceWidth &&
-          last.lsb === existingGlyph.lsb
+          last.lsb === existingGlyph.lsb &&
+          last.contours.length === existingGlyph.contours.length &&
+          JSON.stringify(last.contours) === JSON.stringify(existingGlyph.contours)
         ) {
           return prev;
         }
       }
       // Bounded 50-step circular ring buffer with structured cloning
-      return [...prev.slice(-49), JSON.parse(JSON.stringify(existingGlyph))];
+      return [...prev.slice(-49), cloneGlyph(existingGlyph)];
     });
     setRedoStack([]);
   }, [selectedUnicode, selectedChar]);
@@ -696,7 +704,7 @@ export default function App() {
       const nextUndo = prevUndo.slice(0, prevUndo.length - 1);
       
       const currentSnapshot = currentGlyphRef.current;
-      setRedoStack((prevRedo) => [...prevRedo.slice(-49), JSON.parse(JSON.stringify(currentSnapshot))]);
+      setRedoStack((prevRedo) => [...prevRedo.slice(-49), cloneGlyph(currentSnapshot)]);
 
       if (previous.unicode !== selectedUnicode) {
         setSelectedUnicode(previous.unicode);
@@ -731,7 +739,7 @@ export default function App() {
       const nextRedo = prevRedo.slice(0, prevRedo.length - 1);
 
       const currentSnapshot = currentGlyphRef.current;
-      setUndoStack((prevUndo) => [...prevUndo.slice(-49), JSON.parse(JSON.stringify(currentSnapshot))]);
+      setUndoStack((prevUndo) => [...prevUndo.slice(-49), cloneGlyph(currentSnapshot)]);
 
       if (next.unicode !== selectedUnicode) {
         setSelectedUnicode(next.unicode);
