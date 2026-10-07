@@ -19,7 +19,7 @@ export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss, theme }) => {
   const isLight = isLightTheme(theme);
 
   return (
-    <div className="fixed bottom-20 sm:bottom-4 right-3 sm:right-4 z-50 flex flex-col space-y-2 max-w-sm pointer-events-none pb-[max(env(safe-area-inset-bottom),0px)]">
+    <div className="fixed bottom-14 sm:bottom-4 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-4 z-50 flex flex-col items-center sm:items-end space-y-1.5 w-auto max-w-[calc(100vw-24px)] sm:max-w-sm pointer-events-none pb-[max(env(safe-area-inset-bottom),0px)]">
       {toasts.map((toast) => {
         const isSuccess = toast.type === 'success' || !toast.type;
         const isError = toast.type === 'error';
@@ -28,7 +28,7 @@ export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss, theme }) => {
         return (
           <div
             key={toast.id}
-            className={`pointer-events-auto flex items-center space-x-2.5 px-3.5 py-2.5 rounded-lg border shadow-lg text-xs font-medium backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200 ${
+            className={`pointer-events-auto flex items-center gap-2 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full sm:rounded-xl border shadow-md sm:shadow-lg text-[11px] sm:text-xs font-medium backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150 max-w-full ${
               isLight
                 ? isError
                   ? 'bg-rose-50/95 border-rose-200 text-rose-900'
@@ -47,20 +47,21 @@ export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss, theme }) => {
             }`}
           >
             {isError ? (
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+              <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-500 shrink-0" />
             ) : isWarning ? (
-              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+              <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 shrink-0" />
             ) : isSuccess ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             ) : (
-              <Info className="w-4 h-4 text-sky-500 shrink-0" />
+              <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-500 shrink-0" />
             )}
-            <span className="flex-1 leading-snug">{toast.text}</span>
+            <span className="leading-tight truncate max-w-[70vw] sm:max-w-none">{toast.text}</span>
             <button
               onClick={() => onDismiss(toast.id)}
-              className="p-0.5 rounded hover:opacity-75 shrink-0 text-stone-400"
+              className="p-0.5 rounded-full hover:opacity-75 shrink-0 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 cursor-pointer"
+              title="閉じる"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </button>
           </div>
         );

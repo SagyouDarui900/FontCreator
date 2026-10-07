@@ -698,6 +698,40 @@ export function centerContoursInBox(
 }
 
 /**
+ * Auto-fit contours safely inside the standard Em-box (e.g. 85% for Kanji, or custom target ratio)
+ * Pulls overflowing contours back inside the canvas boundaries with proportional scaling.
+ */
+export function fitContoursToEmBox(
+  contours: PathContour[],
+  boxWidth: number = 1000,
+  boxHeight: number = 1000,
+  targetRatio: number = 0.85
+): PathContour[] {
+  if (!contours || contours.length === 0) return [];
+  const bbox = getContoursBoundingBox(contours);
+  if (bbox.width <= 0 || bbox.height <= 0) return contours;
+
+  const targetW = boxWidth * targetRatio;
+  const targetH = boxHeight * targetRatio;
+
+  // Scale down if contours exceed the target box, or scale to optimal 85% frame
+  const scaleX = bbox.width > targetW ? targetW / bbox.width : 1.0;
+  const scaleY = bbox.height > targetH ? targetH / bbox.height : 1.0;
+  const scale = Math.min(scaleX, scaleY);
+
+  const targetCenterX = boxWidth / 2;
+  const targetCenterY = boxHeight / 2;
+
+  const currentCenterX = bbox.centerX;
+  const currentCenterY = bbox.centerY;
+
+  return transformContours(contours, (p) => ({
+    x: Math.round((targetCenterX + (p.x - currentCenterX) * scale) * 10) / 10,
+    y: Math.round((targetCenterY + (p.y - currentCenterY) * scale) * 10) / 10,
+  }));
+}
+
+/**
  * Rotate contours around a center point (default center of em box: 500, 500)
  */
 export function rotateContours(
@@ -957,12 +991,22 @@ export function sampleContourPoints(contour: PathContour, samplesPerSegment: num
         });
       }
     } else {
+      const chordLen = Math.hypot(next.x - curr.x, next.y - curr.y);
+      const ctrlNetLen =
+        Math.hypot(cp1.x - curr.x, cp1.y - curr.y) +
+        Math.hypot(cp2.x - cp1.x, cp2.y - cp1.y) +
+        Math.hypot(next.x - cp2.x, next.y - cp2.y);
+      const approxCurveLen = (chordLen + ctrlNetLen) / 2;
+      const adaptiveSteps = Math.max(
+        samplesPerSegment,
+        Math.min(32, Math.ceil(approxCurveLen / 12))
+      );
       const sampled = sampleCubicBezier(
         { x: curr.x, y: curr.y },
         cp1,
         cp2,
         { x: next.x, y: next.y },
-        samplesPerSegment
+        adaptiveSteps
       );
       densePoints.push(...sampled);
     }
@@ -983,6 +1027,48 @@ function distToSegment(pt: Point, p1: Point, p2: Point): number {
   const projX = p1.x + t * dx;
   const projY = p1.y + t * dy;
   return Math.hypot(pt.x - projX, pt.y - projY);
+}
+
+/**
+ * Check if two line segments (p1-p2 and q1-q2) intersect
+ */
+function doSegmentsIntersect(p1: Point, p2: Point, q1: Point, q2: Point): boolean {
+  const ccw = (a: Point, b: Point, c: Point) => (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x);
+  return (
+    ccw(p1, q1, q2) !== ccw(p2, q1, q2) &&
+    ccw(p1, p2, q1) !== ccw(p1, p2, q2)
+  );
+}
+
+/**
+ * Compute the shortest distance between two 2D line segments
+ */
+function distSegmentToSegment(p1: Point, p2: Point, q1: Point, q2: Point): number {
+  if (doSegmentsIntersect(p1, p2, q1, q2)) return 0;
+  return Math.min(
+    distToSegment(p1, q1, q2),
+    distToSegment(p2, q1, q2),
+    distToSegment(q1, p1, p2),
+    distToSegment(q2, p1, p2)
+  );
+}
+
+/**
+ * Point in polygon test using ray-casting
+ */
+export function isPointInPolygon(pt: Point, poly: Point[]): boolean {
+  if (!poly || poly.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x;
+    const yi = poly[i].y;
+    const xj = poly[j].x;
+    const yj = poly[j].y;
+    const intersect =
+      yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi || 0.0000001) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 /**
@@ -1016,33 +1102,62 @@ export function isPointNearContour(
     return false;
   }
 
-  // If point (or prevPoint) is inside a closed contour, treat as hit
+  // 1. Sample dense polyline representation along the contour with high curve fidelity
+  const samples = sampleContourPoints(contour, 16);
+  if (samples.length < 2) return false;
+
+  // 1.5. Direct distance check from eraser points to any sample point on the contour
+  for (const q of samples) {
+    if (Math.hypot(p2.x - q.x, p2.y - q.y) <= threshold) return true;
+    if (prevPoint && Math.hypot(p1.x - q.x, p1.y - q.y) <= threshold) return true;
+  }
+
+  // 2. If closed contour, check if either eraser point (or swept samples) is inside the filled body
   if (contour.closed) {
-    if (isPointInContour(p2, contour) || (prevPoint && isPointInContour(p1, contour))) {
+    if (isPointInPolygon(p2, samples)) return true;
+    if (prevPoint && isPointInPolygon(p1, samples)) return true;
+    if (prevPoint) {
+      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      if (isPointInPolygon(mid, samples)) return true;
+      const q1 = { x: (p1.x * 3 + p2.x) / 4, y: (p1.y * 3 + p2.y) / 4 };
+      if (isPointInPolygon(q1, samples)) return true;
+      const q3 = { x: (p1.x + p2.x * 3) / 4, y: (p1.y + p2.y * 3) / 4 };
+      if (isPointInPolygon(q3, samples)) return true;
+    }
+  }
+
+  // 3. Check point-to-segment distance and swept segment-to-segment distance along contour boundary
+  for (let i = 1; i < samples.length; i++) {
+    const q1 = samples[i - 1];
+    const q2 = samples[i];
+    if (distToSegment(p2, q1, q2) <= threshold) {
+      return true;
+    }
+    if (prevPoint && distToSegment(p1, q1, q2) <= threshold) {
+      return true;
+    }
+    if (distSegmentToSegment(p1, p2, q1, q2) <= threshold) {
+      return true;
+    }
+  }
+  if (contour.closed && samples.length > 2) {
+    const q1 = samples[samples.length - 1];
+    const q2 = samples[0];
+    if (distToSegment(p2, q1, q2) <= threshold) {
+      return true;
+    }
+    if (prevPoint && distToSegment(p1, q1, q2) <= threshold) {
+      return true;
+    }
+    if (distSegmentToSegment(p1, p2, q1, q2) <= threshold) {
       return true;
     }
   }
 
-  // 1. Check anchor nodes
+  // 4. Check anchor nodes directly
   for (const node of contour.nodes) {
     if (distToSegment(node, p1, p2) <= threshold) {
       return true;
-    }
-  }
-
-  // 2. Check Bézier and line segments using sampleContourPoints
-  const samples = sampleContourPoints(contour, 8);
-  for (let i = 0; i < samples.length; i++) {
-    const p = samples[i];
-    if (distToSegment(p, p1, p2) <= threshold) {
-      return true;
-    }
-    if (i > 0) {
-      const pPrev = samples[i - 1];
-      const mid = { x: (p.x + pPrev.x) / 2, y: (p.y + pPrev.y) / 2 };
-      if (distToSegment(mid, p1, p2) <= threshold) {
-        return true;
-      }
     }
   }
 
@@ -1439,15 +1554,7 @@ export function sliceOpenContourWithEraser(
     const simplified = rdpSimplify(run, 0.9);
     if (simplified.length < 2) continue;
 
-    const nodes: BezierNode[] = simplified.map((p, idx) => ({
-      id: generateId(),
-      x: Math.round(p.x),
-      y: Math.round(p.y),
-      type: idx === 0 || idx === simplified.length - 1 ? 'corner' : 'smooth',
-      handleIn: null,
-      handleOut: null,
-    }));
-
+    const nodes = pointsToBezierContourNodes(simplified);
     result.push({
       id: generateId(),
       closed: false,
@@ -1505,7 +1612,8 @@ export function subtractEraserStrokeFromContours(
   if (hitClosedContours.length > 0) {
     try {
       newClosed = subtractEraserStrokeVector(hitClosedContours, strokePoints, radius);
-    } catch {
+    } catch (err) {
+      console.warn('Vector eraser subtraction encountered an error, falling back to bitmap carve:', err);
       newClosed = subtractEraserStrokeFromClosedContours(hitClosedContours, strokePoints, radius);
     }
   }
@@ -1527,6 +1635,8 @@ export function subtractEraserStrokeFromContours(
 /**
  * Erase contours at a given canvas point with specified radius and eraser mode.
  * - 'stroke': Deletes any contour that intersects with the eraser radius.
+ *   Uses topological grouping so outer outlines and all counter-holes (e.g. O, A, 日, 国, あ)
+ *   are erased together without leaving solid orphan hole artifacts!
  * - 'cut': Cuts/splits contours by carving out eraser areas from closed shapes (Boolean difference)
  *   or slicing open paths at eraser boundaries into separate segments.
  * - 'node': Removes individual anchor nodes falling within the eraser circle.
@@ -1535,32 +1645,59 @@ export function eraseContoursAtPoint(
   contours: PathContour[],
   point: Point,
   radius: number,
-  mode: 'stroke' | 'cut' | 'node' = 'stroke',
+  mode: 'all' | 'stroke' | 'cut' | 'node' = 'stroke',
   prevPoint?: Point | null
 ): PathContour[] {
   if (!contours || contours.length === 0) return [];
+
+  if (mode === 'all') {
+    return [];
+  }
 
   if (mode === 'cut') {
     const strokePts = prevPoint ? [prevPoint, point] : [point];
     return subtractEraserStrokeFromContours(contours, strokePts, radius);
   }
 
-  let hasChanged = false;
-  const result: PathContour[] = [];
+  if (mode === 'stroke') {
+    let hasChanged = false;
+    const erasedIds = new Set<string>();
 
-  for (const contour of contours) {
-    if (!isPointNearContour(point, contour, radius, prevPoint)) {
-      result.push(contour);
-      continue;
+    // 1. Direct hit test on each individual contour
+    for (const contour of contours) {
+      if (isPointNearContour(point, contour, radius, prevPoint)) {
+        erasedIds.add(contour.id);
+        hasChanged = true;
+      }
     }
 
-    if (mode === 'stroke') {
-      hasChanged = true;
-      // Completely erase this contour
-      continue;
+    if (!hasChanged) {
+      return contours;
     }
 
-    if (mode === 'node') {
+    // 2. If an outer contour is erased, also remove any dependent counter-holes
+    // that were fully enclosed by that specific outer contour so orphan inner holes don't invert.
+    for (const contour of contours) {
+      if (erasedIds.has(contour.id) && contour.closed) {
+        for (const other of contours) {
+          if (!erasedIds.has(other.id) && other.closed && other.id !== contour.id) {
+            // If other is fully inside contour, remove it with its deleted parent
+            if (isContourContained(other, contour)) {
+              erasedIds.add(other.id);
+            }
+          }
+        }
+      }
+    }
+
+    return contours.filter((c) => !erasedIds.has(c.id));
+  }
+
+  if (mode === 'node') {
+    let hasChanged = false;
+    const result: PathContour[] = [];
+
+    for (const contour of contours) {
       const remainingNodes = contour.nodes.filter(
         (n) => distToSegment(n, prevPoint || point, point) > radius
       );
@@ -1576,14 +1713,15 @@ export function eraseContoursAtPoint(
       } else {
         result.push(contour);
       }
-      continue;
     }
+
+    if (!hasChanged) {
+      return contours;
+    }
+    return result;
   }
 
-  if (!hasChanged) {
-    return contours;
-  }
-  return result;
+  return contours;
 }
 
 /**
@@ -2961,6 +3099,19 @@ export function strokePointsToOutline(
 
   const numRaw = rawPts.length;
 
+  // Check if stroke was created using a mouse to adaptively absorb optical sensor discretization jitter
+  const isMouseInput = rawPts.some((p) => p.pointerType === 'mouse');
+
+  // For mouse inputs: pre-filter 1px discrete staircasing steps with moving-average coordinate smoothing
+  if (isMouseInput && rawPts.length >= 4) {
+    const origX = rawPts.map((p) => p.x);
+    const origY = rawPts.map((p) => p.y);
+    for (let i = 1; i < rawPts.length - 1; i++) {
+      rawPts[i].x = origX[i - 1] * 0.25 + origX[i] * 0.50 + origX[i + 1] * 0.25;
+      rawPts[i].y = origY[i - 1] * 0.25 + origY[i] * 0.50 + origY[i + 1] * 0.25;
+    }
+  }
+
   // Compute cumulative physical arc-length along raw points
   const rawArcLengths = new Float64Array(numRaw);
   for (let i = 1; i < numRaw; i++) {
@@ -3003,9 +3154,6 @@ export function strokePointsToOutline(
     }
   }
 
-  // Check if stroke was created using a mouse to adaptively absorb optical sensor discretization jitter
-  const isMouseInput = rawPts.some((p) => p.pointerType === 'mouse');
-
   // Calculate instantaneous velocities (px/ms) along raw points to drive calligraphic ink dynamics
   const rawSpeeds = new Float64Array(numRaw);
   let validTimeCount = 0;
@@ -3023,8 +3171,11 @@ export function strokePointsToOutline(
   }
   if (validTimeCount > 0) {
     rawSpeeds[0] = rawSpeeds[1] || 0.5;
-    for (let i = 1; i < numRaw - 1; i++) {
-      rawSpeeds[i] = (rawSpeeds[i - 1] + rawSpeeds[i] * 2 + rawSpeeds[i + 1]) * 0.25;
+    const speedPasses = isMouseInput ? 4 : 2;
+    for (let p = 0; p < speedPasses; p++) {
+      for (let i = 1; i < numRaw - 1; i++) {
+        rawSpeeds[i] = (rawSpeeds[i - 1] + rawSpeeds[i] * 2 + rawSpeeds[i + 1]) * 0.25;
+      }
     }
   } else {
     rawSpeeds.fill(0.5);
@@ -3032,7 +3183,7 @@ export function strokePointsToOutline(
 
   // 2. Continuous Spatial Gaussian smoothing over physical arc-length
   // Eliminates low-speed wobble and sensor tremors uniformly regardless of drawing speed
-  // For mouse input, provides a gentle stabilizer bonus to suppress hand tremors and pixel stepping
+  // For mouse input, provides an advanced stabilizer bonus to suppress hand tremors and pixel stepping
   const smoothX = new Float64Array(numRaw);
   const smoothY = new Float64Array(numRaw);
   const smoothP = new Float64Array(numRaw);
@@ -3040,9 +3191,9 @@ export function strokePointsToOutline(
 
   if (numRaw >= 3 && intensityNorm > 0.05 && totalRawArcLen > 2) {
     // Physical filter radius in font coordinate units
-    const baseSigma = isMouseInput ? 2.8 : 1.8;
-    const maxSigmaBonus = isMouseInput ? 16.0 : 13.0;
-    const sigma = baseSigma + maxSigmaBonus * intensityNorm; // ~1.8px up to 18.8px physical smoothing radius
+    const baseSigma = isMouseInput ? 4.5 : 1.8;
+    const maxSigmaBonus = isMouseInput ? 24.0 : 13.0;
+    const sigma = baseSigma + maxSigmaBonus * intensityNorm; // ~4.5px up to 28.5px physical smoothing radius for mouse
     const filterRadius = sigma * 2.5;
     const twoSigmaSq = 2 * sigma * sigma;
 
@@ -3051,7 +3202,7 @@ export function strokePointsToOutline(
       if (i === 0 || i === numRaw - 1) {
         smoothX[i] = rawPts[i].x;
         smoothY[i] = rawPts[i].y;
-        smoothP[i] = rawPts[i].pressure;
+        smoothP[i] = isMouseInput ? 0.5 : rawPts[i].pressure;
         smoothV[i] = rawSpeeds[i];
         continue;
       }
@@ -5326,19 +5477,10 @@ export function reverseContour(contour: PathContour): PathContour {
  * Test whether a point is inside a contour using ray-casting algorithm
  */
 export function isPointInContour(pt: Point, contour: PathContour): boolean {
-  const nodes = contour.nodes;
-  if (!nodes || nodes.length < 3) return false;
-  let inside = false;
-  for (let i = 0, j = nodes.length - 1; i < nodes.length; j = i++) {
-    const xi = nodes[i].x;
-    const yi = nodes[i].y;
-    const xj = nodes[j].x;
-    const yj = nodes[j].y;
-    const intersect =
-      yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi || 0.00001) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
+  if (!contour || !contour.nodes || contour.nodes.length < 3) return false;
+  const hasCurves = contour.nodes.some((n) => n.handleIn != null || n.handleOut != null);
+  const poly = hasCurves ? sampleContourPoints(contour, 8) : contour.nodes;
+  return isPointInPolygon(pt, poly);
 }
 
 /**
@@ -5364,7 +5506,9 @@ export function isContourContained(inner: PathContour, outer: PathContour): bool
   }
   const centerPt = { x: innerBbox.centerX, y: innerBbox.centerY };
   const centerInside = isPointInContour(centerPt, outer);
-  return insideCount >= inner.nodes.length * 0.65 || centerInside;
+  // Both high node containment (> 85%) AND center point inside required:
+  // Prevents intersecting/crossing strokes from being misidentified as inner counter holes!
+  return insideCount >= inner.nodes.length * 0.85 && centerInside;
 }
 
 /**
@@ -5386,16 +5530,20 @@ export function groupContoursWithHoles(contours: PathContour[]): PathContour[][]
 
   for (let i = 0; i < contours.length; i++) {
     const child = contours[i];
+    const childArea = Math.abs(getContourSignedArea(child));
     let smallestParentIdx = -1;
     let smallestParentArea = Infinity;
 
     for (let j = 0; j < contours.length; j++) {
       if (i === j) continue;
       const candidateParent = contours[j];
+      const candidateArea = Math.abs(getContourSignedArea(candidateParent));
+      // A parent contour must have strictly larger area than its child
+      if (candidateArea <= childArea) continue;
+
       if (isContourContained(child, candidateParent)) {
-        const area = Math.abs(getContourSignedArea(candidateParent));
-        if (area < smallestParentArea) {
-          smallestParentArea = area;
+        if (candidateArea < smallestParentArea) {
+          smallestParentArea = candidateArea;
           smallestParentIdx = j;
         }
       }
@@ -5416,7 +5564,9 @@ export function groupContoursWithHoles(contours: PathContour[]): PathContour[][]
 
   for (const [childIdx, parentIdx] of parentMap.entries()) {
     let root = parentIdx;
-    while (parentMap.has(root)) {
+    const visited = new Set<number>([childIdx]);
+    while (parentMap.has(root) && !visited.has(root)) {
+      visited.add(root);
       root = parentMap.get(root)!;
     }
     if (!rootGroups.has(root)) {
@@ -7848,7 +7998,7 @@ export function expandStrokeContours(
       expandedList.push(c);
       continue;
     }
-    const sampled = sampleContourPoints(c, 4);
+    const sampled = sampleContourPoints(c, 8);
     if (sampled.length < 2) {
       expandedList.push(c);
       continue;
@@ -7910,7 +8060,7 @@ export function expandStrokeContours(
 
     if (c.closed) {
       const outerNodes = pointsToBezierContourNodes(leftPoints);
-      const innerNodes = pointsToBezierContourNodes(rightPoints.reverse());
+      const innerNodes = pointsToBezierContourNodes(rightPoints.slice().reverse());
       expandedList.push({ id: generateId(), nodes: outerNodes, closed: true });
       expandedList.push({ id: generateId(), nodes: innerNodes, closed: true });
     } else {
@@ -7919,40 +8069,45 @@ export function expandStrokeContours(
       const endTangent = tangents[tangents.length - 1] || { x: 1, y: 0 };
       const startTangent = tangents[0] || { x: 1, y: 0 };
 
+      const endNormal = { x: -endTangent.y, y: endTangent.x };
+      const startNormal = { x: -startTangent.y, y: startTangent.x };
+
+      const endL = leftPoints[leftPoints.length - 1];
+      const endR = rightPoints[rightPoints.length - 1];
+      const startL = leftPoints[0];
+      const startR = rightPoints[0];
+
       let endCap: Point[] = [];
       let startCap: Point[] = [];
 
       if (capStyle === 'round') {
-        // End cap: semicircular arc from left to right at end
-        const startAngle = Math.atan2(endTangent.y, endTangent.x) - Math.PI / 2;
-        const capSteps = 6;
-        for (let s = 1; s < capSteps; s++) {
-          const a = startAngle + (Math.PI * s) / capSteps;
+        // End cap: sweep smoothly from endL to endR in forward semicircle
+        const endCapSteps = 12;
+        const endAngleStart = Math.atan2(endNormal.y, endNormal.x);
+        for (let s = 1; s < endCapSteps; s++) {
+          const a = endAngleStart - (Math.PI * s) / endCapSteps;
           endCap.push({
             x: endPt.x + Math.cos(a) * halfW,
             y: endPt.y + Math.sin(a) * halfW,
           });
         }
 
-        // Start cap: semicircular arc from right to left at start
-        const startCapBaseAngle = Math.atan2(-startTangent.y, -startTangent.x) - Math.PI / 2;
-        for (let s = 1; s < capSteps; s++) {
-          const a = startCapBaseAngle + (Math.PI * s) / capSteps;
+        // Start cap: sweep smoothly from startR to startL in backward semicircle
+        const startCapSteps = 12;
+        const startAngleStart = Math.atan2(-startNormal.y, -startNormal.x);
+        for (let s = 1; s < startCapSteps; s++) {
+          const a = startAngleStart - (Math.PI * s) / startCapSteps;
           startCap.push({
             x: startPt.x + Math.cos(a) * halfW,
             y: startPt.y + Math.sin(a) * halfW,
           });
         }
       } else if (capStyle === 'square') {
-        const endL = leftPoints[leftPoints.length - 1];
-        const endR = rightPoints[rightPoints.length - 1];
         endCap = [
           { x: endL.x + endTangent.x * halfW, y: endL.y + endTangent.y * halfW },
           { x: endR.x + endTangent.x * halfW, y: endR.y + endTangent.y * halfW },
         ];
 
-        const startL = leftPoints[0];
-        const startR = rightPoints[0];
         startCap = [
           { x: startR.x - startTangent.x * halfW, y: startR.y - startTangent.y * halfW },
           { x: startL.x - startTangent.x * halfW, y: startL.y - startTangent.y * halfW },
@@ -7962,7 +8117,7 @@ export function expandStrokeContours(
       const combinedPoints = [
         ...leftPoints,
         ...endCap,
-        ...rightPoints.reverse(),
+        ...rightPoints.slice().reverse(),
         ...startCap,
       ];
       const outlineNodes = pointsToBezierContourNodes(combinedPoints);

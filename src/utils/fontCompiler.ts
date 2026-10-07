@@ -327,6 +327,9 @@ export function compileFont(
   let minRsb = 0;
   let maxXExtent = 0;
 
+  const upm = project.metadata.unitsPerEm || DEFAULT_UPM;
+  const baselineY = project.metadata.ascender || Math.round(upm * 0.8);
+
   // Add all user defined glyphs
   const glyphEntries = Object.values(project.glyphs);
 
@@ -409,7 +412,7 @@ export function compileFont(
       }
     }
 
-    const path = contoursToOpenTypePath(glyphContours, SCREEN_BASELINE_Y);
+    const path = contoursToOpenTypePath(glyphContours, baselineY);
 
     const glyphName = g.name || (g.char ? `uni${g.unicode.toString(16).toUpperCase().padStart(4, '0')}` : `glyph${g.unicode}`);
 
@@ -521,7 +524,7 @@ export function compileFont(
           derivedContours = normalizeGlyphContoursWinding(derivedContours);
         }
 
-        const path = contoursToOpenTypePath(derivedContours, SCREEN_BASELINE_Y);
+        const path = contoursToOpenTypePath(derivedContours, baselineY);
         const vertGlyph = new opentype.Glyph({
           name: `vert_${deriv.targetUnicode.toString(16).toUpperCase()}`,
           unicode: deriv.targetUnicode,

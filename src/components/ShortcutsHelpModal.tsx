@@ -447,7 +447,7 @@ export const ShortcutsHelpModal: React.FC<ShortcutsHelpModalProps> = ({
                     <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
                       <Shapes className="w-4 h-4" />
                     </div>
-                    <h4 className="text-xs font-bold">部首パーツ工房 (Radical Studio)</h4>
+                    <h4 className="text-xs font-bold">部首・パーツ機能</h4>
                   </div>
                   <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
                     「さんずい」「きへん」「しんにょう」などのへん・つくりパーツを一度作れば、他の漢字にドラッグ＆ドロップで何度でも再利用・合成可能です。

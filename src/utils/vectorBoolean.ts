@@ -1,6 +1,6 @@
 import paper from 'paper/dist/paper-core';
 import { BezierNode, NodeType, PathContour, Point } from '../types';
-import { generateId, getContoursBoundingBox } from './pathUtils';
+import { generateId, getContoursBoundingBox, groupContoursWithHoles } from './pathUtils';
 
 // Initialize a shared, isolated PaperScope for headless vector operations
 let paperScopeInstance: paper.PaperScope | null = null;
@@ -25,7 +25,101 @@ function getPaperScope(): paper.PaperScope {
 /**
  * Convert a single PathContour into a Paper.js Path
  */
-export function contourToPaperPath(scope: paper.PaperScope, contour: PathContour): paper.Path {
+/**
+ * Sanitize bezier nodes from Paper.js to prevent wild runaway handles, spikes, and distortions.
+ */
+export function sanitizeContourNodes(nodes: BezierNode[], closed: boolean): BezierNode[] {
+  if (!nodes || nodes.length < 2) return nodes || [];
+
+  // Step 1: Merge redundant micro-distance adjacent nodes (< 0.5px)
+  const deduped: BezierNode[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const curr = nodes[i];
+    if (deduped.length === 0) {
+      deduped.push({ ...curr });
+      continue;
+    }
+    const prev = deduped[deduped.length - 1];
+    const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+    if (dist < 0.5) {
+      // Merge: retain outgoing handle of curr if exists, or incoming of prev
+      if (curr.handleOut) {
+        prev.handleOut = curr.handleOut;
+      }
+      prev.type = curr.type;
+    } else {
+      deduped.push({ ...curr });
+    }
+  }
+
+  // Check end-to-start wrap if closed
+  if (closed && deduped.length > 2) {
+    const first = deduped[0];
+    const last = deduped[deduped.length - 1];
+    if (Math.hypot(first.x - last.x, first.y - last.y) < 0.5) {
+      if (last.handleIn) first.handleIn = last.handleIn;
+      deduped.pop();
+    }
+  }
+
+  if (deduped.length < 2) return deduped;
+
+  const N = deduped.length;
+  const result: BezierNode[] = [];
+
+  // Step 2: Clamp runaway handle vectors (anti-wild-loop guard)
+  for (let i = 0; i < N; i++) {
+    const node = { ...deduped[i] };
+    const prevNode = deduped[(i - 1 + N) % N];
+    const nextNode = deduped[(i + 1) % N];
+
+    const dPrev = Math.hypot(node.x - prevNode.x, node.y - prevNode.y);
+    const dNext = Math.hypot(node.x - nextNode.x, node.y - nextNode.y);
+
+    // Max handle distance allowed: proportional to segment length, capped to prevent runaway loops
+    const maxInLen = Math.max(12, dPrev * 1.5);
+    const maxOutLen = Math.max(12, dNext * 1.5);
+
+    if (node.handleIn) {
+      const hInDist = Math.hypot(node.handleIn.x - node.x, node.handleIn.y - node.y);
+      if (hInDist < 0.3) {
+        node.handleIn = null;
+      } else if (hInDist > maxInLen) {
+        const ratio = maxInLen / hInDist;
+        node.handleIn = {
+          x: Math.round((node.x + (node.handleIn.x - node.x) * ratio) * 100) / 100,
+          y: Math.round((node.y + (node.handleIn.y - node.y) * ratio) * 100) / 100,
+        };
+      }
+    }
+
+    if (node.handleOut) {
+      const hOutDist = Math.hypot(node.handleOut.x - node.x, node.handleOut.y - node.y);
+      if (hOutDist < 0.3) {
+        node.handleOut = null;
+      } else if (hOutDist > maxOutLen) {
+        const ratio = maxOutLen / hOutDist;
+        node.handleOut = {
+          x: Math.round((node.x + (node.handleOut.x - node.x) * ratio) * 100) / 100,
+          y: Math.round((node.y + (node.handleOut.y - node.y) * ratio) * 100) / 100,
+        };
+      }
+    }
+
+    result.push(node);
+  }
+
+  return result;
+}
+
+/**
+ * Convert a single PathContour into a Paper.js Path with explicit clockwise orientation
+ */
+export function contourToPaperPath(
+  scope: paper.PaperScope,
+  contour: PathContour,
+  isHole: boolean = false
+): paper.Path {
   const path = new scope.Path();
   path.closed = contour.closed;
 
@@ -39,6 +133,15 @@ export function contourToPaperPath(scope: paper.PaperScope, contour: PathContour
       : new scope.Point(0, 0);
 
     path.add(new scope.Segment(pt, inPt, outPt));
+  }
+
+  if (contour.closed && path.segments.length >= 3) {
+    // In Paper.js CompoundPath: outer path must be clockwise, inner holes counter-clockwise
+    if (isHole) {
+      if (path.clockwise) path.reverse();
+    } else {
+      if (!path.clockwise) path.reverse();
+    }
   }
 
   return path;
@@ -69,6 +172,7 @@ function collectPaperPaths(item: paper.Item): paper.Path[] {
 
 /**
  * Convert any Paper.js Item (Path, CompoundPath, Group) back to PathContour[]
+ * with rigorous handle clamping, micro-sliver filtering, and node stabilization.
  */
 export function paperItemToContours(item: paper.Item | null): PathContour[] {
   if (!item) return [];
@@ -79,10 +183,17 @@ export function paperItemToContours(item: paper.Item | null): PathContour[] {
   for (const p of rawPaths) {
     if (!p.segments || p.segments.length < 2) continue;
 
-    // Filter out degenerate zero-area micro-loops
-    if (p.closed && Math.abs(p.area) < 1.0) continue;
+    // Filter out degenerate zero-area micro-loops and slivers
+    if (p.closed) {
+      const area = Math.abs(p.area);
+      const perimeter = p.length;
+      const bounds = p.bounds;
+      if (area < 6.0 || perimeter < 12.0 || bounds.width < 1.0 || bounds.height < 1.0) {
+        continue;
+      }
+    }
 
-    const nodes: BezierNode[] = [];
+    const rawNodes: BezierNode[] = [];
     for (let i = 0; i < p.segments.length; i++) {
       const seg = p.segments[i];
       const x = Math.round(seg.point.x * 100) / 100;
@@ -113,14 +224,13 @@ export function paperItemToContours(item: paper.Item | null): PathContour[] {
           const dot =
             (handleIn.x - x) * (handleOut.x - x) + (handleIn.y - y) * (handleOut.y - y);
           const cosAngle = dot / (dIn * dOut);
-          // Handles pointing in opposite directions along tangent
           if (cosAngle < -0.92) {
             nodeType = Math.abs(dIn - dOut) < 1.5 ? 'symmetric' : 'smooth';
           }
         }
       }
 
-      nodes.push({
+      rawNodes.push({
         id: generateId(),
         x,
         y,
@@ -130,10 +240,12 @@ export function paperItemToContours(item: paper.Item | null): PathContour[] {
       });
     }
 
-    if (nodes.length >= 2) {
+    const sanitizedNodes = sanitizeContourNodes(rawNodes, p.closed);
+
+    if (sanitizedNodes.length >= 2) {
       contours.push({
         id: generateId(),
-        nodes,
+        nodes: sanitizedNodes,
         closed: p.closed,
       });
     }
@@ -143,7 +255,81 @@ export function paperItemToContours(item: paper.Item | null): PathContour[] {
 }
 
 /**
- * Build a smooth closed vector ribbon / capsule shape from a sequence of stroke points and a radius
+ * Helper to build an exact 2D capsule (stadium) shape between two points with radius
+ */
+function createCapsulePath(
+  scope: paper.PaperScope,
+  p1: Point,
+  p2: Point,
+  radius: number
+): paper.Path {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.001) {
+    return new scope.Path.Circle(new scope.Point(p1.x, p1.y), radius);
+  }
+
+  const nx = (-dy / len) * radius;
+  const ny = (dx / len) * radius;
+  const tx = (dx / len) * radius;
+  const ty = (dy / len) * radius;
+
+  const path = new scope.Path();
+  path.closed = true;
+
+  // Arc around p1 (start cap)
+  const p1Left = new scope.Point(p1.x + nx, p1.y + ny);
+  const p1Back = new scope.Point(p1.x - tx, p1.y - ty);
+  const p1Right = new scope.Point(p1.x - nx, p1.y - ny);
+
+  // Arc around p2 (end cap)
+  const p2Right = new scope.Point(p2.x - nx, p2.y - ny);
+  const p2Front = new scope.Point(p2.x + tx, p2.y + ty);
+  const p2Left = new scope.Point(p2.x + nx, p2.y + ny);
+
+  path.add(p1Left);
+  path.arcTo(p1Back, p1Right);
+  path.lineTo(p2Right);
+  path.arcTo(p2Front, p2Left);
+  path.lineTo(p1Left);
+
+  return path;
+}
+
+/**
+ * Divide-and-conquer union of multiple Paper.js PathItems to avoid accumulated boolean errors
+ */
+function unionPaperPathItems(scope: paper.PaperScope, items: paper.PathItem[]): paper.PathItem {
+  if (items.length === 0) return new scope.Path();
+  if (items.length === 1) return items[0];
+
+  let currentLevel = items;
+  while (currentLevel.length > 1) {
+    const nextLevel: paper.PathItem[] = [];
+    for (let i = 0; i < currentLevel.length; i += 2) {
+      if (i + 1 < currentLevel.length) {
+        try {
+          const united = currentLevel[i].unite(currentLevel[i + 1]);
+          currentLevel[i].remove();
+          currentLevel[i + 1].remove();
+          nextLevel.push(united);
+        } catch {
+          nextLevel.push(currentLevel[i]);
+          currentLevel[i + 1].remove();
+        }
+      } else {
+        nextLevel.push(currentLevel[i]);
+      }
+    }
+    currentLevel = nextLevel;
+  }
+  return currentLevel[0];
+}
+
+/**
+ * Build a smooth closed vector ribbon / capsule shape from a sequence of stroke points and a radius.
+ * Uses exact segment capsule unions to guarantee zero self-intersections and zero distortion!
  */
 export function buildEraserRibbonPath(
   scope: paper.PaperScope,
@@ -154,105 +340,35 @@ export function buildEraserRibbonPath(
     return new scope.Path();
   }
 
-  if (strokePoints.length === 1) {
-    return new scope.Path.Circle(
-      new scope.Point(strokePoints[0].x, strokePoints[0].y),
-      Math.max(2, radius)
-    );
-  }
+  const rad = Math.max(2, radius);
 
-  // Remove consecutive duplicate points
+  // Decimate points to avoid excessive clustering
+  const minDist = Math.max(2, rad * 0.3);
   const cleanPts: Point[] = [strokePoints[0]];
   for (let i = 1; i < strokePoints.length; i++) {
     const prev = cleanPts[cleanPts.length - 1];
     const curr = strokePoints[i];
-    if (Math.hypot(curr.x - prev.x, curr.y - prev.y) > 0.5) {
+    if (Math.hypot(curr.x - prev.x, curr.y - prev.y) >= minDist) {
       cleanPts.push(curr);
     }
+  }
+  if (cleanPts.length === 1 && strokePoints.length > 1) {
+    cleanPts.push(strokePoints[strokePoints.length - 1]);
   }
 
   if (cleanPts.length === 1) {
     return new scope.Path.Circle(
       new scope.Point(cleanPts[0].x, cleanPts[0].y),
-      Math.max(2, radius)
+      rad
     );
   }
 
-  const n = cleanPts.length;
-  const rad = Math.max(2, radius);
-
-  // Compute normal vectors at each point
-  const normals: Point[] = [];
-  for (let i = 0; i < n; i++) {
-    let dx = 0;
-    let dy = 0;
-    if (i === 0) {
-      dx = cleanPts[1].x - cleanPts[0].x;
-      dy = cleanPts[1].y - cleanPts[0].y;
-    } else if (i === n - 1) {
-      dx = cleanPts[n - 1].x - cleanPts[n - 2].x;
-      dy = cleanPts[n - 1].y - cleanPts[n - 2].y;
-    } else {
-      dx = cleanPts[i + 1].x - cleanPts[i - 1].x;
-      dy = cleanPts[i + 1].y - cleanPts[i - 1].y;
-    }
-    const len = Math.hypot(dx, dy) || 1;
-    // Normal perpendicular (-dy, dx)
-    normals.push({ x: -dy / len, y: dx / len });
+  const capsules: paper.PathItem[] = [];
+  for (let i = 0; i < cleanPts.length - 1; i++) {
+    capsules.push(createCapsulePath(scope, cleanPts[i], cleanPts[i + 1], rad));
   }
 
-  const ribbon = new scope.Path();
-  ribbon.closed = true;
-
-  // Left boundary points (0 -> n - 1)
-  for (let i = 0; i < n; i++) {
-    const pt = cleanPts[i];
-    const norm = normals[i];
-    ribbon.add(new scope.Point(pt.x + norm.x * rad, pt.y + norm.y * rad));
-  }
-
-  // End cap semicircular arc around cleanPts[n - 1]
-  const endPt = cleanPts[n - 1];
-  const endNorm = normals[n - 1];
-  const endDir = { x: -endNorm.y, y: endNorm.x }; // Forward direction
-  ribbon.add(new scope.Point(endPt.x + endDir.x * rad, endPt.y + endDir.y * rad));
-
-  // Right boundary points (n - 1 down to 0)
-  for (let i = n - 1; i >= 0; i--) {
-    const pt = cleanPts[i];
-    const norm = normals[i];
-    ribbon.add(new scope.Point(pt.x - norm.x * rad, pt.y - norm.y * rad));
-  }
-
-  // Start cap semicircular arc around cleanPts[0]
-  const startPt = cleanPts[0];
-  const startNorm = normals[0];
-  const startDir = { x: startNorm.y, y: -startNorm.x }; // Backward direction
-  ribbon.add(new scope.Point(startPt.x + startDir.x * rad, startPt.y + startDir.y * rad));
-
-  // Smooth the ribbon outline for clean, round caps and joints
-  ribbon.smooth({ type: 'catmull-rom' });
-
-  // For multi-segment strokes, also create circles at points to guarantee no inside corners are missed
-  if (cleanPts.length > 2) {
-    let combined: paper.PathItem = ribbon;
-    // Sample a few circles along stroke if needed
-    const step = Math.max(1, Math.floor(cleanPts.length / 8));
-    for (let i = 0; i < cleanPts.length; i += step) {
-      const circ = new scope.Path.Circle(new scope.Point(cleanPts[i].x, cleanPts[i].y), rad);
-      try {
-        const nextUnion = combined.unite(circ);
-        combined.remove();
-        circ.remove();
-        combined = nextUnion;
-      } catch {
-        circ.remove();
-      }
-    }
-    return combined;
-  }
-
-  return ribbon;
+  return unionPaperPathItems(scope, capsules);
 }
 
 /**
@@ -266,17 +382,30 @@ function isContourNearStroke(contour: PathContour, strokePoints: Point[], radius
   const cMinY = bbox.minY - margin;
   const cMaxY = bbox.maxY + margin;
 
-  for (const pt of strokePoints) {
+  for (let i = 0; i < strokePoints.length; i++) {
+    const pt = strokePoints[i];
     if (pt.x >= cMinX && pt.x <= cMaxX && pt.y >= cMinY && pt.y <= cMaxY) {
       return true;
+    }
+    if (i > 0) {
+      const prev = strokePoints[i - 1];
+      const sMinX = Math.min(prev.x, pt.x) - margin;
+      const sMaxX = Math.max(prev.x, pt.x) + margin;
+      const sMinY = Math.min(prev.y, pt.y) - margin;
+      const sMaxY = Math.max(prev.y, pt.y) + margin;
+      if (sMinX <= bbox.maxX && sMaxX >= bbox.minX && sMinY <= bbox.maxY && sMaxY >= bbox.minY) {
+        return true;
+      }
     }
   }
   return false;
 }
 
 /**
- * High-precision vector eraser: subtracts eraser stroke from closed contours using Paper.js
- * Completely preserves all untouched Bézier curve segments without rasterization or pixel degradation!
+ * High-precision vector eraser: subtracts eraser stroke from closed contours using Paper.js.
+ * Preserves topological groups (outer outline + child holes) as CompoundPaths with explicit
+ * clockwise/counter-clockwise winding so counter-holes are carved cleanly without inverting
+ * into solid artifacts or creating twisted paths!
  */
 export function subtractEraserStrokeVector(
   contours: PathContour[],
@@ -289,39 +418,96 @@ export function subtractEraserStrokeVector(
 
   const scope = getPaperScope();
 
-  // Separate hit vs untouched contours
-  const untouchedContours: PathContour[] = [];
-  const candidateContours: PathContour[] = [];
-
+  // Separate contours into open (unsupported for vector subtraction) and closed
+  const closedContours: PathContour[] = [];
+  const openContours: PathContour[] = [];
   for (const c of contours) {
-    if (c.closed && isContourNearStroke(c, strokePoints, radius)) {
-      candidateContours.push(c);
+    if (c.closed && c.nodes && c.nodes.length >= 3) {
+      closedContours.push(c);
     } else {
-      untouchedContours.push(c);
+      openContours.push(c);
     }
   }
 
-  if (candidateContours.length === 0) {
+  if (closedContours.length === 0) {
+    return contours;
+  }
+
+  // 1. Group ALL closed contours into topological units (parent outer shape + its enclosed holes)
+  const allGroups = groupContoursWithHoles(closedContours);
+
+  const untouchedContours: PathContour[] = [...openContours];
+  const candidateGroups: PathContour[][] = [];
+
+  for (const group of allGroups) {
+    // If ANY contour in the group is touched by the eraser stroke, process the ENTIRE group together!
+    const isHit = group.some((c) => isContourNearStroke(c, strokePoints, radius));
+    if (isHit) {
+      candidateGroups.push(group);
+    } else {
+      untouchedContours.push(...group);
+    }
+  }
+
+  if (candidateGroups.length === 0) {
     return contours;
   }
 
   try {
     const cutter = buildEraserRibbonPath(scope, strokePoints, radius);
-
     const resultingCarvedContours: PathContour[] = [];
 
-    for (const cand of candidateContours) {
-      const paperPath = contourToPaperPath(scope, cand);
+    for (const group of candidateGroups) {
+      if (group.length === 1) {
+        const paperPath = contourToPaperPath(scope, group[0], false);
+        let subtracted: paper.PathItem | null = null;
+        try {
+          subtracted = paperPath.subtract(cutter);
+        } catch (subErr) {
+          console.warn('Paper.js subtract failed for single contour:', subErr);
+        }
+        paperPath.remove();
 
-      // Perform exact Bézier subtraction
-      const subtracted = paperPath.subtract(cutter);
-      paperPath.remove();
+        if (subtracted) {
+          const converted = paperItemToContours(subtracted);
+          subtracted.remove();
+          if (converted.length > 0) {
+            resultingCarvedContours.push(...converted);
+          } else {
+            // Completely erased
+          }
+        } else {
+          // If subtract returned null or threw, keep original contour
+          resultingCarvedContours.push(group[0]);
+        }
+      } else {
+        // Compound glyph with holes (e.g. O, A, 日, 国, あ):
+        // Outer path is index 0 (clockwise), child holes index 1..k (counter-clockwise)
+        const outerPath = contourToPaperPath(scope, group[0], false);
+        const holePaths = group.slice(1).map((c) => contourToPaperPath(scope, c, true));
+        const childPaths = [outerPath, ...holePaths];
 
-      if (subtracted) {
-        const converted = paperItemToContours(subtracted);
-        subtracted.remove();
-        if (converted.length > 0) {
-          resultingCarvedContours.push(...converted);
+        const compPath = new scope.CompoundPath({
+          children: childPaths,
+        });
+
+        let subtracted: paper.PathItem | null = null;
+        try {
+          subtracted = compPath.subtract(cutter);
+        } catch (subErr) {
+          console.warn('Paper.js subtract failed for compound path:', subErr);
+        }
+        compPath.remove();
+
+        if (subtracted) {
+          const converted = paperItemToContours(subtracted);
+          subtracted.remove();
+          if (converted.length > 0) {
+            resultingCarvedContours.push(...converted);
+          }
+        } else {
+          // If failed, preserve original group
+          resultingCarvedContours.push(...group);
         }
       }
     }
@@ -330,8 +516,8 @@ export function subtractEraserStrokeVector(
 
     return [...untouchedContours, ...resultingCarvedContours];
   } catch (err) {
-    console.error('Vector eraser error, falling back cleanly:', err);
-    return contours;
+    console.warn('Vector eraser error:', err);
+    throw err;
   } finally {
     try {
       scope.project?.clear();

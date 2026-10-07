@@ -537,7 +537,10 @@ export const PenPresetsModal: React.FC<PenPresetsModalProps> = ({
     const next = [newP, ...presets];
     onUpdatePresets(next);
     saveUserPenPresets(next);
-    showToast(`「${name}」を新規プリセットとして保存しました`);
+    onApplyPreset(newP);
+    setWorkingPreset(newP);
+    setRenameInput(name);
+    showToast(`「${name}」を新規プリセットとして保存し、作図ペンとして適用しました`);
   };
 
   const handleApplyCurrentAndClose = () => {
@@ -824,7 +827,7 @@ export const PenPresetsModal: React.FC<PenPresetsModalProps> = ({
             <svg
               viewBox="0 0 600 130"
               preserveAspectRatio="xMidYMid meet"
-              className="absolute inset-0 w-full h-full drop-shadow-sm"
+              className="absolute inset-0 w-full h-full"
             >
               {previewData.svgPath && (
                 <path

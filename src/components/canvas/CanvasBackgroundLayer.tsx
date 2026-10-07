@@ -7,11 +7,13 @@ interface CanvasBackgroundLayerProps {
   showGrid: boolean;
   gridSize: number;
   gridOpacity?: number;
+  unitsPerEm?: number;
 }
 
 export const CanvasBackgroundLayer: React.FC<CanvasBackgroundLayerProps> = React.memo(
-  ({ isLight, theme = 'light', showGrid, gridSize, gridOpacity = 30 }) => {
+  ({ isLight, theme = 'light', showGrid, gridSize, gridOpacity = 30, unitsPerEm = 1000 }) => {
     const size = gridSize || 50;
+    const upm = unitsPerEm || 1000;
     const opacityFactor = Math.min(1, Math.max(0.08, gridOpacity / 100));
 
     // Determine colors tailored for eye-comfort presets - subtle, non-intrusive lines
@@ -100,17 +102,17 @@ export const CanvasBackgroundLayer: React.FC<CanvasBackgroundLayerProps> = React
 
         {/* Surrounding Outer Area Dimming Frame */}
         <path
-          d="M -4000 -4000 H 5000 V 5000 H -4000 Z M 0 0 V 1000 H 1000 V 0 Z"
+          d={`M -4000 -4000 H 5000 V 5000 H -4000 Z M 0 0 V ${upm} H ${upm} V 0 Z`}
           fill={dimmingFill}
           fillRule="evenodd"
         />
 
-        {/* Em Square Box (1000x1000) Background with subtle, gentle frame border */}
+        {/* Em Square Box Background with subtle, gentle frame border */}
         <rect
           x={0}
           y={0}
-          width={1000}
-          height={1000}
+          width={upm}
+          height={upm}
           fill={emBoxFill}
           stroke={emBoxStroke}
           strokeWidth={1.5}
@@ -121,11 +123,11 @@ export const CanvasBackgroundLayer: React.FC<CanvasBackgroundLayerProps> = React
           {/* Top-Left */}
           <path d="M -30 0 L 0 0 M 0 -30 L 0 0" stroke={cropMarkStroke} strokeWidth={1.2} />
           {/* Top-Right */}
-          <path d="M 1030 0 L 1000 0 M 1000 -30 L 1000 0" stroke={cropMarkStroke} strokeWidth={1.2} />
+          <path d={`M ${upm + 30} 0 L ${upm} 0 M ${upm} -30 L ${upm} 0`} stroke={cropMarkStroke} strokeWidth={1.2} />
           {/* Bottom-Left */}
-          <path d="M -30 1000 L 0 1000 M 0 1030 L 0 1000" stroke={cropMarkStroke} strokeWidth={1.2} />
+          <path d={`M -30 ${upm} L 0 ${upm} M 0 ${upm + 30} L 0 ${upm}`} stroke={cropMarkStroke} strokeWidth={1.2} />
           {/* Bottom-Right */}
-          <path d="M 1030 1000 L 1000 1000 M 1000 1030 L 1000 1000" stroke={cropMarkStroke} strokeWidth={1.2} />
+          <path d={`M ${upm + 30} ${upm} L ${upm} ${upm} M ${upm} ${upm + 30} L ${upm} ${upm}`} stroke={cropMarkStroke} strokeWidth={1.2} />
         </g>
 
         {/* Grid Overlay with configurable opacity */}
@@ -133,8 +135,8 @@ export const CanvasBackgroundLayer: React.FC<CanvasBackgroundLayerProps> = React
           <rect
             x={0}
             y={0}
-            width={1000}
-            height={1000}
+            width={upm}
+            height={upm}
             fill="url(#canvasGridPattern)"
             opacity={opacityFactor}
           />

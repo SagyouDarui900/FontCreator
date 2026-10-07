@@ -28,11 +28,13 @@ import {
   slantContours,
   scaleContours,
   centerContoursInBox,
+  fitContoursToEmBox,
   getContoursBoundingBox,
   outlineOpenContour,
   createSmallKanaContours,
   simplifyGlyphContours,
   smoothAndFixTransformedContours,
+  transformContours,
 } from '../utils/pathUtils';
 import {
   calculateOptimalSpacing,
@@ -59,6 +61,7 @@ interface MetricsPanelProps {
   onSelectNextGlyph?: () => void;
   onSelectPrevUncompletedGlyph?: () => void;
   onSelectNextUncompletedGlyph?: () => void;
+  unitsPerEm?: number;
   // Feature Callbacks
   onAutoSpaceGlyph?: (preset: AutoSpacingPreset) => void;
   onSimplifyGlyph?: (level: 'mild' | 'normal' | 'strong') => void;
@@ -79,6 +82,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
   onClose,
   theme,
   isOverlay,
+  unitsPerEm = 1000,
   onSelectPrevGlyph,
   onSelectNextGlyph,
   onSelectPrevUncompletedGlyph,
@@ -87,6 +91,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
   onSimplifyGlyph,
   onShowToast,
 }) => {
+  const upm = unitsPerEm || 1000;
   const [strokeOutlineWidth, setStrokeOutlineWidth] = useState<number>(60);
   const [isConfirmingClear, setIsConfirmingClear] = useState<boolean>(false);
   const [simplifyLevel, setSimplifyLevel] = useState<'mild' | 'normal' | 'strong'>('normal');
@@ -178,7 +183,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
 
     // Direct fallback
     onCommitHistory();
-    const result = calculateOptimalSpacing(selectedUnicode, contours, preset);
+    const result = calculateOptimalSpacing(selectedUnicode, contours, preset, upm);
     onChangeContours(result.contours);
     onChangeAdvanceWidth(result.advanceWidth);
     onChangeLsb(result.lsb);
@@ -187,7 +192,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
       preset === 'smart'
         ? 'スマート自動'
         : preset === 'japanese-fullwidth'
-        ? '和文全角センタリング (1000EM)'
+        ? `和文全角センタリング (${upm}EM)`
         : preset === 'proportional-tight'
         ? '欧文タイト'
         : preset === 'proportional-loose'
@@ -207,19 +212,11 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
       return;
     }
     onCommitHistory();
-    const currentAdv = advanceWidth || 1000;
+    const currentAdv = advanceWidth || upm;
     const targetLsb = Math.round((currentAdv - bbox.width) / 2);
     const deltaX = targetLsb - bbox.minX;
 
-    const shifted = contours.map((c) => ({
-      ...c,
-      nodes: c.nodes.map((n) => ({
-        ...n,
-        x: Math.round(n.x + deltaX),
-        inX: n.inX !== undefined ? Math.round(n.inX + deltaX) : undefined,
-        outX: n.outX !== undefined ? Math.round(n.outX + deltaX) : undefined,
-      })),
-    }));
+    const shifted = deltaX !== 0 ? transformContours(contours, (p) => ({ x: Math.round(p.x + deltaX), y: p.y })) : contours;
 
     onChangeContours(shifted);
     onChangeLsb(targetLsb);
@@ -228,7 +225,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
 
   // Step adjustments for Advance & LSB
   const handleStepAdvance = (delta: number) => {
-    const nextVal = Math.max(100, Math.round((advanceWidth || 1000) + delta));
+    const nextVal = Math.max(100, Math.round((advanceWidth || upm) + delta));
     onChangeAdvanceWidth(nextVal);
     onCommitHistory();
   };
@@ -294,7 +291,17 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
   const handleCenter = () => {
     if (contours.length === 0) return;
     onCommitHistory();
-    onChangeContours(centerContoursInBox(contours, 1000, 1000));
+    onChangeContours(centerContoursInBox(contours, upm, Math.round(upm * 0.8)));
+  };
+
+  const handleFitToEmBox = () => {
+    if (contours.length === 0) return;
+    onCommitHistory();
+    const isKana = /[ぁ-んァ-ヶー]/.test(selectedChar);
+    const targetRatio = isKana ? 0.78 : 0.85;
+    const fitted = fitContoursToEmBox(contours, upm, upm, targetRatio);
+    onChangeContours(fitted);
+    onShowToast?.(`文字の輪郭をキャンバス枠内（字面枠 ${Math.round(targetRatio * 100)}%基準）に最適化しました`, 'success');
   };
 
   const handleExecuteClear = () => {
@@ -549,7 +556,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     <label className={`text-xs font-bold ${isLight ? 'text-stone-800' : 'text-emerald-300'}`}>
                       送り幅 (Advance Width)
                     </label>
-                    <span className="text-[10px] font-mono text-stone-500">標準: 1000 (全角)</span>
+                    <span className="text-[10px] font-mono text-stone-500">標準: {upm} (全角)</span>
                   </div>
 
                   {/* Input Row with Large +/- buttons */}
@@ -567,9 +574,9 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                     <div className="relative flex-1 min-w-0 flex items-center">
                       <input
                         type="number"
-                        value={advanceWidth ?? 1000}
+                        value={advanceWidth ?? upm}
                         onChange={(e) => {
-                          onChangeAdvanceWidth(Number(e.target.value) || 1000);
+                          onChangeAdvanceWidth(Number(e.target.value) || upm);
                           onCommitHistory();
                         }}
                         className={`w-full border rounded-lg px-2.5 py-1.5 pr-7 text-sm font-mono font-bold text-center focus:outline-hidden ${
@@ -616,11 +623,11 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                   {/* Preset Width Chips */}
                   <div className="flex flex-wrap gap-1 pt-0.5">
                     {[
-                      { label: '全角 1000', val: 1000 },
-                      { label: '半角 500', val: 500 },
-                      { label: '600', val: 600 },
-                      { label: '750', val: 750 },
-                      { label: '800', val: 800 },
+                      { label: `全角 ${upm}`, val: upm },
+                      { label: `半角 ${Math.round(upm / 2)}`, val: Math.round(upm / 2) },
+                      { label: `${Math.round(upm * 0.6)}`, val: Math.round(upm * 0.6) },
+                      { label: `${Math.round(upm * 0.75)}`, val: Math.round(upm * 0.75) },
+                      { label: `${Math.round(upm * 0.8)}`, val: Math.round(upm * 0.8) },
                     ].map((p) => (
                       <button
                         key={p.val}
@@ -838,8 +845,8 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                 {/* Preset Selector Grid - 1 column to avoid overflow on narrow sidebars */}
                 <div className="grid grid-cols-1 gap-1.5 text-xs">
                   {[
-                    { id: 'smart' as AutoSpacingPreset, label: '自動計算 (和欧最適化)', desc: '和文:全角1000EM / 欧文:光学余白', icon: Sliders },
-                    { id: 'japanese-fullwidth' as AutoSpacingPreset, label: '和文全角センタリング (1000EM)', desc: '枠の中心に正確に配置' },
+                    { id: 'smart' as AutoSpacingPreset, label: '自動計算 (和欧最適化)', desc: `和文:全角${upm}EM / 欧文:光学余白`, icon: Sliders },
+                    { id: 'japanese-fullwidth' as AutoSpacingPreset, label: `和文全角センタリング (${upm}EM)`, desc: '枠の中心に正確に配置' },
                     { id: 'proportional-balanced' as AutoSpacingPreset, label: '欧文プロポーショナル', desc: '字形ごとの光学余白' },
                     { id: 'proportional-tight' as AutoSpacingPreset, label: '欧文タイト (詰まり気味)', desc: '余白を狭めて配置' },
                   ].map((preset) => {
@@ -1140,6 +1147,19 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                 </button>
 
                 <button
+                  onClick={handleFitToEmBox}
+                  className={`w-full min-h-[42px] py-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors cursor-pointer active:scale-95 ${
+                    isLight
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100'
+                      : 'bg-emerald-950/60 border-emerald-800 text-emerald-300 hover:bg-emerald-900/60'
+                  }`}
+                  title="はみ出た文字や大きすぎる文字を、キャンバスの字面枠（漢字85%/仮名78%）にぴったり収まるよう自動縮小・中央配置します"
+                >
+                  <Maximize2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>キャンバス枠内に自動収める (字面85%最適化)</span>
+                </button>
+
+                <button
                   onClick={handleCenter}
                   className={`w-full min-h-[42px] py-2 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors cursor-pointer active:scale-95 ${
                     isLight
@@ -1148,7 +1168,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
                   }`}
                 >
                   <AlignCenter className="w-4 h-4 shrink-0" />
-                  <span>EM枠の中央に配置 (1000×1000)</span>
+                  <span>EM枠の中央に配置 ({upm}×{upm})</span>
                 </button>
 
                 {/* Small Kana Helper */}

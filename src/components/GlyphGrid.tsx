@@ -64,6 +64,7 @@ const GlyphGridCard = memo(
     glyphData,
     isLight,
     density,
+    unitsPerEm = 1000,
     onSelectGlyph,
     onContextMenu,
   }: {
@@ -72,6 +73,7 @@ const GlyphGridCard = memo(
     glyphData?: GlyphData;
     isLight: boolean;
     density: GridDensity;
+    unitsPerEm?: number;
     onSelectGlyph: (code: number, char: string) => void;
     onContextMenu: (e: React.MouseEvent, item: { char: string; code: number; name?: string }) => void;
   }) => {
@@ -169,7 +171,7 @@ const GlyphGridCard = memo(
         <div className="flex-1 flex items-center justify-center w-full min-h-0 min-w-0 overflow-hidden relative z-10 p-0.5 pointer-events-none">
           {hasContours && svgPath ? (
             <svg
-              viewBox="0 0 1000 1000"
+              viewBox={`0 0 ${unitsPerEm} ${unitsPerEm}`}
               preserveAspectRatio="xMidYMid meet"
               className="w-full h-full max-w-[88%] max-h-[88%] object-contain"
             >
@@ -751,7 +753,12 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                     : 'bg-stone-800 text-emerald-300 font-mono border border-stone-700'
                 }`}
               >
-                {charList.length}字
+                {charList.length.toLocaleString()}字
+                {totalPages > 1 && (
+                  <span className="opacity-75 font-normal ml-1">
+                    ({validPage}/{totalPages}頁)
+                  </span>
+                )}
               </span>
             </div>
 
@@ -1341,6 +1348,7 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                 glyphData={project.glyphs[item.code]}
                 isLight={isLight}
                 density={gridDensity}
+                unitsPerEm={project.metadata.unitsPerEm || 1000}
                 onSelectGlyph={handleCardSelect}
                 onContextMenu={handleOpenContextMenu}
               />
@@ -1412,70 +1420,105 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
         {/* Pagination Footer */}
         {totalPages > 1 && (
           <div
-            className={`p-2 border-t flex items-center justify-between text-xs gap-1 shrink-0 pb-[max(env(safe-area-inset-bottom),10px)] ${
+            className={`p-2 border-t flex flex-col gap-1.5 shrink-0 pb-[max(env(safe-area-inset-bottom),10px)] ${
               isLight ? 'bg-[#edf5f1] border-[#d4e5dc]' : 'bg-[#18231c] border-[#25362b]'
             }`}
           >
-            <div className="flex items-center space-x-1">
-              <button
-                disabled={validPage <= 1}
-                onClick={() => setCurrentPage(1)}
-                title="最初のページへ"
-                className={`px-1.5 py-1 rounded disabled:opacity-30 border text-[10px] font-bold ${
-                  isLight
-                    ? 'bg-white border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
-                    : 'bg-[#1f2d24] border-[#2d4034] text-emerald-200 hover:bg-[#283b2f]'
+            <div className="flex items-center justify-between text-[11px] px-0.5">
+              <span className={`font-medium ${isLight ? 'text-stone-600' : 'text-emerald-400/90'}`}>
+                全<strong className={isLight ? 'text-stone-900 font-bold' : 'text-emerald-200 font-bold'}>{charList.length.toLocaleString()}字</strong>中{' '}
+                <span className="font-mono">{Math.min(charList.length, (validPage - 1) * pageSize + 1)}〜{Math.min(charList.length, validPage * pageSize)}字</span>
+              </span>
+              <span
+                className={`font-mono text-[11px] font-bold px-1.5 py-0.2 rounded ${
+                  isLight ? 'bg-emerald-100 text-emerald-950 border border-emerald-200' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                 }`}
               >
-                « 1
-              </button>
-              <button
-                disabled={validPage <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className={`px-2 py-1 rounded flex items-center space-x-1 disabled:opacity-30 border transition-colors ${
-                  isLight
-                    ? 'bg-white border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
-                    : 'bg-[#1f2d24] border-[#2d4034] text-emerald-200 hover:bg-[#283b2f]'
-                }`}
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span className="text-[11px]">前</span>
-              </button>
+                {validPage} / {totalPages} ページ
+              </span>
             </div>
 
-            <span
-              className={`font-mono text-[11px] font-semibold text-center truncate ${
-                isLight ? 'text-emerald-950' : 'text-emerald-300'
-              }`}
-            >
-              {validPage} / {totalPages}
-            </span>
+            <div className="flex items-center justify-between text-xs gap-1">
+              <div className="flex items-center space-x-1">
+                <button
+                  disabled={validPage <= 1}
+                  onClick={() => setCurrentPage(1)}
+                  title="最初のページへ"
+                  className={`px-1.5 py-1 rounded disabled:opacity-30 border text-[10px] font-bold ${
+                    isLight
+                      ? 'bg-white border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
+                      : 'bg-[#1f2d24] border-[#2d4034] text-emerald-200 hover:bg-[#283b2f]'
+                  }`}
+                >
+                  « 1
+                </button>
+                <button
+                  disabled={validPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className={`px-2 py-1 rounded flex items-center space-x-1 disabled:opacity-30 border transition-colors ${
+                    isLight
+                      ? 'bg-white border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
+                      : 'bg-[#1f2d24] border-[#2d4034] text-emerald-200 hover:bg-[#283b2f]'
+                  }`}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">前へ</span>
+                </button>
+              </div>
 
-            <div className="flex items-center space-x-1">
-              <button
-                disabled={validPage >= totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className={`px-2 py-1 rounded flex items-center space-x-1 disabled:opacity-30 border transition-colors ${
-                  isLight
-                    ? 'bg-white border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
-                    : 'bg-[#1f2d24] border-[#2d4034] text-emerald-200 hover:bg-[#283b2f]'
-                }`}
-              >
-                <span className="text-[11px]">次</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-              <button
-                disabled={validPage >= totalPages}
-                onClick={() => setCurrentPage(totalPages)}
-                title="最後のページへ"
-                className={`px-1.5 py-1 rounded disabled:opacity-30 border text-[10px] font-bold ${
-                  isLight
-                    ? 'bg-white border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
-                    : 'bg-[#1f2d24] border-[#2d4034] text-emerald-200 hover:bg-[#283b2f]'
-                }`}
-              >
-                {totalPages} »
-              </button>
+              {totalPages > 5 && (
+                <div className="flex items-center gap-1">
+                  {validPage > 3 && (
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 5))}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                        isLight ? 'bg-stone-50 border-stone-200 text-stone-600' : 'bg-[#151f18] border-[#25362b] text-emerald-400'
+                      }`}
+                      title="5ページ前へ"
+                    >
+                      -5p
+                    </button>
+                  )}
+                  {validPage < totalPages - 2 && (
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 5))}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                        isLight ? 'bg-stone-50 border-stone-200 text-stone-600' : 'bg-[#151f18] border-[#25362b] text-emerald-400'
+                      }`}
+                      title="5ページ先へ"
+                    >
+                      +5p
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center space-x-1">
+                <button
+                  disabled={validPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className={`px-2 py-1 rounded flex items-center space-x-1 disabled:opacity-30 border transition-colors ${
+                    isLight
+                      ? 'bg-white border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
+                      : 'bg-[#1f2d24] border-[#2d4034] text-emerald-200 hover:bg-[#283b2f]'
+                  }`}
+                >
+                  <span className="text-[11px]">次へ</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  disabled={validPage >= totalPages}
+                  onClick={() => setCurrentPage(totalPages)}
+                  title="最後のページへ"
+                  className={`px-1.5 py-1 rounded disabled:opacity-30 border text-[10px] font-bold ${
+                    isLight
+                      ? 'bg-white border-[#c8ded3] text-stone-700 hover:bg-emerald-50'
+                      : 'bg-[#1f2d24] border-[#2d4034] text-emerald-200 hover:bg-[#283b2f]'
+                  }`}
+                >
+                  {totalPages} »
+                </button>
+              </div>
             </div>
           </div>
         )}

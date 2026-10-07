@@ -6,6 +6,7 @@ interface CustomGuidelinesLayerProps {
   zoom: number;
   locked?: boolean;
   interactive?: boolean;
+  unitsPerEm?: number;
   onPointerDownGuide: (e: React.PointerEvent, guideId: string) => void;
   onDoubleClickGuide: (e: React.MouseEvent, guideId: string) => void;
 }
@@ -16,12 +17,15 @@ export const CustomGuidelinesLayer: React.FC<CustomGuidelinesLayerProps> = React
     zoom,
     locked = true,
     interactive = false,
+    unitsPerEm = 1000,
     onPointerDownGuide,
     onDoubleClickGuide,
   }) => {
     if (customGuidelines.length === 0) return null;
 
     const canInteract = interactive && !locked;
+    const upm = unitsPerEm || 1000;
+    const spanEnd = upm + 200;
 
     return (
       <g
@@ -43,7 +47,7 @@ export const CustomGuidelinesLayer: React.FC<CustomGuidelinesLayerProps> = React
                   <line
                     x1={-200}
                     y1={guide.position}
-                    x2={1200}
+                    x2={spanEnd}
                     y2={guide.position}
                     stroke="transparent"
                     strokeWidth={14 / zoom}
@@ -53,7 +57,7 @@ export const CustomGuidelinesLayer: React.FC<CustomGuidelinesLayerProps> = React
                 <line
                   x1={-200}
                   y1={guide.position}
-                  x2={1200}
+                  x2={spanEnd}
                   y2={guide.position}
                   stroke="#06b6d4"
                   strokeWidth={1.5 / zoom}
@@ -83,7 +87,7 @@ export const CustomGuidelinesLayer: React.FC<CustomGuidelinesLayerProps> = React
                     x1={guide.position}
                     y1={-200}
                     x2={guide.position}
-                    y2={1200}
+                    y2={spanEnd}
                     stroke="transparent"
                     strokeWidth={14 / zoom}
                     className="cursor-ew-resize"
@@ -93,7 +97,7 @@ export const CustomGuidelinesLayer: React.FC<CustomGuidelinesLayerProps> = React
                   x1={guide.position}
                   y1={-200}
                   x2={guide.position}
-                  y2={1200}
+                  y2={spanEnd}
                   stroke="#06b6d4"
                   strokeWidth={1.5 / zoom}
                   strokeDasharray="5 3"

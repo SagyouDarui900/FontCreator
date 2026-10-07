@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   X,
   Type,
@@ -63,6 +63,18 @@ interface TestPreviewModalProps {
 }
 
 const SAMPLE_PRESETS = [
+  {
+    name: '【横組】イーハトーヴォ (かな混じり・漢字少)',
+    mode: 'horizontal' as const,
+    text:
+      'あのイーハトーヴォのすきとおった風、夏でも底に冷たさをもつ青いそら、うつくしい森で飾られたモリーオ市、郊外のぎらぎらひかる草の波。\nまたそのなかでいっしょになったたくさんのひとたち、ファゼーロとロザーロ、羊飼のミーロや、顔の赤いこどもたち、地主のテーモ、山猫博士のボーガント・デストゥパーゴなど、いまこの暗い巨きな石の建物のなかで考えていると、みんなむかし風のなつかしい青い幻燈のように思われます。',
+  },
+  {
+    name: '【縦組】イーハトーヴォ (かな混じり・漢字少)',
+    mode: 'vertical' as const,
+    text:
+      'あのイーハトーヴォのすきとおった風、夏でも底に冷たさをもつ青いそら、うつくしい森で飾られたモリーオ市、郊外のぎらぎらひかる草の波。\nまたそのなかでいっしょになったたくさんのひとたち、ファゼーロとロザーロ、羊飼のミーロや、顔の赤いこどもたち、地主のテーモ、山猫博士のボーガント・デストゥパーゴなど、いまこの暗い巨きな石の建物のなかで考えていると、みんなむかし風のなつかしい青い幻燈のように思われます。',
+  },
   {
     name: '【横組】いろは歌 (4行・パングラム)',
     mode: 'horizontal' as const,
@@ -226,6 +238,24 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
   const [adjustScaleX, setAdjustScaleX] = useState<number>(100);
   const [adjustScaleY, setAdjustScaleY] = useState<number>(100);
   const [isAspectLocked, setIsAspectLocked] = useState<boolean>(true);
+
+  // Handle mouse wheel scrolling horizontally in vertical writing mode
+  const handleVerticalWheel = useCallback(
+    (e: React.WheelEvent<HTMLDivElement>) => {
+      if (writingMode === 'vertical' && !isWaterfall) {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX) * 1.1) {
+          const target = e.currentTarget;
+          const prevLeft = target.scrollLeft;
+          // In RTL / vertical-rl columns advance to the left
+          target.scrollLeft -= e.deltaY;
+          if (target.scrollLeft === prevLeft) {
+            target.scrollLeft += e.deltaY;
+          }
+        }
+      }
+    },
+    [writingMode, isWaterfall]
+  );
 
   // Variable Width & Collapsible Panel States (可変式UI)
   const [isSideAdjusterOpen, setIsSideAdjusterOpen] = useState<boolean>(true);
@@ -650,7 +680,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                 textAlign: 'center',
                 boxSizing: 'border-box',
                 transform: hasCustomTransform
-                  ? `translate(${adjustDx * (fontSize / 1000)}px, ${-adjustDy * (fontSize / 1000)}px) scale(${adjustScaleX / 100}, ${adjustScaleY / 100})`
+                  ? `translate(${adjustDx * (fontSize / (project.metadata.unitsPerEm || 1000))}px, ${-adjustDy * (fontSize / (project.metadata.unitsPerEm || 1000))}px) scale(${adjustScaleX / 100}, ${adjustScaleY / 100})`
                   : undefined,
                 transformOrigin: 'center center',
               }}
@@ -698,7 +728,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
               }`}
               style={{
                 transform: hasCustomTransform
-                  ? `translate(${adjustDx * (fontSize / 1000)}px, ${-adjustDy * (fontSize / 1000)}px) scale(${adjustScaleX / 100}, ${adjustScaleY / 100})`
+                  ? `translate(${adjustDx * (fontSize / (project.metadata.unitsPerEm || 1000))}px, ${-adjustDy * (fontSize / (project.metadata.unitsPerEm || 1000))}px) scale(${adjustScaleX / 100}, ${adjustScaleY / 100})`
                   : undefined,
                 transformOrigin: 'center center',
               }}
@@ -869,48 +899,91 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
               <div className={`p-2 rounded-xl border flex flex-col items-center justify-center shrink-0 relative overflow-hidden transition-all ${
                 isLight ? 'bg-white border-emerald-200 ' : 'bg-[#101812] border-emerald-900/60 '
               }`}>
-                <div className="w-full flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400 px-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setShowLivePreviewBox((prev) => !prev)}
-                    className="font-bold flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 hover:underline cursor-pointer"
-                  >
-                    <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>ベクター輪郭プレビュー</span>
-                    <span className="text-[10px] font-normal opacity-75">({showLivePreviewBox ? 'たたむ' : '展開'})</span>
-                  </button>
-                  <span className="font-mono text-[10px]">1000 EM</span>
-                </div>
+                {(() => {
+                  const upm = project.metadata.unitsPerEm || 1000;
+                  const baselineY = project.metadata.ascender || Math.round(upm * 0.8);
+                  const half = upm / 2;
+                  const pad = Math.round(upm * 0.1);
+                  const total = upm + pad * 2;
+                  return (
+                    <>
+                      <div className="w-full flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400 px-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowLivePreviewBox((prev) => !prev)}
+                          className="font-bold flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 hover:underline cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>ベクター輪郭プレビュー</span>
+                          <span className="text-[10px] font-normal opacity-75">({showLivePreviewBox ? 'たたむ' : '展開'})</span>
+                        </button>
+                        <span className="font-mono text-[10px]">{upm} EM</span>
+                      </div>
 
-                {showLivePreviewBox && (
-                  <div className="mt-2 w-28 h-28 border border-dashed border-emerald-500/40 relative bg-emerald-50/20 dark:bg-emerald-950/20 rounded-lg flex items-center justify-center">
-                    <svg
-                      viewBox="-100 -100 1200 1200"
-                      className="w-full h-full overflow-visible text-emerald-900 dark:text-emerald-300"
-                    >
-                      {/* EM Box Frame */}
-                      <rect x="0" y="0" width="1000" height="1000" fill="none" stroke="rgba(16,185,129,0.25)" strokeWidth="10" strokeDasharray="20 20" />
-                      {/* Baseline Y=800 in canvas/SVG space */}
-                      <line x1="-100" y1="800" x2="1100" y2="800" stroke="rgba(99,102,241,0.5)" strokeWidth="12" />
-                      {/* Center Cross X=500, Y=500 */}
-                      <line x1="500" y1="-100" x2="500" y2="1100" stroke="rgba(16,185,129,0.3)" strokeWidth="8" strokeDasharray="15 15" />
-                      <line x1="-100" y1="500" x2="1100" y2="500" stroke="rgba(16,185,129,0.3)" strokeWidth="8" strokeDasharray="15 15" />
+                      {showLivePreviewBox && (
+                        <div className="mt-2 w-28 h-28 border border-dashed border-emerald-500/40 relative bg-emerald-50/20 dark:bg-emerald-950/20 rounded-lg flex items-center justify-center">
+                          <svg
+                            viewBox={`-${pad} -${pad} ${total} ${total}`}
+                            className="w-full h-full overflow-visible text-emerald-900 dark:text-emerald-300"
+                          >
+                            {/* EM Box Frame */}
+                            <rect
+                              x="0"
+                              y="0"
+                              width={upm}
+                              height={upm}
+                              fill="none"
+                              stroke="rgba(16,185,129,0.25)"
+                              strokeWidth={Math.max(2, Math.round(upm * 0.01))}
+                              strokeDasharray={`${Math.round(upm * 0.02)} ${Math.round(upm * 0.02)}`}
+                            />
+                            {/* Baseline in canvas/SVG space */}
+                            <line
+                              x1={-pad}
+                              y1={baselineY}
+                              x2={upm + pad}
+                              y2={baselineY}
+                              stroke="rgba(99,102,241,0.5)"
+                              strokeWidth={Math.max(2, Math.round(upm * 0.012))}
+                            />
+                            {/* Center Cross */}
+                            <line
+                              x1={half}
+                              y1={-pad}
+                              x2={half}
+                              y2={upm + pad}
+                              stroke="rgba(16,185,129,0.3)"
+                              strokeWidth={Math.max(1.5, Math.round(upm * 0.008))}
+                              strokeDasharray={`${Math.round(upm * 0.015)} ${Math.round(upm * 0.015)}`}
+                            />
+                            <line
+                              x1={-pad}
+                              y1={half}
+                              x2={upm + pad}
+                              y2={half}
+                              stroke="rgba(16,185,129,0.3)"
+                              strokeWidth={Math.max(1.5, Math.round(upm * 0.008))}
+                              strokeDasharray={`${Math.round(upm * 0.015)} ${Math.round(upm * 0.015)}`}
+                            />
 
-                      {/* Rendered Contours */}
-                      <g>
-                        {livePreviewContours.map((c, idx) => (
-                          <path
-                            key={idx}
-                            d={contourToSvgPathData(c)}
-                            fill="currentColor"
-                            fillRule="nonzero"
-                            opacity="0.88"
-                          />
-                        ))}
-                      </g>
-                    </svg>
-                  </div>
-                )}
+                            {/* Rendered Contours */}
+                            <g>
+                              {livePreviewContours.map((c, idx) => (
+                                <path
+                                  key={idx}
+                                  d={contourToSvgPathData(c)}
+                                  fill="currentColor"
+                                  fillRule="nonzero"
+                                  opacity="0.88"
+                                />
+                              ))}
+                            </g>
+                          </svg>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 <div className="mt-1 flex items-center justify-center gap-2 text-[10.5px] font-mono text-stone-600 dark:text-stone-300">
                   <span>オフセット: ({adjustDx}, {adjustDy})</span>
@@ -2214,11 +2287,12 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                 </div>
               ) : (
                 /* Full-Height Paper Layout for Proofing */
-                <div className="w-full flex justify-center items-start min-h-full py-1 sm:py-2">
+                <div className="w-full flex items-start min-h-full py-1 sm:py-2">
                   <div
-                    className={`transition-all rounded-lg shadow-sm border p-4 sm:p-12 ${
+                    onWheel={handleVerticalWheel}
+                    className={`transition-all rounded-lg shadow-sm border p-4 sm:p-12 mx-auto ${
                       writingMode === 'vertical'
-                        ? 'min-w-[260px] sm:min-w-[340px] max-w-full overflow-x-auto min-h-[calc(100dvh-260px)] md:min-h-[calc(100vh-220px)]'
+                        ? 'min-w-[280px] sm:min-w-[360px] max-w-full overflow-x-auto overscroll-contain min-h-[calc(100dvh-260px)] md:min-h-[calc(100vh-220px)]'
                         : 'w-full max-w-3xl lg:max-w-4xl min-h-[calc(100dvh-260px)] md:min-h-[calc(100vh-220px)]'
                     } ${
                       isLight
@@ -2268,7 +2342,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                       </div>
                     )}
 
-                    <div className="relative w-full overflow-hidden">
+                    <div className={`relative ${writingMode === 'vertical' ? 'w-max min-w-full' : 'w-full overflow-hidden'}`}>
                       {/* Multi-line Notebook Ruling Layer */}
                       {showNotebookGuides && (
                         writingMode === 'horizontal' ? (
@@ -2392,9 +2466,9 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                           fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
                         }}
-                        className={`relative z-10 whitespace-pre-wrap break-words min-h-[300px] ${
+                        className={`relative z-10 whitespace-pre-wrap select-text min-h-[300px] ${
                           isLight ? 'text-stone-900' : 'text-emerald-50'
-                        } ${writingMode === 'vertical' ? 'h-full' : 'w-full'}`}
+                        } ${writingMode === 'vertical' ? 'h-full w-max break-normal' : 'w-full break-words'}`}
                       >
                         {renderedText}
                       </div>
@@ -2731,15 +2805,16 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                 </div>
               ) : (
                 /* Paper Layout */
-                <div className={`w-full flex justify-center items-start min-h-full ${isFullscreen ? 'py-4 sm:py-8' : 'py-2'}`}>
+                <div className={`w-full flex items-start min-h-full ${isFullscreen ? 'py-4 sm:py-8' : 'py-2'}`}>
                   <div
-                    className={`transition-all rounded-lg shadow-sm border ${
+                    onWheel={handleVerticalWheel}
+                    className={`transition-all rounded-lg shadow-sm border mx-auto ${
                       isFullscreen ? 'p-6 sm:p-14' : 'p-4 sm:p-10'
                     } ${
                       writingMode === 'vertical'
                         ? isFullscreen
-                          ? 'min-w-[280px] sm:min-w-[380px] max-w-full overflow-x-auto h-full max-h-[calc(100vh-270px)]'
-                          : 'min-w-[260px] sm:min-w-[320px] max-w-full overflow-x-auto h-full max-h-[720px]'
+                          ? 'min-w-[280px] sm:min-w-[380px] max-w-full overflow-x-auto overscroll-contain h-full max-h-[calc(100vh-270px)]'
+                          : 'min-w-[260px] sm:min-w-[320px] max-w-full overflow-x-auto overscroll-contain h-full max-h-[720px]'
                         : isFullscreen
                         ? 'w-full max-w-5xl xl:max-w-6xl min-h-[calc(100vh-320px)]'
                         : 'w-full max-w-3xl'
@@ -2791,7 +2866,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                       </div>
                     )}
 
-                    <div className="relative w-full overflow-hidden">
+                    <div className={`relative ${writingMode === 'vertical' ? 'w-max min-w-full' : 'w-full overflow-hidden'}`}>
                       {/* Multi-line Notebook Ruling Layer */}
                       {showNotebookGuides && (
                         writingMode === 'horizontal' ? (
@@ -2915,9 +2990,9 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                           fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
                         }}
-                        className={`relative z-10 whitespace-pre-wrap break-words min-h-[220px] ${
+                        className={`relative z-10 whitespace-pre-wrap select-text min-h-[220px] ${
                           isLight ? 'text-stone-900' : 'text-emerald-50'
-                        } ${writingMode === 'vertical' ? 'h-full' : 'w-full'}`}
+                        } ${writingMode === 'vertical' ? 'h-full w-max break-normal' : 'w-full break-words'}`}
                       >
                         {renderedText}
                       </div>

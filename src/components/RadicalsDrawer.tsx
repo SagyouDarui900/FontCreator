@@ -424,10 +424,10 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
             <Type className={`w-4 h-4 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`} />
             <div className="flex flex-col">
               <span className={`text-xs font-bold tracking-wide ${isLight ? 'text-emerald-950' : 'text-emerald-200'}`}>
-                部首・偏旁＆フォントパーツスタジオ
+                部首・フォントパーツ
               </span>
               <span className="text-[10px] text-stone-500 dark:text-stone-400">
-                実用高精度ベクター・フォント自動抽出
+                ベクター輪郭の登録・文字への挿入
               </span>
             </div>
           </div>
@@ -1185,7 +1185,7 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                 }`}
               >
                 <Shapes className="w-4 h-4" />
-                <span>部首パーツ工房を開く &gt;</span>
+                <span>部首・パーツ工房を開く</span>
               </button>
             )}
 

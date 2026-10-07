@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { ThemeMode } from '../../utils/theme';
 import { PathContour } from '../../types';
-import { contoursToSvgPath, getContoursBoundingBox } from '../../utils/pathUtils';
+import { contoursToSvgPath, groupContoursWithHoles } from '../../utils/pathUtils';
 
 interface RenderGroup {
   id: string;
@@ -30,46 +30,9 @@ export function groupContoursForRendering(contours: PathContour[]): RenderGroup[
     ];
   }
 
-  const bboxes = contours.map((c) => getContoursBoundingBox([c]));
-  const parentMap = new Map<number, number>();
-
-  for (let i = 0; i < contours.length; i++) {
-    const b1 = bboxes[i];
-    if (b1.width === 0 || b1.height === 0) continue;
-
-    for (let j = 0; j < contours.length; j++) {
-      if (i === j) continue;
-      const b2 = bboxes[j];
-      if (
-        b1.minX >= b2.minX - 2 &&
-        b1.maxX <= b2.maxX + 2 &&
-        b1.minY >= b2.minY - 2 &&
-        b1.maxY <= b2.maxY + 2 &&
-        b2.maxX - b2.minX > b1.maxX - b1.minX &&
-        b2.maxY - b2.minY > b1.maxY - b1.minY
-      ) {
-        parentMap.set(i, j);
-        break;
-      }
-    }
-  }
-
-  const groups: PathContour[][] = [];
-  const processed = new Set<number>();
-
-  for (let i = 0; i < contours.length; i++) {
-    if (processed.has(i)) continue;
-    processed.add(i);
-
-    const currentGroup = [contours[i]];
-    for (let j = 0; j < contours.length; j++) {
-      if (!processed.has(j) && parentMap.get(j) === i) {
-        processed.add(j);
-        currentGroup.push(contours[j]);
-      }
-    }
-    groups.push(currentGroup);
-  }
+  // Use robust topological hole identification:
+  // Nested counter-holes stay with their parent (evenodd), while crossing strokes remain separate (nonzero)!
+  const groups = groupContoursWithHoles(contours);
 
   return groups.map((group, idx) => ({
     id: group.map((c) => c.id).join('-') || `group-${idx}`,
@@ -138,7 +101,7 @@ export const MainGlyphContoursLayer: React.FC<MainGlyphContoursLayerProps> = Rea
     // When Outline Mode (輪郭のみモード) is active, remove fills entirely and stroke every contour outline
     if (outlineOnly) {
       return (
-        <g id="main-glyph-contours-layer" className="transition-opacity duration-150">
+        <g id="main-glyph-contours-layer">
           {contours && contours.length > 0 ? (
             contours.map((contour, idx) => {
               const d = contoursToSvgPath([contour]);

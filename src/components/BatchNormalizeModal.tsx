@@ -346,34 +346,41 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
 
               {/* SVG Stage */}
               <div className="relative w-44 h-44 border rounded bg-white overflow-hidden shadow-inner flex items-center justify-center">
-                {/* 1000x1000 EM Grid Lines */}
-                <svg viewBox="0 0 1000 1000" className="absolute inset-0 w-full h-full pointer-events-none">
-                  {/* EM Box Boundary */}
-                  <rect x="0" y="0" width="1000" height="1000" fill="#fafafa" stroke="#e0e0e0" strokeWidth="6" />
-                  {/* Baseline Y: 800 */}
-                  <line x1="0" y1="800" x2="1000" y2="800" stroke="#f87171" strokeWidth="4" strokeDasharray="10 10" />
-                  {/* Center lines */}
-                  <line x1="500" y1="0" x2="500" y2="1000" stroke="#93c5fd" strokeWidth="3" strokeDasharray="8 8" />
-                  <line x1="0" y1="500" x2="1000" y2="500" stroke="#93c5fd" strokeWidth="3" strokeDasharray="8 8" />
+                {/* EM Grid Lines */}
+                {(() => {
+                  const upm = project?.metadata?.unitsPerEm || 1000;
+                  const baselineY = Math.round(upm * 0.8);
+                  const half = upm / 2;
+                  return (
+                    <svg viewBox={`0 0 ${upm} ${upm}`} className="absolute inset-0 w-full h-full pointer-events-none">
+                      {/* EM Box Boundary */}
+                      <rect x="0" y="0" width={upm} height={upm} fill="#fafafa" stroke="#e0e0e0" strokeWidth={upm * 0.006} />
+                      {/* Baseline */}
+                      <line x1="0" y1={baselineY} x2={upm} y2={baselineY} stroke="#f87171" strokeWidth={upm * 0.004} strokeDasharray="10 10" />
+                      {/* Center lines */}
+                      <line x1={half} y1="0" x2={half} y2={upm} stroke="#93c5fd" strokeWidth={upm * 0.003} strokeDasharray="8 8" />
+                      <line x1="0" y1={half} x2={upm} y2={half} stroke="#93c5fd" strokeWidth={upm * 0.003} strokeDasharray="8 8" />
 
-                  {/* Target frame box */}
-                  <rect
-                    x={(1000 - targetWidth) / 2}
-                    y={(1000 - targetHeight) / 2}
-                    width={targetWidth}
-                    height={targetHeight}
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="3"
-                    strokeDasharray="6 6"
-                  />
+                      {/* Target frame box */}
+                      <rect
+                        x={(upm - targetWidth) / 2}
+                        y={(upm - targetHeight) / 2}
+                        width={targetWidth}
+                        height={targetHeight}
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth={upm * 0.003}
+                        strokeDasharray="6 6"
+                      />
 
-                  {/* Original (Faint Red) */}
-                  {origSvg && <path d={origSvg} fill="#fca5a5" opacity="0.45" fillRule="nonzero" />}
+                      {/* Original (Faint Red) */}
+                      {origSvg && <path d={origSvg} fill="#fca5a5" opacity="0.45" fillRule="nonzero" />}
 
-                  {/* Normalized (Crisp Emerald) */}
-                  {normSvg && <path d={normSvg} fill="#047857" opacity="0.9" fillRule="nonzero" />}
-                </svg>
+                      {/* Normalized (Crisp Emerald) */}
+                      {normSvg && <path d={normSvg} fill="#047857" opacity="0.9" fillRule="nonzero" />}
+                    </svg>
+                  );
+                })()}
               </div>
 
               <div className="w-full text-[10px] flex justify-between font-mono text-stone-500 dark:text-emerald-400/80">

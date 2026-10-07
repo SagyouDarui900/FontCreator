@@ -113,6 +113,8 @@ import {
   normalizeGlyphContoursWinding,
   simplifyGlyphContours,
   isPointNearContour,
+  eraseContoursAtPoint,
+  subtractEraserStrokeFromContours,
   flipMultipleContoursH,
   flipMultipleContoursV,
   expandStrokeContours,
@@ -460,6 +462,26 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
   const [rightTab, setRightTab] = useState<'transform' | 'compose'>('transform');
   const [targetChar, setTargetChar] = useState<string>(selectedChar || '休');
+
+  // Eraser modes & settings
+  const [eraserMode, setEraserMode] = useState<'stroke' | 'cut' | 'node'>('stroke');
+  const [eraserRadius, setEraserRadius] = useState<number>(24);
+  const isErasingRef = useRef<boolean>(false);
+  const eraserStrokePointsRef = useRef<Point[]>([]);
+  const [eraserHoverPos, setEraserHoverPos] = useState<Point | null>(null);
+  const activeEraserSvgDRef = useRef<string>('');
+  const activeEraserPathRef = useRef<SVGPathElement | null>(null);
+
+  // Mobile Bottom Sheet states
+  const [mobileSheetSnap, setMobileSheetSnap] = useState<'peek' | 'half' | 'full'>('peek');
+  const [mobileSheetTab, setMobileSheetTab] = useState<'radicals' | 'parts' | 'transform' | 'compose'>('radicals');
+
+  // Multi-touch gestures (pinch-zoom and pan on mobile/tablet touch screens)
+  const activeTouchesRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const touchPinchInitialDistRef = useRef<number | null>(null);
+  const touchPinchInitialZoomRef = useRef<number>(1);
+  const touchPinchInitialPanRef = useRef<Point>({ x: 0, y: 0 });
+  const touchPinchInitialMidpointRef = useRef<Point>({ x: 0, y: 0 });
 
   // SVG file input ref
   const svgFileInputRef = useRef<HTMLInputElement>(null);
@@ -1643,10 +1665,31 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   // Pointer event handlers on Part Canvas
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!activePart) return;
+
+    // Multi-touch tracking for pinch-to-zoom and two-finger pan
+    if (e.pointerType === 'touch') {
+      activeTouchesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activeTouchesRef.current.size >= 2) {
+        const pts = Array.from(activeTouchesRef.current.values()) as { x: number; y: number }[];
+        touchPinchInitialDistRef.current = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        touchPinchInitialZoomRef.current = zoom;
+        touchPinchInitialPanRef.current = { ...pan };
+        touchPinchInitialMidpointRef.current = {
+          x: (pts[0].x + pts[1].x) / 2,
+          y: (pts[0].y + pts[1].y) / 2,
+        };
+        setIsPanning(false);
+        return;
+      }
+    }
+
     const pos = getCanvasCoords(e);
 
     // Hand tool / Middle click pan / Space key pan
     if (toolMode === 'hand' || e.button === 1 || e.spaceKey) {
+      try {
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+      } catch {}
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
       return;
@@ -1654,6 +1697,9 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
     // Brush Tool
     if (toolMode === 'brush') {
+      try {
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+      } catch {}
       let initialPressure = 0.5;
       if (e.pressure && e.pressure > 0) {
         initialPressure = e.pressure;
@@ -1694,19 +1740,26 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
       return;
     }
 
-    // Eraser Tool
+    // Eraser Tool with pointer capture & live modes
     if (toolMode === 'eraser') {
-      const remaining = activePart.contours.filter((contour) => {
-        const bbox = getContoursBoundingBox([contour]);
-        return !(
-          pos.x >= bbox.minX - 25 &&
-          pos.x <= bbox.maxX + 25 &&
-          pos.y >= bbox.minY - 25 &&
-          pos.y <= bbox.maxY + 25
-        );
-      });
-      if (remaining.length !== activePart.contours.length) {
-        commitPartChange(remaining);
+      try {
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+      } catch {}
+      isErasingRef.current = true;
+      eraserStrokePointsRef.current = [pos];
+      setEraserHoverPos(pos);
+
+      if (eraserMode === 'cut') {
+        const d = `M ${pos.x} ${pos.y} L ${pos.x + 0.1} ${pos.y}`;
+        activeEraserSvgDRef.current = d;
+        if (activeEraserPathRef.current) {
+          activeEraserPathRef.current.setAttribute('d', d);
+        }
+      } else {
+        const remaining = eraseContoursAtPoint(activePart.contours, pos, eraserRadius, eraserMode);
+        if (remaining.length !== activePart.contours.length) {
+          commitPartChange(remaining);
+        }
       }
       return;
     }
@@ -1850,6 +1903,36 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    // Multi-touch gestures (pinch-zoom and pan)
+    if (e.pointerType === 'touch') {
+      activeTouchesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activeTouchesRef.current.size >= 2 && touchPinchInitialDistRef.current) {
+        const pts = Array.from(activeTouchesRef.current.values()) as { x: number; y: number }[];
+        const newDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const scale = newDist / touchPinchInitialDistRef.current;
+        const newZoom = Math.max(0.15, Math.min(3.5, touchPinchInitialZoomRef.current * scale));
+
+        const currMid = {
+          x: (pts[0].x + pts[1].x) / 2,
+          y: (pts[0].y + pts[1].y) / 2,
+        };
+        const dMidX = currMid.x - touchPinchInitialMidpointRef.current.x;
+        const dMidY = currMid.y - touchPinchInitialMidpointRef.current.y;
+
+        if (svgCanvasRef.current) {
+          const rect = svgCanvasRef.current.getBoundingClientRect();
+          const midX = touchPinchInitialMidpointRef.current.x - rect.left;
+          const midY = touchPinchInitialMidpointRef.current.y - rect.top;
+          setPan({
+            x: midX - (midX - touchPinchInitialPanRef.current.x) * (newZoom / touchPinchInitialZoomRef.current) + dMidX,
+            y: midY - (midY - touchPinchInitialPanRef.current.y) * (newZoom / touchPinchInitialZoomRef.current) + dMidY,
+          });
+        }
+        setZoom(newZoom);
+        return;
+      }
+    }
+
     if (isPanning) {
       setPan({
         x: e.clientX - panStart.x,
@@ -1870,10 +1953,42 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
     }
 
     const pos = snapped.point;
+
+    // Track eraser hover position for the high-visibility circular reticle
+    if (toolMode === 'eraser') {
+      setEraserHoverPos(pos);
+    }
+
     if (toolMode === 'pen') {
       if (!penMousePos || Math.hypot(penMousePos.x - pos.x, penMousePos.y - pos.y) > 0.5) {
         setPenMousePos(pos);
       }
+    }
+
+    // Eraser continuous sweep while dragging
+    if (isErasingRef.current && toolMode === 'eraser' && activePart) {
+      const prev = eraserStrokePointsRef.current[eraserStrokePointsRef.current.length - 1] || pos;
+      eraserStrokePointsRef.current.push(pos);
+
+      if (eraserMode === 'cut') {
+        const pts = eraserStrokePointsRef.current;
+        let d = `M ${pts[0].x} ${pts[0].y}`;
+        for (let i = 1; i < pts.length; i++) {
+          d += ` L ${pts[i].x} ${pts[i].y}`;
+        }
+        activeEraserSvgDRef.current = d;
+        if (activeEraserPathRef.current) {
+          activeEraserPathRef.current.setAttribute('d', d);
+        }
+      } else {
+        const remaining = eraseContoursAtPoint(activePart.contours, pos, eraserRadius, eraserMode, prev);
+        if (remaining.length !== activePart.contours.length) {
+          setParts((prevParts) =>
+            prevParts.map((p) => (p.id === activePart.id ? { ...p, contours: remaining } : p))
+          );
+        }
+      }
+      return;
     }
 
     // Live Brush Stroke Engine
@@ -2065,11 +2180,49 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
   };
 
   const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.pointerType === 'touch') {
+      activeTouchesRef.current.delete(e.pointerId);
+      if (activeTouchesRef.current.size < 2) {
+        touchPinchInitialDistRef.current = null;
+      }
+    }
+
     setIsPanning(false);
     setIsDraggingNode(false);
     setIsDraggingContour(false);
     setSelectedHandleType(null);
     setActiveSnapLines({ x: null, y: null });
+
+    // Finalize Eraser Tool
+    if (isErasingRef.current && toolMode === 'eraser') {
+      try {
+        (e.target as Element).releasePointerCapture?.(e.pointerId);
+      } catch {}
+      isErasingRef.current = false;
+      activeEraserSvgDRef.current = '';
+      if (activeEraserPathRef.current) {
+        activeEraserPathRef.current.setAttribute('d', '');
+      }
+
+      if (eraserMode === 'cut' && eraserStrokePointsRef.current.length > 0 && activePart) {
+        const rawPts = eraserStrokePointsRef.current;
+        eraserStrokePointsRef.current = [];
+        const pts = rawPts.length === 1
+          ? [rawPts[0], { x: rawPts[0].x + 0.1, y: rawPts[0].y + 0.1 }]
+          : rawPts;
+        const updated = subtractEraserStrokeFromContours(activePart.contours, pts, eraserRadius);
+        if (updated !== activePart.contours) {
+          commitPartChange(updated);
+          notify('パスを削り・分割しました', 'info');
+        }
+      } else {
+        eraserStrokePointsRef.current = [];
+        if (activePart) {
+          commitPartChange(activePart.contours);
+        }
+      }
+      return;
+    }
 
     // Record undo state if a node or contour drag occurred in select mode
     if (dragStartContoursRef.current && activePart) {
@@ -2601,8 +2754,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
             </div>
           </div>
 
-          {/* Quick Workspace Switchers */}
-          <div className="flex items-center space-x-1.5 shrink-0">
+          {/* Quick Workspace Switchers (Desktop/Tablet only) */}
+          <div className="hidden md:flex items-center space-x-1.5 shrink-0">
             {/* Toggle Left Sidebar */}
             <button
               onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
@@ -2732,17 +2885,11 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               </div>
             </div>
           ) : (
-            <>
-              {/* Mobile Backdrop */}
-              <div
-                className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-40 animate-fadeIn"
-                onClick={() => setIsLeftSidebarOpen(false)}
-              />
-              <div
-                className={`fixed md:static inset-y-0 left-0 z-50 w-[88vw] max-w-sm md:w-72 sm:md:w-80 xl:w-88 border-r flex flex-col shrink-0 min-h-0 relative shadow-2xl md:shadow-none overflow-hidden transition-all ${
-                  isLight ? 'bg-white border-stone-200/60' : 'bg-[#162119] border-stone-800/60'
-                }`}
-              >
+            <div
+              className={`hidden md:flex static inset-y-0 left-0 w-72 xl:w-88 border-r flex-col shrink-0 min-h-0 relative overflow-hidden transition-all ${
+                isLight ? 'bg-white border-stone-200/60' : 'bg-[#162119] border-stone-800/60'
+              }`}
+            >
               {/* Left Column Header with collapse button */}
               <div
                 className={`p-2 px-3 border-b flex items-center justify-between shrink-0 ${
@@ -3423,11 +3570,10 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                 )}
               </div>
             </div>
-          </>
-        )}
+          )}
 
           {/* ================= CENTER COLUMN: DEDICATED PART CANVAS ================= */}
-          <div className="flex-1 flex flex-col min-w-0 min-h-0 relative overflow-hidden">
+          <div className="flex-1 flex flex-col min-w-0 min-h-0 relative overflow-hidden flex pb-14 md:pb-0">
             {/* Top Quick Action / Insertion Ribbon (作字・即時配置バー) */}
             <div
               className={`px-3 py-1.5 border-b flex items-center justify-between gap-2 shrink-0 overflow-x-auto scrollbar-none z-20 ${
@@ -4383,7 +4529,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
                   <div className="flex items-center space-x-2 shrink-0">
                     {activePenContour ? (
-                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 animate-pulse">
+                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
                         {isPenNearFirstNode ? '◎ 始点クリックでパスを閉じます' : `作図中 (${activePenContour.nodes.length}点)`}
                       </span>
                     ) : (
@@ -4397,6 +4543,76 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     >
                       ショートカット一覧
                     </button>
+                  </div>
+                </div>
+              ) : toolMode === 'eraser' ? (
+                /* ================= ERASER TOOL OPTIONS ================= */
+                <div className="flex items-center space-x-2.5 sm:space-x-4 shrink-0 w-full justify-between">
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 shrink-0 flex items-center space-x-1">
+                      <Eraser className="w-3.5 h-3.5 text-rose-500" />
+                      <span>消しゴム:</span>
+                    </span>
+
+                    <div className="flex items-center space-x-1 bg-stone-100 dark:bg-[#1a281f] p-0.5 rounded-lg border border-stone-200 dark:border-[#25382b]">
+                      <button
+                        onClick={() => setEraserMode('stroke')}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
+                          eraserMode === 'stroke'
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                        }`}
+                        title="交差した輪郭を一括削除"
+                      >
+                        輪郭一括
+                      </button>
+                      <button
+                        onClick={() => setEraserMode('cut')}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
+                          eraserMode === 'cut'
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                        }`}
+                        title="ドラッグした軌跡でベジェ曲線を切断・削り取り"
+                      >
+                        部分割 (Cut)
+                      </button>
+                      <button
+                        onClick={() => setEraserMode('node')}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
+                          eraserMode === 'node'
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                        }`}
+                        title="範囲内のアンカーノードのみ削除"
+                      >
+                        ノード消去
+                      </button>
+                    </div>
+
+                    {/* Size Selector */}
+                    <div className="flex items-center space-x-1.5 ml-2">
+                      <span className="text-[10px] text-stone-400">半径:</span>
+                      {[12, 24, 36, 50].map((sz) => (
+                        <button
+                          key={sz}
+                          onClick={() => setEraserRadius(sz)}
+                          className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
+                            eraserRadius === sz
+                              ? 'bg-rose-500 text-white scale-110 shadow-xs'
+                              : 'bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-300'
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-stone-400 hidden sm:block">
+                    {eraserMode === 'cut'
+                      ? 'なぞった軌跡で輪郭を削り取ります（円形プレビュー表示）'
+                      : 'ドラッグまたはタップで消去します'}
                   </div>
                 </div>
               ) : (
@@ -4768,12 +4984,17 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               )}
               <svg
                 ref={svgCanvasRef}
+                style={{ touchAction: 'none' }}
                 className={`w-full h-full select-none ${
                   toolMode === 'hand' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'
                 }`}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                onPointerLeave={() => {
+                  setEraserHoverPos(null);
+                }}
                 onWheel={handleWheel}
               >
                 <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
@@ -5051,6 +5272,41 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     fillOpacity={0.88}
                   />
 
+                  {/* Real-time Cut Eraser Ribbon Preview Path */}
+                  <path
+                    ref={activeEraserPathRef}
+                    d=""
+                    fill="none"
+                    stroke="#f43f5e"
+                    strokeWidth={eraserRadius * 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={0.45}
+                    pointerEvents="none"
+                  />
+
+                  {/* Real-time Circular Touch & Mouse Reticle */}
+                  {toolMode === 'eraser' && eraserHoverPos && (
+                    <g pointerEvents="none">
+                      <circle
+                        cx={eraserHoverPos.x}
+                        cy={eraserHoverPos.y}
+                        r={eraserRadius}
+                        fill="#f43f5e"
+                        fillOpacity={0.16}
+                        stroke="#f43f5e"
+                        strokeWidth={2 / zoom}
+                        strokeDasharray={`${4 / zoom} ${3 / zoom}`}
+                      />
+                      <circle
+                        cx={eraserHoverPos.x}
+                        cy={eraserHoverPos.y}
+                        r={Math.max(2, 3 / zoom)}
+                        fill="#f43f5e"
+                      />
+                    </g>
+                  )}
+
                   {/* Active Pen Path in-progress */}
                   {penSvgPath && (
                     <path
@@ -5083,8 +5339,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                               r={10}
                               fill="none"
                               stroke="#10b981"
-                              strokeWidth={3}
-                              className="animate-ping"
+                              strokeWidth={2.5}
                             />
                           )}
                         </g>
@@ -5276,6 +5531,48 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                     ))}
                 </g>
               </svg>
+
+              {/* Mobile Floating Canvas Quick Controls (Zoom, Fit, Undo, Redo) */}
+              <div className="md:hidden absolute top-3 right-3 z-30 flex items-center space-x-1 bg-white/95 dark:bg-[#152019]/95 backdrop-blur-md px-2 py-1 rounded-full border border-stone-200 dark:border-stone-700 shadow-lg text-xs">
+                <button
+                  onClick={handleUndo}
+                  disabled={undoStack.length <= 1}
+                  className="p-1 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-30 text-stone-700 dark:text-stone-300"
+                  title="元に戻す"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleRedo}
+                  disabled={redoStack.length === 0}
+                  className="p-1 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-30 text-stone-700 dark:text-stone-300"
+                  title="やり直す"
+                >
+                  <Redo2 className="w-3.5 h-3.5" />
+                </button>
+                <div className="w-[1px] h-3 bg-stone-300 dark:bg-stone-700 mx-0.5" />
+                <button
+                  onClick={() => setZoom((z) => Math.max(0.2, Number((z * 0.8).toFixed(2))))}
+                  className="p-1 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300"
+                  title="縮小"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={resetView}
+                  className="px-1 text-[10px] font-mono font-bold text-stone-700 dark:text-emerald-300"
+                  title="全体表示 (フィット)"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button
+                  onClick={() => setZoom((z) => Math.min(5, Number((z * 1.25).toFixed(2))))}
+                  className="p-1 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300"
+                  title="拡大"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -5304,17 +5601,11 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               </div>
             </div>
           ) : (
-            <>
-              {/* Mobile Backdrop */}
-              <div
-                className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-40 animate-fadeIn"
-                onClick={() => setIsRightSidebarOpen(false)}
-              />
-              <div
-                className={`fixed md:static inset-y-0 right-0 z-50 w-[88vw] max-w-sm md:w-80 lg:w-88 xl:w-96 border-l flex flex-col shrink-0 min-h-0 relative shadow-2xl md:shadow-none overflow-hidden transition-all ${
-                  isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#162119] border-[#25362b]'
-                }`}
-              >
+            <div
+              className={`hidden md:flex static inset-y-0 right-0 w-80 lg:w-88 xl:w-96 border-l flex-col shrink-0 min-h-0 relative overflow-hidden transition-all ${
+                isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#162119] border-[#25362b]'
+              }`}
+            >
               {/* Right Column Header with Tab Switcher & Collapse */}
               <div
                 className={`p-2 px-3 border-b flex items-center justify-between gap-2 shrink-0 ${
@@ -6050,81 +6341,530 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
                   <p>左側のライブラリからパーツを選択するか、新規パーツを作成してください</p>
                 </div>
               )}
-              </div>
-            </>
+            </div>
           )}
         </div>
 
-        {/* ================= MOBILE BOTTOM NAVIGATION BAR ================= */}
+        {/* ================= MOBILE RESPONSIVE BOTTOM SHEET ================= */}
         <div
-          className={`flex md:hidden items-center justify-around h-14 shrink-0 border-t z-30 ${
+          className={`flex md:hidden fixed bottom-0 inset-x-0 z-40 flex-col transition-all duration-300 ease-out shadow-2xl border-t select-none ${
             isLight
-              ? 'bg-white/98 border-stone-300'
-              : 'bg-[#0a0f0c]/98 border-[#25362b]'
+              ? 'bg-white/98 border-stone-300 text-stone-800'
+              : 'bg-[#121c15]/98 border-[#25362b] text-emerald-100'
           }`}
-          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 2px)' }}
+          style={{
+            height:
+              mobileSheetSnap === 'peek'
+                ? 'calc(54px + env(safe-area-inset-bottom, 0px))'
+                : mobileSheetSnap === 'half'
+                ? '48vh'
+                : '85vh',
+            paddingBottom: mobileSheetSnap === 'peek' ? 'max(env(safe-area-inset-bottom, 0px), 2px)' : '0px',
+          }}
         >
-          <button
+          {/* Bottom Sheet Grab Handle & Mode Toggle */}
+          <div
+            className="w-full flex flex-col items-center pt-2 pb-1 cursor-grab active:cursor-grabbing select-none"
             onClick={() => {
-              setIsLeftSidebarOpen(true);
-              setIsRightSidebarOpen(false);
+              if (mobileSheetSnap === 'peek') setMobileSheetSnap('half');
+              else if (mobileSheetSnap === 'half') setMobileSheetSnap('full');
+              else setMobileSheetSnap('peek');
             }}
-            className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 transition-all ${
-              isLeftSidebarOpen
-                ? 'text-emerald-700 dark:text-emerald-400 font-extrabold'
-                : 'text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'
-            }`}
           >
-            <Shapes className={`w-4 h-4 ${isLeftSidebarOpen ? 'scale-110' : ''}`} />
-            <span className="text-[10px] mt-0.5">部首ライブラリ</span>
-          </button>
+            <div className="w-10 h-1.5 bg-stone-300 dark:bg-stone-600 rounded-full" />
+          </div>
 
-          <button
-            onClick={() => {
-              setIsLeftSidebarOpen(false);
-              setIsRightSidebarOpen(false);
-            }}
-            className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 transition-all ${
-              !isLeftSidebarOpen && !isRightSidebarOpen
-                ? 'text-emerald-700 dark:text-emerald-400 font-extrabold'
-                : 'text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'
-            }`}
-          >
-            <PenTool className={`w-4 h-4 ${!isLeftSidebarOpen && !isRightSidebarOpen ? 'scale-110' : ''}`} />
-            <span className="text-[10px] mt-0.5">作図キャンバス</span>
-          </button>
+          {/* Bottom Sheet 4-Tab Navigation Strip */}
+          <div className="flex items-center justify-around px-1 pb-1 border-b border-inherit shrink-0">
+            <button
+              onClick={() => {
+                setMobileSheetTab('radicals');
+                if (mobileSheetSnap === 'peek') setMobileSheetSnap('half');
+              }}
+              className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 rounded-lg transition-all ${
+                mobileSheetTab === 'radicals' && mobileSheetSnap !== 'peek'
+                  ? 'text-emerald-700 dark:text-emerald-400 font-extrabold bg-emerald-50 dark:bg-emerald-950/40'
+                  : 'text-stone-500 hover:text-stone-900 dark:text-stone-400'
+              }`}
+            >
+              <Shapes className="w-4 h-4" />
+              <span className="text-[10px] mt-0.5">部首</span>
+            </button>
 
-          <button
-            onClick={() => {
-              setRightTab('transform');
-              setIsRightSidebarOpen(true);
-              setIsLeftSidebarOpen(false);
-            }}
-            className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 transition-all ${
-              isRightSidebarOpen && rightTab === 'transform'
-                ? 'text-emerald-700 dark:text-emerald-400 font-extrabold'
-                : 'text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'
-            }`}
-          >
-            <Sliders className={`w-4 h-4 ${isRightSidebarOpen && rightTab === 'transform' ? 'scale-110' : ''}`} />
-            <span className="text-[10px] mt-0.5">詳細・変形</span>
-          </button>
+            <button
+              onClick={() => {
+                setMobileSheetTab('parts');
+                if (mobileSheetSnap === 'peek') setMobileSheetSnap('half');
+              }}
+              className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 rounded-lg transition-all ${
+                mobileSheetTab === 'parts' && mobileSheetSnap !== 'peek'
+                  ? 'text-emerald-700 dark:text-emerald-400 font-extrabold bg-emerald-50 dark:bg-emerald-950/40'
+                  : 'text-stone-500 hover:text-stone-900 dark:text-stone-400'
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              <span className="text-[10px] mt-0.5">パーツ ({parts.length})</span>
+            </button>
 
-          <button
-            onClick={() => {
-              setRightTab('compose');
-              setIsRightSidebarOpen(true);
-              setIsLeftSidebarOpen(false);
-            }}
-            className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 transition-all ${
-              isRightSidebarOpen && rightTab === 'compose'
-                ? 'text-emerald-700 dark:text-emerald-400 font-extrabold'
-                : 'text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'
-            }`}
-          >
-            <BookmarkPlus className={`w-4 h-4 ${isRightSidebarOpen && rightTab === 'compose' ? 'scale-110' : ''}`} />
-            <span className="text-[10px] mt-0.5">漢字合成</span>
-          </button>
+            <button
+              onClick={() => {
+                setMobileSheetTab('transform');
+                if (mobileSheetSnap === 'peek') setMobileSheetSnap('half');
+              }}
+              className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 rounded-lg transition-all ${
+                mobileSheetTab === 'transform' && mobileSheetSnap !== 'peek'
+                  ? 'text-emerald-700 dark:text-emerald-400 font-extrabold bg-emerald-50 dark:bg-emerald-950/40'
+                  : 'text-stone-500 hover:text-stone-900 dark:text-stone-400'
+              }`}
+            >
+              <Sliders className="w-4 h-4" />
+              <span className="text-[10px] mt-0.5">変形</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setMobileSheetTab('compose');
+                if (mobileSheetSnap === 'peek') setMobileSheetSnap('half');
+              }}
+              className={`flex-1 min-h-[44px] flex flex-col items-center justify-center py-1 rounded-lg transition-all ${
+                mobileSheetTab === 'compose' && mobileSheetSnap !== 'peek'
+                  ? 'text-emerald-700 dark:text-emerald-400 font-extrabold bg-emerald-50 dark:bg-emerald-950/40'
+                  : 'text-stone-500 hover:text-stone-900 dark:text-stone-400'
+              }`}
+            >
+              <BookmarkPlus className="w-4 h-4" />
+              <span className="text-[10px] mt-0.5">合成</span>
+            </button>
+
+            {/* Snap expand/collapse toggle button */}
+            <button
+              onClick={() => {
+                if (mobileSheetSnap === 'peek') setMobileSheetSnap('half');
+                else if (mobileSheetSnap === 'half') setMobileSheetSnap('peek');
+                else setMobileSheetSnap('half');
+              }}
+              className="px-2 min-h-[44px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-emerald-300"
+              title="シートの展開/縮小"
+            >
+              {mobileSheetSnap === 'peek' ? (
+                <ChevronLeft className="w-4 h-4 -rotate-90" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+
+          {/* Bottom Sheet Expandable Content */}
+          {mobileSheetSnap !== 'peek' && (
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 overscroll-contain">
+              {mobileSheetTab === 'radicals' && (
+                <div className="space-y-3 pb-8">
+                  {/* Category switcher */}
+                  <div className="grid grid-cols-3 gap-1 p-0.5 rounded-lg bg-stone-200/70 dark:bg-[#1b261f]">
+                    <button
+                      onClick={() => setLeftSidebarTab('presets')}
+                      className={`py-1.5 text-xs font-bold rounded-md ${
+                        leftSidebarTab === 'presets'
+                          ? 'bg-white dark:bg-[#25362b] text-emerald-900 dark:text-emerald-200 shadow-xs'
+                          : 'text-stone-600 dark:text-stone-400'
+                      }`}
+                    >
+                      標準部首 214
+                    </button>
+                    <button
+                      onClick={() => setLeftSidebarTab('kanji_db')}
+                      className={`py-1.5 text-xs font-bold rounded-md ${
+                        leftSidebarTab === 'kanji_db'
+                          ? 'bg-white dark:bg-[#25362b] text-emerald-900 dark:text-emerald-200 shadow-xs'
+                          : 'text-stone-600 dark:text-stone-400'
+                      }`}
+                    >
+                      部首別漢字
+                    </button>
+                    <button
+                      onClick={() => setLeftSidebarTab('custom')}
+                      className={`py-1.5 text-xs font-bold rounded-md ${
+                        leftSidebarTab === 'custom'
+                          ? 'bg-white dark:bg-[#25362b] text-emerald-900 dark:text-emerald-200 shadow-xs'
+                          : 'text-stone-600 dark:text-stone-400'
+                      }`}
+                    >
+                      マイパーツ ({parts.length})
+                    </button>
+                  </div>
+
+                  {/* Search box */}
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="部首名・読み・漢字で検索..."
+                      className={`w-full pl-9 pr-8 py-2 rounded-xl text-xs font-bold border outline-hidden ${
+                        isLight
+                          ? 'bg-stone-50 border-stone-300 text-stone-800'
+                          : 'bg-[#18241c] border-stone-700 text-emerald-100'
+                      }`}
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dynamic Radical Content based on category sub-tab */}
+                  {leftSidebarTab === 'presets' && (
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      {filteredPresets.map((item) => (
+                        <button
+                          key={`m_preset_${item.id}`}
+                          onClick={() => handleLoadPreset(item)}
+                          className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 active:scale-95 transition-all min-h-[58px] ${
+                            isLight
+                              ? 'bg-stone-50/80 border-stone-200 hover:border-emerald-500 hover:bg-white text-stone-800'
+                              : 'bg-[#18261e] border-stone-800 hover:border-emerald-500 hover:bg-[#203328] text-emerald-100'
+                          }`}
+                        >
+                          <span className="text-xl font-bold leading-none">{item.char}</span>
+                          <span className="text-[10px] text-stone-500 dark:text-stone-400 truncate max-w-full">
+                            {item.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {leftSidebarTab === 'kanji_db' && (
+                    <div className="space-y-2">
+                      {searchRadicalDatabase(searchQuery, 'all').slice(0, 40).map((radical) => {
+                        const isExpanded = selectedRadicalDbId === radical.id;
+                        return (
+                          <div
+                            key={`m_db_${radical.id}`}
+                            className={`rounded-xl border overflow-hidden ${
+                              isExpanded
+                                ? isLight ? 'bg-white border-emerald-600' : 'bg-[#16241b] border-emerald-500'
+                                : isLight ? 'bg-stone-50/80 border-stone-200' : 'bg-[#18261e] border-stone-800'
+                            }`}
+                          >
+                            <div
+                              onClick={() => setSelectedRadicalDbId(isExpanded ? '' : radical.id)}
+                              className="p-2.5 flex items-center justify-between cursor-pointer"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-700 text-white font-bold text-sm shrink-0 font-serif">
+                                  {radical.char}
+                                </span>
+                                <div>
+                                  <div className="text-xs font-bold text-stone-800 dark:text-emerald-100">
+                                    {radical.name} ({radical.strokes}画)
+                                  </div>
+                                  <div className="text-[10px] text-stone-400">
+                                    {radical.kanjiList.length}字収録
+                                  </div>
+                                </div>
+                              </div>
+                              <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${isExpanded ? 'rotate-180 text-emerald-600' : ''}`} />
+                            </div>
+
+                            {isExpanded && (
+                              <div className="p-2.5 pt-0 border-t border-inherit space-y-2">
+                                <div className="grid grid-cols-5 gap-1.5 pt-2 max-h-36 overflow-y-auto">
+                                  {radical.kanjiList.map((kanji, kIdx) => (
+                                    <button
+                                      key={`m_k_${radical.id}_${kanji}_${kIdx}`}
+                                      onClick={() => {
+                                        setWatermarkChar(kanji);
+                                        setShowWatermark(true);
+                                        notify(`「${kanji}」を下絵ガイドに設定しました`, 'info');
+                                      }}
+                                      className="p-2 rounded-lg text-sm font-serif font-bold bg-white dark:bg-[#121b14] border border-stone-200 dark:border-stone-700 text-center"
+                                    >
+                                      {kanji}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {leftSidebarTab === 'custom' && (
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => handleCreateNewPart(activeCategory)}
+                        className="w-full py-2.5 rounded-xl font-bold text-xs bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center space-x-1.5 shadow-sm"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>新規マイパーツを作成</span>
+                      </button>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {parts.map((p) => (
+                          <button
+                            key={`m_custom_p_${p.id}`}
+                            onClick={() => setSelectedPartId(p.id)}
+                            className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 ${
+                              p.id === selectedPartId
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-900 dark:text-emerald-200'
+                                : isLight ? 'bg-white border-stone-200 text-stone-800' : 'bg-[#18261e] border-stone-800 text-emerald-100'
+                            }`}
+                          >
+                            <svg viewBox="0 0 1000 1000" className="w-6 h-6">
+                              <path d={contoursToSvgPath(p.contours || [])} fill="currentColor" />
+                            </svg>
+                            <span className="text-[10px] font-bold truncate max-w-full">{p.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {mobileSheetTab === 'parts' && (
+                <div className="space-y-3 pb-8">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-stone-600 dark:text-stone-400">
+                      パーツ構成 ({parts.length}個)
+                    </span>
+                    <button
+                      onClick={() => handleCreateNewPart(activeCategory)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center space-x-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>パーツ追加</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {parts.map((part) => {
+                      const isSelected = part.id === selectedPartId;
+                      return (
+                        <div
+                          key={`m_part_${part.id}`}
+                          onClick={() => setSelectedPartId(part.id)}
+                          className={`p-3 rounded-xl border flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-50/90 dark:bg-emerald-950/50 border-emerald-500 ring-1 ring-emerald-500'
+                              : isLight
+                              ? 'bg-stone-50 border-stone-200 hover:bg-white'
+                              : 'bg-[#18261e] border-stone-800 hover:bg-[#203429]'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-white dark:bg-black/30 border border-stone-200 dark:border-stone-700 flex items-center justify-center shrink-0">
+                              <svg viewBox="0 0 1000 1000" className="w-6 h-6">
+                                <path
+                                  d={contoursToSvgPath(part.contours || [])}
+                                  fill={isLight ? '#047857' : '#34d399'}
+                                />
+                              </svg>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold truncate">{part.name}</div>
+                              <div className="text-[10px] text-stone-400">
+                                輪郭 {part.contours?.length ?? 0}個
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDuplicatePart(part.id);
+                              }}
+                              className="p-2 rounded-lg text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                              title="複製"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletePart(part.id);
+                              }}
+                              className="p-2 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                              title="削除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {mobileSheetTab === 'transform' && (
+                <div className="space-y-4 pb-8">
+                  <div className="text-xs font-bold text-stone-600 dark:text-stone-400">
+                    選択パーツの変形・配置調整
+                  </div>
+
+                  {activePart ? (
+                    <div className="space-y-3">
+                      {/* Scale */}
+                      <div className="p-3 rounded-xl border bg-stone-50 dark:bg-[#16221a] border-stone-200 dark:border-stone-800 space-y-1.5">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span>拡大縮小 (Scale)</span>
+                          <span className="font-mono text-emerald-600">100%</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[0.7, 0.85, 1.15, 1.3].map((sc) => (
+                            <button
+                              key={`scale_btn_${sc}`}
+                              onClick={() => {
+                                const scaled = scaleContours(activePart.contours, sc, sc);
+                                commitPartChange(scaled);
+                              }}
+                              className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 active:scale-95 transition-all min-h-[44px]"
+                            >
+                              {sc > 1 ? `+${Math.round((sc - 1) * 100)}%` : `-${Math.round((1 - sc) * 100)}%`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Rotate & Slant */}
+                      <div className="p-3 rounded-xl border bg-stone-50 dark:bg-[#16221a] border-stone-200 dark:border-stone-800 space-y-1.5">
+                        <div className="text-xs font-bold">回転・傾斜 (Rotate / Slant)</div>
+                        <div className="grid grid-cols-4 gap-2">
+                          <button
+                            onClick={() => {
+                              const rotated = rotateSingleContour(activePart.contours[0] || ({} as any), -15);
+                              commitPartChange(activePart.contours.map((c, i) => i === 0 ? rotated : c));
+                            }}
+                            className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center space-x-1 active:scale-95 min-h-[44px]"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>-15°</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              const rotated = rotateSingleContour(activePart.contours[0] || ({} as any), 15);
+                              commitPartChange(activePart.contours.map((c, i) => i === 0 ? rotated : c));
+                            }}
+                            className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center space-x-1 active:scale-95 min-h-[44px]"
+                          >
+                            <RotateCw className="w-3.5 h-3.5" />
+                            <span>+15°</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              const slanted = slantContours(activePart.contours, -0.2);
+                              commitPartChange(slanted);
+                            }}
+                            className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center space-x-1 active:scale-95 min-h-[44px]"
+                          >
+                            <Italic className="w-3.5 h-3.5" />
+                            <span>左斜</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              const slanted = slantContours(activePart.contours, 0.2);
+                              commitPartChange(slanted);
+                            }}
+                            className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center space-x-1 active:scale-95 min-h-[44px]"
+                          >
+                            <Italic className="w-3.5 h-3.5" />
+                            <span>右斜</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Mirror / Flip */}
+                      <div className="p-3 rounded-xl border bg-stone-50 dark:bg-[#16221a] border-stone-200 dark:border-stone-800 space-y-1.5">
+                        <div className="text-xs font-bold">反転・配置 (Flip / Center)</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            onClick={() => {
+                              const flipped = flipContoursHorizontal(activePart.contours);
+                              commitPartChange(flipped);
+                            }}
+                            className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center space-x-1 active:scale-95 min-h-[44px]"
+                          >
+                            <FlipHorizontal className="w-3.5 h-3.5" />
+                            <span>左右反転</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              const flipped = flipContoursVertical(activePart.contours);
+                              commitPartChange(flipped);
+                            }}
+                            className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center space-x-1 active:scale-95 min-h-[44px]"
+                          >
+                            <FlipVertical className="w-3.5 h-3.5" />
+                            <span>上下反転</span>
+                          </button>
+                          <button
+                            onClick={handleCenterPartInCanvas}
+                            className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center space-x-1 active:scale-95 min-h-[44px]"
+                          >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                            <span>中央揃え</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-stone-400 text-xs text-center py-6">
+                      パーツを選択してください
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {mobileSheetTab === 'compose' && (
+                <div className="space-y-3 pb-8">
+                  <div className="text-xs font-bold text-stone-600 dark:text-stone-400">
+                    現在の文字「{selectedChar}」へ部首を適用
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        { id: 'hen' as RadicalPlacement, label: '偏 (へん / 左側)' },
+                        { id: 'tsukuri' as RadicalPlacement, label: '旁 (つくり / 右側)' },
+                        { id: 'kanmuri' as RadicalPlacement, label: '冠 (かんむり / 上部)' },
+                        { id: 'ashi' as RadicalPlacement, label: '脚 (あし / 下部)' },
+                        { id: 'kamae' as RadicalPlacement, label: '構 (かまえ / 外枠)' },
+                        { id: 'original' as RadicalPlacement, label: '全体 (等倍配置)' },
+                      ] as const
+                    ).map((plc) => (
+                      <button
+                        key={`m_plc_${plc.id}`}
+                        onClick={() => handleQuickInsertPlacement(plc.id)}
+                        disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
+                        className="p-2.5 rounded-xl border bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 flex flex-col items-center justify-center gap-1 active:scale-95 disabled:opacity-40 min-h-[54px]"
+                      >
+                        <span className="text-sm font-bold">{plc.label.split(' ')[0]}</span>
+                        <span className="text-[10px] text-stone-400">{plc.label.split(' ')[1]}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => handleQuickInsertPlacement('original', true)}
+                    disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
+                    className="w-full py-3 rounded-xl font-bold text-sm bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center space-x-2 shadow-lg shadow-emerald-950/20 active:scale-98 min-h-[48px]"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>「{selectedChar}」にパーツを保存・反映</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

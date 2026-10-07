@@ -11,6 +11,7 @@ interface TraceReferenceLayerProps {
   activeChar: string;
   selectedUnicode?: string;
   toolMode: ToolMode;
+  unitsPerEm?: number;
   onPointerDownImage?: (e: React.PointerEvent) => void;
   onPointerDownResize?: (e: React.PointerEvent, handle: TraceResizeHandle) => void;
   onDoubleClickReset?: () => void;
@@ -24,11 +25,16 @@ export const TraceReferenceLayer: React.FC<TraceReferenceLayerProps> = React.mem
     activeChar,
     selectedUnicode,
     toolMode,
+    unitsPerEm = 1000,
     onPointerDownImage,
     onPointerDownResize,
     onDoubleClickReset,
   }) => {
     if (!traceSettings.enabled) return null;
+
+    const upm = unitsPerEm || 1000;
+    const half = upm / 2;
+    const screenBaselineY = Math.round(upm * 0.8);
 
     const scale = traceSettings.scale ?? 1;
     const offsetX = traceSettings.offsetX ?? 0;
@@ -40,58 +46,86 @@ export const TraceReferenceLayer: React.FC<TraceReferenceLayerProps> = React.mem
     const isKanji = /[\u4e00-\u9faf\u3400-\u4dbf]/.test(charToRender);
     const isJapanese = isKana || isKanji || /[、。々〆〇\u3000-\u303F\uFF01-\uFF60]/.test(charToRender);
 
-    // Char bounding box virtual dimension (centered around 500, 500)
-    const charBoxSize = isKana ? 780 : isKanji ? 850 : 800;
-    const charBoxX = 500 - charBoxSize / 2;
-    const charBoxY = 500 - charBoxSize / 2;
+    const userFontScale = traceSettings.fontSize ? traceSettings.fontSize / 1000 : 1;
 
-    // Image bounding box (0, 0, 1000, 1000)
+    // Char bounding box virtual dimension (centered around half, half)
+    const charBoxSize = Math.round(
+      (isKana ? upm * 0.78 : isKanji ? upm * 0.85 : upm * 0.80) * userFontScale
+    );
+    const charBoxX = half - charBoxSize / 2;
+    const charBoxY = half - charBoxSize / 2;
+
+    // Image bounding box (0, 0, upm, upm)
     const imgBoxX = 0;
     const imgBoxY = 0;
-    const imgBoxSize = 1000;
+    const imgBoxSize = upm;
 
     const activeBoxX = traceSettings.type === 'char' ? charBoxX : imgBoxX;
     const activeBoxY = traceSettings.type === 'char' ? charBoxY : imgBoxY;
     const activeBoxW = traceSettings.type === 'char' ? charBoxSize : imgBoxSize;
     const activeBoxH = traceSettings.type === 'char' ? charBoxSize : imgBoxSize;
 
+    // Calculate safe font size and baseline based on character category
+    // In Japanese typography: Kanji standard body is 85% of EM box, Kana is 78%, centered in (half, half)
+    let effectiveFontSize: number;
+    let effectiveY: number;
+    let dominantBaseline: 'central' | 'alphabetic';
+
+    if (isKanji) {
+      effectiveFontSize = Math.round(upm * 0.85 * userFontScale);
+      effectiveY = half;
+      dominantBaseline = 'central';
+    } else if (isKana) {
+      effectiveFontSize = Math.round(upm * 0.78 * userFontScale);
+      effectiveY = half;
+      dominantBaseline = 'central';
+    } else if (isJapanese) {
+      effectiveFontSize = Math.round(upm * 0.80 * userFontScale);
+      effectiveY = half;
+      dominantBaseline = 'central';
+    } else {
+      // Latin with descenders (g, j, p, q, y, ç) or deep brackets
+      const hasDescender = /[gjpqyç_\[\]\(\)\{\}\|]/.test(charToRender);
+      const hasTallAscenderOrDiacritic = /[À-ÖØ-öø-ÿÅÄÖÜÉÈÊËÎÏÔÙÛ]/.test(charToRender);
+
+      if (hasDescender && hasTallAscenderOrDiacritic) {
+        effectiveFontSize = Math.round(upm * 0.72 * userFontScale);
+        effectiveY = Math.round(upm * 0.76);
+      } else if (hasDescender) {
+        effectiveFontSize = Math.round(upm * 0.74 * userFontScale);
+        effectiveY = Math.round(upm * 0.78);
+      } else if (hasTallAscenderOrDiacritic) {
+        effectiveFontSize = Math.round(upm * 0.74 * userFontScale);
+        effectiveY = Math.round(upm * 0.79);
+      } else {
+        effectiveFontSize = Math.round(upm * 0.76 * userFontScale);
+        effectiveY = screenBaselineY;
+      }
+      dominantBaseline = 'alphabetic';
+    }
+
     return (
       <g
         className="trace-reference-layer"
         opacity={traceSettings.opacity ?? 0.25}
-        // Center-anchored scale transformation around (500, 500)
-        transform={`translate(${offsetX}, ${offsetY}) translate(500, 500) scale(${scale}) translate(-500, -500)`}
+        // Center-anchored scale transformation around (half, half)
+        transform={`translate(${offsetX}, ${offsetY}) translate(${half}, ${half}) scale(${scale}) translate(${-half}, ${-half})`}
       >
         {traceSettings.type === 'char' ? (
           <g>
-            {isJapanese ? (
-              // 和文（ひらがな・カタカナ・漢字）: 十字格 (500, 500) および 字面枠 (78% / 85%) に完全一致する中央揃え
-              <text
-                x={500}
-                y={500}
-                dominantBaseline="central"
-                textAnchor="middle"
-                fontSize={traceSettings.fontSize || 1000}
-                fontFamily={traceSettings.fontFamily || "'Noto Sans JP', sans-serif"}
-                fill={isLight ? '#0284c7' : '#38bdf8'}
-                className="font-normal pointer-events-none select-none"
-              >
-                {charToRender}
-              </text>
-            ) : (
-              // 欧文（アルファベット等）: Baseline (y=800) 揃え
-              <text
-                x={500}
-                y={SCREEN_BASELINE_Y}
-                textAnchor="middle"
-                fontSize={traceSettings.fontSize || 800}
-                fontFamily={traceSettings.fontFamily || "'Noto Sans JP', sans-serif"}
-                fill={isLight ? '#0284c7' : '#38bdf8'}
-                className="font-normal pointer-events-none select-none"
-              >
-                {charToRender}
-              </text>
-            )}
+            {/* Standard OpenType Baseline Rendering with safe canvas auto-fit bounds */}
+            <text
+              x={half}
+              y={effectiveY}
+              textAnchor="middle"
+              dominantBaseline={dominantBaseline}
+              fontSize={effectiveFontSize}
+              fontFamily={traceSettings.fontFamily || "'Noto Sans JP', sans-serif"}
+              fill={isLight ? '#0284c7' : '#38bdf8'}
+              className="font-normal pointer-events-none select-none"
+            >
+              {charToRender}
+            </text>
 
             {/* In Trace Adjust Mode: Interactive Move Backdrop for Char */}
             {isAdjustMode && (
@@ -131,17 +165,17 @@ export const TraceReferenceLayer: React.FC<TraceReferenceLayerProps> = React.mem
           return (
             <g
               transform={`
-                rotate(${traceSettings.rotation || 0}, 500, 500)
+                rotate(${traceSettings.rotation || 0}, ${half}, ${half})
                 scale(${traceSettings.flipH ? -1 : 1}, ${traceSettings.flipV ? -1 : 1})
               `}
-              style={{ transformOrigin: '500px 500px' }}
+              style={{ transformOrigin: `${half}px ${half}px` }}
             >
               <image
                 href={currentImageSrc}
                 x={0}
                 y={0}
-                width={1000}
-                height={1000}
+                width={upm}
+                height={upm}
                 preserveAspectRatio="xMidYMid meet"
                 style={filterStyle}
                 className="pointer-events-none select-none"
@@ -150,8 +184,8 @@ export const TraceReferenceLayer: React.FC<TraceReferenceLayerProps> = React.mem
                 <rect
                   x={0}
                   y={0}
-                  width={1000}
-                  height={1000}
+                  width={upm}
+                  height={upm}
                   fill="transparent"
                   stroke={isLight ? '#0284c7' : '#38bdf8'}
                   strokeWidth={2}
@@ -173,18 +207,18 @@ export const TraceReferenceLayer: React.FC<TraceReferenceLayerProps> = React.mem
           <g className="trace-adjust-handles pointer-events-auto select-none">
             {/* Center Cross Indicator */}
             <line
-              x1={485}
-              y1={500}
-              x2={515}
-              y2={500}
+              x1={half - 15}
+              y1={half}
+              x2={half + 15}
+              y2={half}
               stroke={isLight ? '#0284c7' : '#38bdf8'}
               strokeWidth={1.5}
             />
             <line
-              x1={500}
-              y1={485}
-              x2={500}
-              y2={515}
+              x1={half}
+              y1={half - 15}
+              x2={half}
+              y2={half + 15}
               stroke={isLight ? '#0284c7' : '#38bdf8'}
               strokeWidth={1.5}
             />
@@ -268,7 +302,7 @@ export const TraceReferenceLayer: React.FC<TraceReferenceLayerProps> = React.mem
 
             {/* Scale % Tag at Top-Center of Bounding Box */}
             <g
-              transform={`translate(500, ${activeBoxY - 14})`}
+              transform={`translate(${half}, ${activeBoxY - 14})`}
               className="pointer-events-none"
             >
               <rect

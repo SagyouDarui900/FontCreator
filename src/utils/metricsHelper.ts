@@ -91,16 +91,19 @@ export type AutoSpacingPreset =
 export function calculateOptimalSpacing(
   unicode: number,
   contours: PathContour[],
-  preset: AutoSpacingPreset = 'smart'
+  preset: AutoSpacingPreset = 'smart',
+  unitsPerEm: number = 1000
 ): {
   advanceWidth: number;
   lsb: number;
   contours: PathContour[];
 } {
+  const upm = unitsPerEm || 1000;
+
   if (!contours || contours.length === 0) {
     return {
-      advanceWidth: unicode >= 0x0020 && unicode <= 0x007f ? 500 : 1000,
-      lsb: 50,
+      advanceWidth: unicode >= 0x0020 && unicode <= 0x007f ? Math.round(upm / 2) : upm,
+      lsb: Math.round(upm * 0.05),
       contours: [],
     };
   }
@@ -110,8 +113,8 @@ export function calculateOptimalSpacing(
   const isAscii = unicode >= 0x0020 && unicode <= 0x007f;
 
   if (preset === 'japanese-fullwidth' || (preset === 'smart' && isCjk)) {
-    // 和文全角 (1000EM 均等センタリング)
-    const targetAdvance = 1000;
+    // 和文全角 (unitsPerEm 均等センタリング)
+    const targetAdvance = upm;
     const targetCenter = targetAdvance / 2;
     const dx = Math.round(targetCenter - bbox.centerX);
     const newContours = dx !== 0 ? transformContours(contours, (p) => ({ x: p.x + dx, y: p.y })) : contours;

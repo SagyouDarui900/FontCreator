@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   MousePointer,
   PenTool,
@@ -40,8 +40,9 @@ import {
   SquareDot,
   Save,
   Plus,
+  Download,
 } from 'lucide-react';
-import { ToolMode, GridSettings, BrushStyle } from '../types';
+import { ToolMode, GridSettings, BrushStyle, UserPenPreset } from '../types';
 import { ThemeMode, isLightTheme, getThemeClasses } from '../utils/theme';
 import { PEN_PRESETS } from '../utils/pathUtils';
 
@@ -62,7 +63,11 @@ interface ToolBarProps {
   onOpenPenPresetsModal?: () => void;
   onOpenPixelStudio?: () => void;
   onQuickSaveGlyph?: () => void;
+  onOpenExportModal?: () => void;
   theme: ThemeMode;
+  activePenPreset?: UserPenPreset;
+  userPresets?: UserPenPreset[];
+  onApplyPreset?: (preset: UserPenPreset) => void;
 }
 
 const PEN_ICONS: Record<BrushStyle, React.FC<{ className?: string }>> = {
@@ -133,7 +138,11 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
   onOpenPenPresetsModal,
   onOpenPixelStudio,
   onQuickSaveGlyph,
+  onOpenExportModal,
   theme,
+  activePenPreset,
+  userPresets = [],
+  onApplyPreset,
 }) => {
   const isLight = isLightTheme(theme);
   const themeClasses = getThemeClasses(theme);
@@ -210,8 +219,26 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
   const currentShapeTool = SHAPE_TOOLS.find((s) => s.id === activeShapeMode) || SHAPE_TOOLS[0];
   const CurrentShapeIcon = currentShapeTool.icon;
 
-  const currentPenPreset = PEN_PRESETS.find((p) => p.id === brushStyle) || PEN_PRESETS[0];
-  const CurrentPenIcon = PEN_ICONS[brushStyle] || Paintbrush;
+  const isCustomPen = Boolean(
+    activePenPreset &&
+    (activePenPreset.id?.startsWith('preset-custom-') ||
+     activePenPreset.id?.startsWith('custom-') ||
+     activePenPreset.isCustom ||
+     activePenPreset.name?.includes('カスタム') ||
+     !PEN_PRESETS.some((p) => p.id === brushStyle))
+  );
+
+  const currentPenPreset = isCustomPen && activePenPreset
+    ? activePenPreset
+    : PEN_PRESETS.find((p) => p.id === brushStyle) || PEN_PRESETS[0];
+
+  const CurrentPenIcon = PEN_ICONS[currentPenPreset.brushStyle || brushStyle] || Paintbrush;
+
+  const customPresets = useMemo(() => {
+    return (userPresets || []).filter(
+      (p) => p.isCustom || p.id?.startsWith('preset-custom-') || p.id?.startsWith('custom-')
+    );
+  }, [userPresets]);
 
   return (
     <div
@@ -234,7 +261,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Select Tool (Object & Contour Transform) */}
         <button
           onClick={() => setToolMode('select')}
-          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
             toolMode === 'select'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
@@ -248,7 +275,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Node / Direct Selection Tool (Path vertex & handle editor) */}
         <button
           onClick={() => setToolMode('node')}
-          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
             toolMode === 'node'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
@@ -262,7 +289,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Pen Tool (Bezier) */}
         <button
           onClick={() => setToolMode('pen')}
-          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
             toolMode === 'pen'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
@@ -288,14 +315,19 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                 setShowBrushMenu(true);
               }
             }}
-            className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+            className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
               toolMode === 'brush' || showBrushMenu
                 ? themeClasses.activeTool
                 : themeClasses.activeToolHover
             }`}
-            title={`手書きペン (${currentPenPreset.name}) (B) - クリックでペンの種類を変更`}
+            title={`手書きペン (${currentPenPreset.name})${isCustomPen ? ' [カスタムペン]' : ''} (B) - クリックでペンの種類を変更`}
           >
             <CurrentPenIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+            {isCustomPen && (
+              <span className="absolute -top-1 -right-1 px-1 py-0.2 bg-emerald-500 text-stone-950 font-bold text-[8px] rounded-full shadow-xs leading-none">
+                自
+              </span>
+            )}
             <span className="absolute bottom-0.5 right-0.5 text-[7px] font-mono opacity-70 leading-none pointer-events-none">▾</span>
           </button>
 
@@ -310,14 +342,17 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                     }
                   : undefined
               }
-              className={`fixed inset-x-3 max-w-sm mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-80 z-50 p-2.5 pb-8 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto ${
-                isLight
-                  ? 'bg-white/98 border-stone-200 text-stone-800 '
-                  : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 '
-              }`}
+              className={`fixed inset-x-3 max-w-sm mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-80 z-50 p-2.5 pb-8 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto ${themeClasses.cardBg}`}
             >
               <div className="px-2 py-1 text-[11px] font-bold border-b mb-1.5 flex items-center justify-between border-stone-200 dark:border-[#223025]">
-                <span className={isLight ? 'text-emerald-800' : 'text-emerald-400'}>手書きペンの種類</span>
+                <div className="flex items-center space-x-1.5">
+                  <span className={isLight ? 'text-emerald-800' : 'text-emerald-400'}>手書きペンの種類</span>
+                  {isCustomPen && (
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white font-bold text-[9px]">
+                      カスタムペン
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center space-x-1.5">
                   {onOpenPenPresetsModal && (
                     <button
@@ -343,9 +378,76 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
               </div>
 
               <div className="space-y-1 max-h-[340px] overflow-y-auto pr-1">
+                {/* Custom User Pens */}
+                {customPresets.length > 0 && (
+                  <div className="mb-2 pb-2 border-b border-stone-200/80 dark:border-[#223025]">
+                    <div className="px-1.5 pb-1 text-[10px] font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>自作カスタムペン ({customPresets.length})</span>
+                      <span className="text-[9px] font-normal opacity-70">マイプリセット</span>
+                    </div>
+                    <div className="space-y-1">
+                      {customPresets.map((preset) => {
+                        const PIcon = PEN_ICONS[preset.brushStyle] || Paintbrush;
+                        const isSelected = activePenPreset?.id === preset.id;
+                        return (
+                          <button
+                            key={preset.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onApplyPreset?.(preset);
+                              setToolMode('brush');
+                              setShowBrushMenu(false);
+                            }}
+                            className={`w-full text-left p-2 rounded-xl transition-all flex items-start space-x-2.5 ${
+                              isSelected
+                                ? isLight
+                                  ? 'bg-emerald-50 text-emerald-950 font-bold border border-emerald-300'
+                                  : 'bg-emerald-950/80 text-emerald-200 font-bold border border-emerald-700'
+                                : isLight
+                                ? 'hover:bg-stone-100 text-stone-700'
+                                : 'hover:bg-[#1d2921] text-emerald-300'
+                            }`}
+                          >
+                            <div
+                              className={`p-1.5 rounded-lg mt-0.5 ${
+                                isSelected
+                                  ? isLight
+                                    ? 'bg-emerald-700 text-white'
+                                    : 'bg-emerald-500 text-stone-950'
+                                  : isLight
+                                  ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-300'
+                                  : 'bg-[#1a251e] text-emerald-400'
+                              }`}
+                            >
+                              <PIcon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold truncate">{preset.name}</span>
+                                <span className="text-[10px] font-mono opacity-70 shrink-0 ml-1">
+                                  太さ {preset.brushWidth}px
+                                </span>
+                              </div>
+                              <p className="text-[10.5px] leading-relaxed opacity-75 mt-0.5 font-normal truncate">
+                                筆圧: {preset.pressureSensitivity} · スムーズ: {preset.smoothingIntensity ?? 50}%
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Built-in Standard Pens */}
+                {customPresets.length > 0 && (
+                  <div className="px-1.5 pt-0.5 pb-1 text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">
+                    標準ペン
+                  </div>
+                )}
                 {PEN_PRESETS.map((preset) => {
                   const PIcon = PEN_ICONS[preset.id] || Paintbrush;
-                  const isSelected = brushStyle === preset.id;
+                  const isSelected = (!isCustomPen && brushStyle === preset.id) || activePenPreset?.id === preset.id;
                   return (
                     <button
                       key={preset.id}
@@ -406,7 +508,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                   title="グリッド上でドットを配置し、ピクセルフォントを作字します"
                 >
                   <Grid className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>ピクセルフォント工房 (専用キャンバス)</span>
+                  <span>ピクセルフォント作成</span>
                 </button>
               )}
 
@@ -559,7 +661,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
               setShowGridMenu(false);
               setShowShapeMenu(true);
             }}
-            className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+            className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
               isCurrentToolShape || showShapeMenu
                 ? themeClasses.activeTool
                 : themeClasses.activeToolHover
@@ -581,11 +683,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                     }
                   : undefined
               }
-              className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-72 z-50 p-2.5 pb-8 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto ${
-                isLight
-                  ? 'bg-white/98 border-stone-200 text-stone-800 '
-                  : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 '
-              }`}
+              className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-72 z-50 p-2.5 pb-8 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto ${themeClasses.cardBg}`}
             >
               <div className="px-1 py-0.5 text-[11px] font-bold border-b mb-2 flex items-center justify-between border-stone-200 dark:border-[#223025]">
                 <span className={isLight ? 'text-emerald-800' : 'text-emerald-400'}>図形を選択</span>
@@ -716,7 +814,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Eraser Tool */}
         <button
           onClick={() => setToolMode('eraser')}
-          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
             toolMode === 'eraser'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
@@ -727,16 +825,16 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
           <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">E</span>
         </button>
 
-        {/* Ruler / Straight Line & Measure Tool */}
+        {/* Ruler / Dimension & Measure Tool */}
         <button
           id="btn-toolbar-ruler"
           onClick={() => setToolMode('ruler')}
-          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+          className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
             toolMode === 'ruler'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
-          title="定規・直線作図ツール (R) - ドラッグして直線を引く・距離や角度を計測 (Shiftで水平/垂直固定)"
+          title="定規・寸法計測ツール (R) - ドラッグして距離・字幅・角度を計測 (Shiftで水平/垂直固定)"
         >
           <Ruler className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">R</span>
@@ -745,7 +843,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Hand Tool (Desktop only in main toolbar) */}
         <button
           onClick={() => setToolMode('hand')}
-          className={`hidden sm:flex group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all items-center justify-center relative shrink-0 ${
+          className={`hidden sm:flex group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 items-center justify-center relative shrink-0 ${
             toolMode === 'hand'
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
@@ -764,11 +862,9 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
               setShowShapeMenu(false);
               setShowGridMenu((prev) => !prev);
             }}
-            className={`group w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+            className={`group w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
               gridSettings.showGrid || showGridMenu
-                ? isLight
-                  ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
-                  : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
+                ? themeClasses.activeTool
                 : themeClasses.activeToolHover
             }`}
             title="方眼・ガイド・下絵・保存メニュー"
@@ -803,14 +899,10 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
               setGridAnchorTop(Math.max(60, rect.top - 80));
               setShowGridMenu((prev) => !prev);
             }}
-            className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
-              gridSettings.showGrid
-                ? isLight
-                  ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
-                  : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
-                : isLight
-                ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
-                : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
+            className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+              gridSettings.showGrid || showGridMenu
+                ? themeClasses.activeTool
+                : themeClasses.activeToolHover
             }`}
             title={`方眼グリッド表示 (クリックで切替 / 右クリックまたは▼で設定開閉: 現在${gridSettings.gridSize || 50}px)`}
           >
@@ -842,11 +934,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                     }
                   : undefined
               }
-              className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-72 z-50 p-3 pb-6 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto ${
-                isLight
-                  ? 'bg-white/98 border-stone-200 text-stone-800 '
-                  : 'bg-[#151f19]/98 border-[#25362b] text-emerald-100 '
-              }`}
+              className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-72 z-50 p-3 pb-6 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto ${themeClasses.cardBg}`}
             >
               <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-stone-200 dark:border-[#223025]">
                 <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-700 dark:text-emerald-400">
@@ -1180,12 +1268,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
           onClick={() => setGridSettings((s) => ({ ...s, snapToGrid: !s.snapToGrid }))}
           className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
             gridSettings.snapToGrid
-              ? isLight
-                ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
-                : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
-              : isLight
-              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
-              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
+              ? themeClasses.activeTool
+              : themeClasses.activeToolHover
           }`}
           title="グリッドにスナップ（幾何学・デザインフォント作図用）"
         >
@@ -1195,14 +1279,10 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Metrics Lines Toggle */}
         <button
           onClick={() => setGridSettings((s) => ({ ...s, showMetrics: !s.showMetrics }))}
-          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
             gridSettings.showMetrics
-              ? isLight
-                ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
-                : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
-              : isLight
-              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
-              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
+              ? themeClasses.activeTool
+              : themeClasses.activeToolHover
           }`}
           title="メトリクスガイド線（ベースライン等）"
         >
@@ -1212,14 +1292,10 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Ruler Bars Toggle (Top/Left Rulers) */}
         <button
           onClick={() => setGridSettings((s) => ({ ...s, showRulers: !s.showRulers }))}
-          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
             gridSettings.showRulers !== false
-              ? isLight
-                ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
-                : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
-              : isLight
-              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
-              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
+              ? themeClasses.activeTool
+              : themeClasses.activeToolHover
           }`}
           title="外枠の目盛定規・ルーラー表示/非表示 (ルーラーからガイド線を引き出せます)"
         >
@@ -1229,14 +1305,10 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {/* Cursor Crosshair Reticle Toggle */}
         <button
           onClick={() => setGridSettings((s) => ({ ...s, showCursorCrosshair: !s.showCursorCrosshair }))}
-          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+          className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
             gridSettings.showCursorCrosshair
-              ? isLight
-                ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
-                : 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800'
-              : isLight
-              ? 'text-stone-500 hover:bg-stone-200/80 hover:text-stone-800 border border-transparent'
-              : 'text-stone-400 hover:bg-[#1d2720] hover:text-emerald-200 border border-transparent'
+              ? themeClasses.activeTool
+              : themeClasses.activeToolHover
           }`}
           title="十字ポインターガイド線"
         >
@@ -1250,10 +1322,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {onQuickSaveGlyph && (
           <button
             onClick={onQuickSaveGlyph}
-            className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 active:scale-95 ${
-              isLight
-                ? 'text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 border border-transparent hover:border-emerald-300'
-                : 'text-emerald-300 hover:bg-[#1a251e] hover:text-emerald-100 border border-transparent hover:border-emerald-800'
+            className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 active:scale-95 ${
+              themeClasses.activeToolHover
             }`}
             title="現在の文字を保存 (即時永続化 & 単体JSONバックアップ書き出し)"
           >
@@ -1265,10 +1335,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
         {onOpenTraceModal && (
           <button
             onClick={onOpenTraceModal}
-            className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
-              isLight
-                ? 'text-stone-600 hover:bg-emerald-100 hover:text-stone-900 border border-transparent'
-                : 'text-emerald-300 hover:bg-[#1a251e] hover:text-emerald-100 border border-transparent'
+            className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+              themeClasses.activeToolHover
             }`}
             title="下絵・看板写真トレース設定"
           >
@@ -1285,11 +1353,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
             onClick={() => setShowBrushMenu(false)}
           />
           <div
-            className={`relative z-10 w-full rounded-t-2xl p-4 pb-[max(env(safe-area-inset-bottom),24px)] border-t shadow-2xl max-h-[75vh] flex flex-col animate-slideUp ${
-              isLight
-                ? 'bg-white border-[#c8ded3] text-stone-800'
-                : 'bg-[#151f19] border-[#25362b] text-emerald-100'
-            }`}
+            className={`relative z-10 w-full rounded-t-2xl p-4 pb-[max(env(safe-area-inset-bottom),24px)] border-t shadow-2xl max-h-[75vh] flex flex-col animate-slideUp ${themeClasses.cardBg}`}
           >
             <div className="flex items-center justify-between pb-2 border-b border-stone-200 dark:border-stone-800 mb-2 shrink-0">
               <span className="font-bold text-sm text-emerald-800 dark:text-emerald-300">手書きペンの種類 (全{PEN_PRESETS.length}種)</span>
@@ -1350,9 +1414,76 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
             )}
 
             <div className="space-y-1.5 overflow-y-auto pr-1 flex-1 pb-20">
+              {/* Custom User Pens in Mobile Sheet */}
+              {customPresets.length > 0 && (
+                <div className="mb-2.5 pb-2 border-b border-stone-200/80 dark:border-[#223025]">
+                  <div className="px-1.5 pb-1 text-[10px] font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>自作カスタムペン ({customPresets.length})</span>
+                    <span className="text-[9px] font-normal opacity-70">マイプリセット</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {customPresets.map((preset) => {
+                      const PIcon = PEN_ICONS[preset.brushStyle] || Paintbrush;
+                      const isSelected = activePenPreset?.id === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onApplyPreset?.(preset);
+                            setToolMode('brush');
+                            setShowBrushMenu(false);
+                          }}
+                          className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center space-x-3 ${
+                            isSelected
+                              ? isLight
+                                ? 'bg-emerald-100/90 text-emerald-950 font-bold border border-emerald-300'
+                                : 'bg-emerald-950/80 text-emerald-200 font-bold border border-emerald-700'
+                              : isLight
+                              ? 'hover:bg-emerald-50 text-stone-700'
+                              : 'hover:bg-[#202d24] text-emerald-300'
+                          }`}
+                        >
+                          <div
+                            className={`p-2 rounded-lg shrink-0 ${
+                              isSelected
+                                ? isLight
+                                  ? 'bg-emerald-700 text-white'
+                                  : 'bg-emerald-500 text-stone-950'
+                                : isLight
+                                ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-300'
+                                : 'bg-[#1a251e] text-emerald-400'
+                            }`}
+                          >
+                            <PIcon className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold truncate">{preset.name}</span>
+                              <span className="text-[10px] font-mono opacity-70 shrink-0 ml-1">
+                                太さ {preset.brushWidth}px
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5 leading-relaxed truncate">
+                              筆圧: {preset.pressureSensitivity} · 補正: {preset.smoothingIntensity ?? 50}%
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Standard Built-in Pens in Mobile Sheet */}
+              {customPresets.length > 0 && (
+                <div className="px-1.5 pt-0.5 pb-1 text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">
+                  標準ペン
+                </div>
+              )}
               {PEN_PRESETS.map((preset) => {
                 const PIcon = PEN_ICONS[preset.id] || Paintbrush;
-                const isSelected = brushStyle === preset.id;
+                const isSelected = (!isCustomPen && brushStyle === preset.id) || activePenPreset?.id === preset.id;
                 return (
                   <button
                     key={preset.id}
@@ -1463,11 +1594,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
             onClick={() => setShowShapeMenu(false)}
           />
           <div
-            className={`relative z-10 w-full rounded-t-3xl p-4 border-t shadow-2xl max-h-[82vh] flex flex-col animate-slideUp pb-[max(env(safe-area-inset-bottom),20px)] ${
-              isLight
-                ? 'bg-white border-[#c8ded3] text-stone-800'
-                : 'bg-[#151f19] border-[#25362b] text-emerald-100'
-            }`}
+            className={`relative z-10 w-full rounded-t-3xl p-4 border-t shadow-2xl max-h-[82vh] flex flex-col animate-slideUp pb-[max(env(safe-area-inset-bottom),20px)] ${themeClasses.cardBg}`}
           >
             {/* Header */}
             <div className="flex items-center justify-between pb-2.5 border-b border-stone-200 dark:border-stone-800 mb-2.5 shrink-0">
@@ -1606,11 +1733,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
             onClick={() => setShowGridMenu(false)}
           />
           <div
-            className={`relative z-10 w-full rounded-t-3xl p-4 border-t shadow-2xl max-h-[85vh] flex flex-col animate-slideUp pb-[max(env(safe-area-inset-bottom),16px)] overflow-hidden ${
-              isLight
-                ? 'bg-white border-[#c8ded3] text-stone-800'
-                : 'bg-[#151f19] border-[#25362b] text-emerald-100'
-            }`}
+            className={`relative z-10 w-full rounded-t-3xl p-4 border-t shadow-2xl max-h-[85vh] flex flex-col animate-slideUp pb-[max(env(safe-area-inset-bottom),16px)] overflow-hidden ${themeClasses.cardBg}`}
           >
             {/* Header */}
             <div className="flex items-center justify-between pb-2.5 border-b border-stone-200 dark:border-stone-800 mb-2.5 shrink-0">
@@ -1984,6 +2107,20 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
                 >
                   <Save className="w-4 h-4" />
                   <span>文字の即時保存</span>
+                </button>
+              )}
+
+              {onOpenExportModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowGridMenu(false);
+                    onOpenExportModal();
+                  }}
+                  className="p-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all col-span-2 shadow-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>フォントを出力 (TTF / OTF / WOFF)</span>
                 </button>
               )}
             </div>

@@ -17,7 +17,7 @@ import {
   Maximize2,
   Minimize2,
 } from 'lucide-react';
-import { FontMetadata, FontProject } from '../types';
+import { FontMetadata, FontProject, GlyphData } from '../types';
 import { ThemeMode, isLightTheme } from '../utils/theme';
 import { exportProjectJsonFile } from '../utils/storageManager';
 import { BundledFontsModal } from './BundledFontsModal';
@@ -108,6 +108,7 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isBundledFontsModalOpen, setIsBundledFontsModalOpen] = useState(false);
+  const [scaleGlyphsOnResize, setScaleGlyphsOnResize] = useState<boolean>(true);
   const isLight = isLightTheme(theme);
 
   // Keyboard shortcut listener: Escape and F
@@ -188,15 +189,75 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
     }
   };
 
+  const handleUpmChange = (newUpmVal: number) => {
+    const oldVal = formData.unitsPerEm || 1000;
+    const ratio = newUpmVal > 0 && oldVal > 0 ? newUpmVal / oldVal : 1;
+    setFormData((prev) => ({
+      ...prev,
+      unitsPerEm: newUpmVal,
+      ascender: Math.round((prev.ascender ?? 800) * ratio),
+      descender: Math.round((prev.descender ?? -200) * ratio),
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setProject((prev) => ({
-      ...prev,
-      metadata: { ...formData },
-      updatedAt: Date.now(),
-    }));
+    const oldUpm = project.metadata.unitsPerEm || 1000;
+    const newUpm = formData.unitsPerEm || 1000;
+    const shouldScale = scaleGlyphsOnResize && oldUpm !== newUpm && oldUpm > 0 && newUpm > 0;
+    const scale = shouldScale ? newUpm / oldUpm : 1;
+
+    setProject((prev) => {
+      const updatedGlyphs: Record<number, any> = {};
+
+      for (const [key, rawG] of Object.entries(prev.glyphs || {})) {
+        const unicode = Number(key);
+        const g = rawG as GlyphData;
+        if (!g) continue;
+
+        if (shouldScale) {
+          updatedGlyphs[unicode] = {
+            ...g,
+            advanceWidth: Math.round((g.advanceWidth || oldUpm) * scale),
+            lsb: g.lsb !== undefined ? Math.round(g.lsb * scale) : undefined,
+            contours: (g.contours || []).map((c: any) => ({
+              ...c,
+              nodes: (c.nodes || []).map((n: any) => ({
+                ...n,
+                x: Math.round(n.x * scale),
+                y: Math.round(n.y * scale),
+                handleIn: n.handleIn
+                  ? { x: Math.round(n.handleIn.x * scale), y: Math.round(n.handleIn.y * scale) }
+                  : null,
+                handleOut: n.handleOut
+                  ? { x: Math.round(n.handleOut.x * scale), y: Math.round(n.handleOut.y * scale) }
+                  : null,
+              })),
+            })),
+          };
+        } else {
+          updatedGlyphs[unicode] = g;
+        }
+      }
+
+      return {
+        ...prev,
+        metadata: {
+          ...formData,
+        },
+        glyphs: updatedGlyphs,
+        updatedAt: Date.now(),
+      };
+    });
+
     if (onShowToast) {
-      onShowToast('フォント情報とライセンス設定を保存しました', 'success');
+      if (shouldScale) {
+        onShowToast(`UPM（キャンバスサイズ ${newUpm}）を保存し、既存輪郭を比率に合わせて自動拡大縮小しました`, 'success');
+      } else if (oldUpm !== newUpm) {
+        onShowToast(`UPM（キャンバスサイズ ${newUpm}）を変更しました（既存輪郭の座標は維持）`, 'success');
+      } else {
+        onShowToast('フォント情報を保存しました', 'success');
+      }
     }
     onClose();
   };
@@ -486,11 +547,29 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                   <div className="flex flex-col space-y-1">
-                    <label className={`text-xs font-medium ${isLight ? 'text-stone-600' : 'text-emerald-400'}`}>UPM (Units Per Em)</label>
+                    <div className="flex items-center justify-between">
+                      <label className={`text-xs font-medium ${isLight ? 'text-stone-600' : 'text-emerald-400'}`}>UPM (キャンバスサイズ)</label>
+                      <div className="flex items-center gap-1">
+                        {[1000, 1200, 1500, 2048].map((val) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => handleUpmChange(val)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono border transition-all ${
+                              (formData.unitsPerEm ?? 1000) === val
+                                ? 'bg-emerald-600 text-white font-bold border-emerald-600'
+                                : isLight ? 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100' : 'bg-[#152119] border-[#2d4034] text-emerald-300 hover:bg-[#1d2d23]'
+                            }`}
+                          >
+                            {val}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <input
                       type="number"
                       value={formData.unitsPerEm ?? 1000}
-                      onChange={(e) => setFormData({ ...formData, unitsPerEm: Number(e.target.value) || 1000 })}
+                      onChange={(e) => handleUpmChange(Number(e.target.value) || 1000)}
                       className={`border rounded-lg p-2.5 sm:p-2 text-sm font-mono focus:outline-none focus:ring-1 ${
                         isLight
                           ? 'bg-white border-[#c8ded3] text-stone-800 focus:border-emerald-700 focus:ring-emerald-700'
@@ -527,6 +606,36 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
                     />
                   </div>
                 </div>
+
+                {/* Dynamic Scaling Option when UPM is modified */}
+                {(formData.unitsPerEm ?? 1000) !== (project.metadata.unitsPerEm || 1000) && (
+                  <div
+                    className={`mt-2 p-3 rounded-lg border text-xs space-y-1.5 transition-all ${
+                      isLight
+                        ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                        : 'bg-[#15231a] border-emerald-800 text-emerald-200'
+                    }`}
+                  >
+                    <label className="flex items-start gap-2 cursor-pointer font-medium">
+                      <input
+                        type="checkbox"
+                        checked={scaleGlyphsOnResize}
+                        onChange={(e) => setScaleGlyphsOnResize(e.target.checked)}
+                        className="mt-0.5 accent-emerald-600 rounded"
+                      />
+                      <div>
+                        <span className="font-bold">
+                          既存グリフの輪郭・送り幅もキャンバス比率に合わせて自動拡大縮小する
+                        </span>
+                        <div className="text-[11px] opacity-80 mt-0.5 font-normal">
+                          {scaleGlyphsOnResize
+                            ? `現在の倍率: ×${(((formData.unitsPerEm ?? 1000) / (project.metadata.unitsPerEm || 1000))).toFixed(3)} （全頂点・ベジェ制御点ハンドル・送り幅を比例変換）`
+                            : 'チェックOFF: 既存グリフの座標・サイズは維持し、外枠キャンバス領域（余白）のみを変更します'}
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Windows 11 & Japanese OS/2 Compatibility Note */}

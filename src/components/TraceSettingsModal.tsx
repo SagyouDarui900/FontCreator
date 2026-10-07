@@ -682,6 +682,42 @@ export const TraceSettingsModal: React.FC<TraceSettingsModalProps> = ({
                       onChange={(e) => setTraceSettings((s) => ({ ...s, scale: Number(e.target.value) }))}
                       className="w-full accent-emerald-700"
                     />
+                    {/* Quick Fit Presets */}
+                    <div className="flex items-center space-x-1 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setTraceSettings((s) => ({ ...s, scale: 0.78 }))}
+                        className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition-colors ${
+                          Math.abs((traceSettings.scale ?? 1) - 0.78) < 0.02
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-300'
+                        }`}
+                      >
+                        仮名78%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTraceSettings((s) => ({ ...s, scale: 0.85 }))}
+                        className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition-colors ${
+                          Math.abs((traceSettings.scale ?? 1) - 0.85) < 0.02
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+                        }`}
+                      >
+                        漢字85%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTraceSettings((s) => ({ ...s, scale: 1.0 }))}
+                        className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition-colors ${
+                          Math.abs((traceSettings.scale ?? 1) - 1.0) < 0.02
+                            ? 'bg-sky-600 text-white'
+                            : 'bg-sky-100 text-sky-900 hover:bg-sky-200 dark:bg-sky-950 dark:text-sky-300'
+                        }`}
+                      >
+                        100%
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-0.5">

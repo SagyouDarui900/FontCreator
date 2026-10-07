@@ -572,6 +572,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
   // Interactive drawing states
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [drawStartPos, setDrawStartPos] = useState<Point | null>(null);
+  const lastDrawPosRef = useRef<Point | null>(null);
   const [previewGrid, setPreviewGrid] = useState<Uint8Array | null>(null);
   const [hoverPos, setHoverPos] = useState<Point | null>(null);
 
@@ -1139,8 +1140,12 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
     const pt = getGridCoordFromEvent(e);
     if (!pt) return;
 
+    // Push history snapshot before starting drawing stroke
+    pushHistory(grid);
+
     setIsDrawing(true);
     setDrawStartPos(pt);
+    lastDrawPosRef.current = pt;
 
     const currentVal = tool === 'eraser' ? 0 : 1;
 
@@ -1152,7 +1157,8 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
       const next = new Uint8Array(grid);
       const targetVal = grid[pt.y * gridWidth + pt.x];
       floodFill(next, gridWidth, gridHeight, pt.x, pt.y, targetVal, currentVal);
-      pushHistory(next);
+      setGrid(next);
+      autoSaveGlyph(next, currentUnicode);
     }
   };
 
@@ -1166,8 +1172,13 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
     const currentVal = tool === 'eraser' ? 0 : 1;
 
     if (tool === 'pencil' || tool === 'eraser') {
+      const lastPt = lastDrawPosRef.current || pt;
+      lastDrawPosRef.current = pt;
+      const linePts = getBresenhamLine(lastPt.x, lastPt.y, pt.x, pt.y);
       const next = new Uint8Array(grid);
-      applyBrushAt(next, pt.x, pt.y, currentVal);
+      for (const p of linePts) {
+        applyBrushAt(next, p.x, p.y, currentVal);
+      }
       setGrid(next);
     } else if (drawStartPos && (tool === 'line' || tool === 'rect' || tool === 'rect_filled' || tool === 'circle' || tool === 'circle_filled')) {
       const pGrid = new Uint8Array(grid);
@@ -1215,12 +1226,14 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
     }
     if (!isDrawing) return;
     setIsDrawing(false);
+    lastDrawPosRef.current = null;
 
     if (previewGrid) {
-      pushHistory(previewGrid);
+      setGrid(previewGrid);
+      autoSaveGlyph(previewGrid, currentUnicode);
       setPreviewGrid(null);
     } else {
-      pushHistory(grid);
+      autoSaveGlyph(grid, currentUnicode);
     }
     setDrawStartPos(null);
   };
@@ -2568,7 +2581,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
             {/* The Pixel Canvas: Strict CRISP Sharp Square Box */}
             <div className="flex-1 flex items-center justify-center w-full h-full min-h-0 p-2 sm:p-4">
               <div
-                className="relative rounded-lg overflow-hidden border-2 shadow-2xl touch-none flex items-center justify-center"
+                className="relative rounded-none overflow-hidden border-2 shadow-2xl touch-none flex items-center justify-center"
                 style={{
                   borderColor: isLight ? '#047857' : '#34d399',
                   maxHeight: 'calc(100vh - 180px)',

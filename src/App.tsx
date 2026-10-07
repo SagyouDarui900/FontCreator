@@ -40,7 +40,7 @@ import { GridFittingModal } from './components/GridFittingModal';
 import { PixelFontStudioModal } from './components/PixelFontStudioModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Toast, ToastMessage } from './components/Toast';
-import { ThemeMode, isLightTheme, getThemeClasses } from './utils/theme';
+import { ThemeMode, isLightTheme, getThemeClasses, THEME_PRESETS, getThemePreset } from './utils/theme';
 import { createSmallKanaContours, generateId, simplifyGlyphContours } from './utils/pathUtils';
 import { DAKUTEN_MAPPINGS, createDakutenContours, createHandakutenContours, cloneContours } from './utils/dakutenHelper';
 import {
@@ -58,7 +58,7 @@ import {
   loadProjectFromIndexedDB,
 } from './utils/storageManager';
 import { KANA_PAIRS } from './data/unicodeTables';
-import { Grid, Paintbrush, Sliders, Eye, Undo2, Redo2, ChevronRight, Layers } from 'lucide-react';
+import { Grid, Paintbrush, Sliders, Eye, Undo2, Redo2, ChevronRight, Layers, Palette, Check, X } from 'lucide-react';
 
 const LOCAL_STORAGE_KEY = LOCAL_STORAGE_PROJECT_KEY;
 const THEME_STORAGE_KEY = 'font_editor_theme_mode';
@@ -70,6 +70,8 @@ export default function App() {
     const validThemes: ThemeMode[] = ['light', 'dark', 'sepia', 'warm', 'nord', 'monochrome'];
     return validThemes.includes(saved) ? saved : 'light';
   });
+
+  const [isMobileThemeModalOpen, setIsMobileThemeModalOpen] = useState(false);
 
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -219,6 +221,7 @@ export default function App() {
 
   // Sticky Brush Settings: Change style and automatically restore saved parameters
   const handleChangeBrushStyle = useCallback((newStyle: BrushStyle) => {
+    setActivePenPreset(undefined);
     setBrushStyle(newStyle);
     const configs = loadStickyBrushConfigs();
     const targetConfig = configs[newStyle];
@@ -342,7 +345,7 @@ export default function App() {
       ...prev,
       enabled: true,
       opacity: 0.18,
-      fontSize: 780,
+      fontSize: 1000,
     }));
     showToast('手書きフォント推奨プリセット（毛筆38px・高感度筆圧・十文字字面枠・手振れ補正）を適用しました', 'success');
   }, [showToast]);
@@ -353,7 +356,7 @@ export default function App() {
     type: 'char',
     text: '',
     fontFamily: "'Noto Sans JP', sans-serif",
-    fontSize: 780,
+    fontSize: 1000,
     opacity: 0.18,
     scale: 1,
     offsetX: 0,
@@ -676,23 +679,24 @@ export default function App() {
           return prev;
         }
       }
-      return [...prev.slice(-30), JSON.parse(JSON.stringify(existingGlyph))];
+      // Bounded 50-step circular ring buffer with structured cloning
+      return [...prev.slice(-49), JSON.parse(JSON.stringify(existingGlyph))];
     });
     setRedoStack([]);
   }, [selectedUnicode, selectedChar]);
 
-  // Undo action
+  // Undo action with memory-bounded stack
   const handleUndo = useCallback(() => {
     setUndoStack((prevUndo) => {
       if (prevUndo.length === 0) {
-        showToast('これ以上戻す操作履歴はありません', 'info');
+        showToast('これ以上戻せません', 'info');
         return prevUndo;
       }
       const previous = prevUndo[prevUndo.length - 1];
       const nextUndo = prevUndo.slice(0, prevUndo.length - 1);
       
       const currentSnapshot = currentGlyphRef.current;
-      setRedoStack((prevRedo) => [...prevRedo, JSON.parse(JSON.stringify(currentSnapshot))]);
+      setRedoStack((prevRedo) => [...prevRedo.slice(-49), JSON.parse(JSON.stringify(currentSnapshot))]);
 
       if (previous.unicode !== selectedUnicode) {
         setSelectedUnicode(previous.unicode);
@@ -711,23 +715,23 @@ export default function App() {
         updatedAt: Date.now(),
       }));
 
-      showToast(`取り消し (Undo): パス数 ${previous.contours?.length || 0} 個の状態に復元しました`, 'info');
+      showToast('元に戻しました', 'info');
       return nextUndo;
     });
   }, [showToast, selectedUnicode]);
 
-  // Redo action
+  // Redo action with memory-bounded stack
   const handleRedo = useCallback(() => {
     setRedoStack((prevRedo) => {
       if (prevRedo.length === 0) {
-        showToast('これ以上やり直す操作履歴はありません', 'info');
+        showToast('これ以上進めません', 'info');
         return prevRedo;
       }
       const next = prevRedo[prevRedo.length - 1];
       const nextRedo = prevRedo.slice(0, prevRedo.length - 1);
 
       const currentSnapshot = currentGlyphRef.current;
-      setUndoStack((prevUndo) => [...prevUndo, JSON.parse(JSON.stringify(currentSnapshot))]);
+      setUndoStack((prevUndo) => [...prevUndo.slice(-49), JSON.parse(JSON.stringify(currentSnapshot))]);
 
       if (next.unicode !== selectedUnicode) {
         setSelectedUnicode(next.unicode);
@@ -746,7 +750,7 @@ export default function App() {
         updatedAt: Date.now(),
       }));
 
-      showToast(`やり直し (Redo): パス数 ${next.contours?.length || 0} 個の状態に復元しました`, 'info');
+      showToast('やり直しました', 'info');
       return nextRedo;
     });
   }, [showToast, selectedUnicode]);
@@ -1171,15 +1175,25 @@ export default function App() {
     }
     commitHistory();
     const base = currentGlyphRef.current?.contours || [];
-    const insertedIds = radicalContours.map((c) => c.id);
-    handleUpdateContours([...base, ...radicalContours]);
+    const uniqueRadicals = radicalContours.map((c) => ({
+      ...c,
+      id: generateId(),
+      nodes: c.nodes.map((n) => ({
+        ...n,
+        id: generateId(),
+        handleIn: n.handleIn ? { ...n.handleIn } : null,
+        handleOut: n.handleOut ? { ...n.handleOut } : null,
+      })),
+    }));
+    const insertedIds = uniqueRadicals.map((c) => c.id);
+    handleUpdateContours([...base, ...uniqueRadicals]);
     setToolMode('select');
     setTimeout(() => {
       window.dispatchEvent(
         new CustomEvent('font_editor_select_contours', { detail: { ids: insertedIds } })
       );
     }, 60);
-    showToast(`部首パーツ (${radicalContours.length}パス) を挿入しました（選択ツールで移動・変形可能）`, 'success');
+    showToast(`部首パーツ (${uniqueRadicals.length}パス) を挿入しました（選択ツールで移動・変形可能）`, 'success');
   };
 
   // Batch Insert Radical Contours to multiple kanji glyphs
@@ -1478,7 +1492,7 @@ export default function App() {
 
   return (
     <div
-      className={`flex flex-col h-full w-full overflow-hidden font-sans select-none transition-colors ${themeClasses.appBg}`}
+      className={`flex flex-col h-full w-full overflow-hidden font-sans select-none ${themeClasses.appBg}`}
     >
       {/* Top Main Navigation Bar */}
       <Header
@@ -1546,7 +1560,11 @@ export default function App() {
             onOpenPenPresetsModal={handleOpenPenPresetsModal}
             onOpenPixelStudio={handleOpenPixelStudio}
             onQuickSaveGlyph={handleQuickSaveCurrentGlyph}
+            onOpenExportModal={() => setIsExportModalOpen(true)}
             theme={theme}
+            activePenPreset={activePenPreset}
+            userPresets={penPresets}
+            onApplyPreset={handleApplyPenPreset}
           />
         </div>
 
@@ -1626,8 +1644,9 @@ export default function App() {
 
         {/* 4. Metrics & Transforms Sidebar (Collapsible Inspector) */}
         <MetricsPanel
-          advanceWidth={currentGlyph.advanceWidth || 1000}
+          advanceWidth={currentGlyph.advanceWidth || project.metadata.unitsPerEm || 1000}
           lsb={currentGlyph.lsb ?? 50}
+          unitsPerEm={project.metadata.unitsPerEm || 1000}
           onChangeAdvanceWidth={handleUpdateAdvanceWidth}
           onChangeLsb={handleUpdateLsb}
           contours={currentGlyph.contours || []}
@@ -1663,27 +1682,21 @@ export default function App() {
 
       {/* Mobile Bottom Navigation Bar (< 640px) */}
       <div
-        className={`flex sm:hidden items-center justify-around py-1 px-2 border-t shrink-0 z-30 select-none pb-[max(env(safe-area-inset-bottom),6px)] ${
-          isLight
-            ? 'bg-white border-[#d8e6df] text-stone-700 shadow-lg'
-            : 'bg-[#121a14] border-[#25362b] text-emerald-200 shadow-lg'
-        }`}
+        className={`flex sm:hidden items-center justify-around py-1 px-1 border-t shrink-0 z-30 select-none pb-[max(env(safe-area-inset-bottom),6px)] transition-colors ${themeClasses.toolbarBg} ${themeClasses.border} ${themeClasses.textPrimary}`}
       >
         <button
           onClick={() => {
             setShowGridDrawer(!showGridDrawer);
             setShowMetricsDrawer(false);
           }}
-          className={`flex flex-col items-center py-1 px-2.5 rounded-md transition-colors ${
+          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${
             showGridDrawer
-              ? isLight
-                ? 'bg-emerald-100 text-emerald-950 font-bold'
-                : 'bg-emerald-950 text-emerald-300 font-bold'
-              : ''
+              ? themeClasses.activeTool
+              : themeClasses.activeToolHover
           }`}
         >
           <Grid className="w-4 h-4" />
-          <span className="text-[10px] mt-0.5">文字一覧</span>
+          <span className="text-[9.5px] mt-0.5">文字一覧</span>
         </button>
 
         <button
@@ -1691,16 +1704,14 @@ export default function App() {
             setShowGridDrawer(false);
             setShowMetricsDrawer(false);
           }}
-          className={`flex flex-col items-center py-1 px-2.5 rounded-md transition-colors ${
+          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${
             !showGridDrawer && !showMetricsDrawer
-              ? isLight
-                ? 'bg-emerald-100 text-emerald-950 font-bold'
-                : 'bg-emerald-950 text-emerald-300 font-bold'
-              : ''
+              ? themeClasses.activeTool
+              : themeClasses.activeToolHover
           }`}
         >
           <Paintbrush className="w-4 h-4" />
-          <span className="text-[10px] mt-0.5">作図</span>
+          <span className="text-[9.5px] mt-0.5">作図</span>
         </button>
 
         <button
@@ -1708,54 +1719,156 @@ export default function App() {
             setShowMetricsDrawer(!showMetricsDrawer);
             setShowGridDrawer(false);
           }}
-          className={`flex flex-col items-center py-1 px-2.5 rounded-md transition-colors ${
+          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${
             showMetricsDrawer
-              ? isLight
-                ? 'bg-emerald-100 text-emerald-950 font-bold'
-                : 'bg-emerald-950 text-emerald-300 font-bold'
-              : ''
+              ? themeClasses.activeTool
+              : themeClasses.activeToolHover
           }`}
         >
           <Sliders className="w-4 h-4" />
-          <span className="text-[10px] mt-0.5">メトリクス</span>
+          <span className="text-[9.5px] mt-0.5">メトリクス</span>
         </button>
 
         <button
           onClick={handleOpenRadicalStudioFromDrawer}
-          className="flex flex-col items-center py-1 px-2 rounded-md hover:bg-emerald-50 dark:hover:bg-[#1a251e] transition-colors"
+          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${themeClasses.activeToolHover}`}
           title="部首・作字パーツ工房"
         >
-          <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-[10px] mt-0.5">部首工房</span>
+          <Layers className="w-4 h-4" />
+          <span className="text-[9.5px] mt-0.5">部首工房</span>
         </button>
 
         <button
           onClick={() => setIsTestModalOpen(true)}
-          className="flex flex-col items-center py-1 px-2 rounded-md hover:bg-emerald-50 dark:hover:bg-[#1a251e] transition-colors"
+          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${themeClasses.activeToolHover}`}
+          title="組版テスト・文章試し打ち"
         >
-          <Eye className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-[10px] mt-0.5">組版テスト</span>
+          <Eye className="w-4 h-4" />
+          <span className="text-[9.5px] mt-0.5">組版テスト</span>
         </button>
 
-        <div className="flex items-center space-x-1 pl-2 border-l border-stone-200 dark:border-stone-800">
+        <button
+          onClick={() => setIsMobileThemeModalOpen(true)}
+          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${
+            isMobileThemeModalOpen
+              ? themeClasses.activeTool
+              : themeClasses.activeToolHover
+          }`}
+          title="テーマ・配色の切り替え"
+        >
+          <Palette className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+          <span className="text-[9.5px] mt-0.5">テーマ</span>
+        </button>
+
+        <div className="flex items-center space-x-0.5 pl-1 border-l border-stone-200/80 dark:border-stone-800/80">
           <button
             onClick={handleUndo}
             disabled={undoStack.length === 0}
-            className="p-1.5 rounded disabled:opacity-30 hover:bg-stone-100 dark:hover:bg-stone-800"
+            className="p-1 rounded disabled:opacity-30 hover:bg-stone-100 dark:hover:bg-stone-800"
             title="取り消し"
           >
-            <Undo2 className="w-4 h-4" />
+            <Undo2 className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleRedo}
             disabled={redoStack.length === 0}
-            className="p-1.5 rounded disabled:opacity-30 hover:bg-stone-100 dark:hover:bg-stone-800"
+            className="p-1 rounded disabled:opacity-30 hover:bg-stone-100 dark:hover:bg-stone-800"
             title="やり直し"
           >
-            <Redo2 className="w-4 h-4" />
+            <Redo2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
+
+      {/* Mobile Theme Selection Drawer / Modal */}
+      {isMobileThemeModalOpen && (
+        <div className="sm:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+            onClick={() => setIsMobileThemeModalOpen(false)}
+          />
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            className={`relative z-10 w-full rounded-t-3xl p-4 border-t shadow-2xl max-h-[85vh] flex flex-col animate-in slide-in-from-bottom duration-200 pb-[max(env(safe-area-inset-bottom),20px)] ${themeClasses.cardBg}`}
+          >
+            <div className="flex items-center justify-between pb-2.5 border-b border-stone-200/80 dark:border-stone-800/80 mb-3 shrink-0">
+              <div className="flex items-center space-x-2">
+                <Palette className="w-5 h-5 text-amber-500" />
+                <span className="font-extrabold text-sm">カラーテーマ・目の保護設定</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileThemeModalOpen(false)}
+                className="p-1.5 rounded-full text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 bg-stone-100 dark:bg-stone-800 cursor-pointer"
+                title="閉じる"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 overflow-y-auto pr-0.5 flex-1 min-h-0">
+              {THEME_PRESETS.map((p) => {
+                const isActive = theme === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      changeTheme(p.id);
+                      showToast(`テーマを「${p.name}」に変更しました`, 'info');
+                      setIsMobileThemeModalOpen(false);
+                    }}
+                    className={`w-full text-left p-2.5 rounded-xl border flex items-start space-x-3 transition-colors cursor-pointer active:scale-[0.98] ${
+                      isActive
+                        ? isLight
+                          ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/50'
+                          : 'bg-[#1c2c22] border-emerald-500 ring-2 ring-emerald-500/50'
+                        : isLight
+                        ? 'bg-stone-50/70 hover:bg-stone-100 border-stone-200/80'
+                        : 'bg-[#18231c]/70 hover:bg-[#202f26] border-[#25362b]'
+                    }`}
+                  >
+                    {/* Color Preview Swatch */}
+                    <div
+                      className="w-8 h-8 rounded-lg border shrink-0 flex items-center justify-center relative overflow-hidden mt-0.5"
+                      style={{
+                        backgroundColor: p.previewBg,
+                        borderColor: p.previewBorder,
+                      }}
+                    >
+                      <div
+                        className="w-4 h-4 rounded-sm border"
+                        style={{
+                          backgroundColor: p.previewCard,
+                          borderColor: p.previewAccent,
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold truncate">{p.name}</span>
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded border font-semibold ${p.badgeClass}`}>
+                          {p.badge}
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-stone-500 dark:text-stone-400 leading-snug mt-0.5">
+                        {p.description}
+                      </p>
+                    </div>
+
+                    {isActive && (
+                      <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-1" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       <TestPreviewModal

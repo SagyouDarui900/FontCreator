@@ -8,11 +8,15 @@ interface GlyphComparisonLayerProps {
   isLight: boolean;
   activeChar?: string;
   activeUnicode?: number;
+  unitsPerEm?: number;
 }
 
 export const GlyphComparisonLayer: React.FC<GlyphComparisonLayerProps> = React.memo(
-  ({ overlaySettings, project, isLight, activeChar, activeUnicode }) => {
+  ({ overlaySettings, project, isLight, activeChar, activeUnicode, unitsPerEm = 1000 }) => {
     if (!overlaySettings?.enabled || !project) return null;
+
+    const upm = unitsPerEm || 1000;
+    const half = upm / 2;
 
     // Find reference glyph data
     const refGlyph: GlyphData | undefined = useMemo(() => {
@@ -49,7 +53,7 @@ export const GlyphComparisonLayer: React.FC<GlyphComparisonLayerProps> = React.m
     const offsetY = overlaySettings.offsetY ?? 0;
     const renderMode = overlaySettings.renderMode || 'outline';
 
-    const transform = `translate(${offsetX}, ${offsetY}) translate(500, 500) scale(${scale}) translate(-500, -500)`;
+    const transform = `translate(${offsetX}, ${offsetY}) translate(${half}, ${half}) scale(${scale}) translate(${-half}, ${-half})`;
 
     return (
       <g
@@ -64,7 +68,7 @@ export const GlyphComparisonLayer: React.FC<GlyphComparisonLayerProps> = React.m
               x1={refGlyph.lsb || 0}
               y1={-20}
               x2={refGlyph.lsb || 0}
-              y2={1020}
+              y2={upm + 20}
               stroke={color}
               strokeWidth={1}
               strokeDasharray="2 2"
@@ -73,7 +77,7 @@ export const GlyphComparisonLayer: React.FC<GlyphComparisonLayerProps> = React.m
               x1={refGlyph.advanceWidth}
               y1={-20}
               x2={refGlyph.advanceWidth}
-              y2={1020}
+              y2={upm + 20}
               stroke={color}
               strokeWidth={1}
               strokeDasharray="2 2"

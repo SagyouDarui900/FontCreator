@@ -5,13 +5,24 @@ interface CanvasRulersLayerProps {
   showRulers: boolean;
   isLight: boolean;
   hoverPos: Point | null;
+  unitsPerEm?: number;
 }
 
-const RULER_TICKS = [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
-
 export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
-  ({ showRulers, isLight, hoverPos }) => {
+  ({ showRulers, isLight, hoverPos, unitsPerEm = 1000 }) => {
     if (!showRulers) return null;
+
+    const upm = unitsPerEm || 1000;
+
+    const rulerTicks = useMemo(() => {
+      const ticks = [];
+      const step = upm > 1500 ? 200 : upm > 1000 ? 150 : 100;
+      for (let i = 0; i <= upm; i += step) {
+        ticks.push(i);
+      }
+      if (ticks[ticks.length - 1] !== upm) ticks.push(upm);
+      return ticks;
+    }, [upm]);
 
     const staticRulerContent = useMemo(() => {
       const strokePrimary = isLight ? '#065f46' : '#34d399';
@@ -24,7 +35,7 @@ export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
           <rect
             x={-50}
             y={-36}
-            width={1100}
+            width={upm + 100}
             height={36}
             fill={isLight ? '#f1f5f3' : '#142018'}
             stroke={isLight ? '#cbdad2' : '#25382c'}
@@ -35,14 +46,14 @@ export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
             x={-36}
             y={-50}
             width={36}
-            height={1100}
+            height={upm + 100}
             fill={isLight ? '#f1f5f3' : '#142018'}
             stroke={isLight ? '#cbdad2' : '#25382c'}
             strokeWidth={1}
           />
 
-          {/* Top Ruler Ticks & Numbers (0 to 1000) */}
-          {RULER_TICKS.map((x) => (
+          {/* Top Ruler Ticks & Numbers */}
+          {rulerTicks.map((x) => (
             <g key={`top-tick-${x}`}>
               <line
                 x1={x}
@@ -60,8 +71,8 @@ export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
               >
                 {x}
               </text>
-              {/* 50px minor tick */}
-              {x < 1000 && (
+              {/* Minor tick */}
+              {x < upm && (
                 <line
                   x1={x + 50}
                   y1={-10}
@@ -74,8 +85,8 @@ export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
             </g>
           ))}
 
-          {/* Left Ruler Ticks & Numbers (0 to 1000) */}
-          {RULER_TICKS.map((y) => (
+          {/* Left Ruler Ticks & Numbers */}
+          {rulerTicks.map((y) => (
             <g key={`left-tick-${y}`}>
               <line
                 x1={-18}
@@ -93,8 +104,8 @@ export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
               >
                 {y}
               </text>
-              {/* 50px minor tick */}
-              {y < 1000 && (
+              {/* Minor tick */}
+              {y < upm && (
                 <line
                   x1={-10}
                   y1={y + 50}
@@ -108,7 +119,7 @@ export const CanvasRulersLayer: React.FC<CanvasRulersLayerProps> = React.memo(
           ))}
         </>
       );
-    }, [isLight]);
+    }, [isLight, upm, rulerTicks]);
 
     return (
       <g className="canvas-rulers-layer select-none font-mono text-[9px] pointer-events-none">
