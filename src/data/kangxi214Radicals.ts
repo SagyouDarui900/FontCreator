@@ -740,7 +740,7 @@ export const KANGXI_214_RADICALS: KangxiRadicalFullEntry[] = [
     strokes: 3,
     category: 'tsukuri',
     categoryName: '旁 (つくり)',
-    description: '美しい毛並み・光彩・模様・装飾に関する漢字',
+    description: '毛並み・光彩・模様・装飾に関する漢字',
     kanjiList: ['形', '杉', '彩', '彫', '彦', '彰', '影', '須']
   },
   {

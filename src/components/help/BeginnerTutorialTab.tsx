@@ -45,7 +45,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
             </span>
           </div>
           <p className="text-xs leading-relaxed opacity-90">
-            FontCreatorへようこそ。フォント制作の専門知識がなくても、直感的な操作で制作を始められます。iPadのApple Pencilやペンタブレット、マウスを用いて文字を描くだけで、PCや各種デザインアプリで実際に使用できるフォントファイル（.ttf / .otf）を作成・書き出しできます。
+            ブラウザ上で文字を描画し、PCや各種デザインアプリで使用可能なフォントファイル（.ttf / .otf）を作成・書き出しできます。マウス、スタイラスペン、タッチ操作に対応しています。
           </p>
         </div>
       </div>
@@ -61,10 +61,10 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
         >
           <div className="text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center space-x-1.5">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>1文字だけでも出力可能</span>
+            <span>1文字から出力可能</span>
           </div>
           <p className="text-[11px] text-stone-600 dark:text-stone-300 leading-snug">
-            すべての文字を一度に制作する必要はありません。「あ」1文字やアルファベット数文字からでも、正式なフォントファイルとして書き出して使用できます。
+            すべての文字を作成する必要はありません。1文字または任意の文字数のみでもフォントファイルとして書き出して使用できます。
           </p>
         </div>
 
@@ -78,7 +78,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
             <span>未作成文字のフォールバック表示</span>
           </div>
           <p className="text-[11px] text-stone-600 dark:text-stone-300 leading-snug">
-            未作成の文字が入力された場合でも、OSの標準フォントによる代替表示（フォールバック）が適用されます。
+            未作成の文字が入力された場合は、OSの標準フォントによる代替表示（フォールバック）が適用されます。
           </p>
         </div>
 
@@ -92,7 +92,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
             <span>商用利用・配布に対応</span>
           </div>
           <p className="text-[11px] text-stone-600 dark:text-stone-300 leading-snug">
-            作成したフォントの著作権は制作者本人に帰属します。同人誌、印刷物、ロゴ、動画テロップ、Webコンテンツなど、商用・非商用を問わず自由に活用できます。
+            作成したフォントデータの著作権は制作者に帰属します。商用・非商用を問わず利用・配布が可能です。
           </p>
         </div>
       </div>
@@ -119,14 +119,14 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
                 <h5 className="text-xs font-extrabold">① 手書き入力コース</h5>
               </div>
               <span className="text-[9.5px] px-1.5 py-0.2 rounded font-mono font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 inline-block">
-                推奨
+                フリーハンド
               </span>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                <strong>筆ツール [B]</strong> を選択し、タブレットやマウスで直接文字を書き込みます。手ブレ補正機能により、滑らかなベクター輪郭へ自動変換されます。
+                <strong>筆ツール [B]</strong> を選択し、タブレットやマウスで文字を描画します。手ブレ補正機能により入力座標が平滑化され、ベクター輪郭へ変換されます。
               </p>
             </div>
             <div className="text-[10.5px] text-emerald-700 dark:text-emerald-400 font-medium">
-              サインペンや丸文字筆など、好みのペン先を選択できます。
+              ペン先プリセットから線のスタイルを選択できます。
             </div>
           </div>
 
@@ -144,14 +144,14 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
                 <h5 className="text-xs font-extrabold">② 下絵トレースコース</h5>
               </div>
               <span className="text-[9.5px] px-1.5 py-0.2 rounded font-mono font-bold bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 inline-block">
-                紙の手書き文字を活用
+                画像参照
               </span>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                紙のノートに書いた文字をスマートフォン等で撮影し、上部バーの「下絵」機能から読み込みます。背景に薄く表示された文字をなぞることで、自作フォントとしてベクター化できます。
+                紙に書いた文字の写真などを上部バーの「下絵」から読み込みます。背景に表示された画像を参照しながら輪郭を描画します。
               </p>
             </div>
             <div className="text-[10.5px] text-teal-700 dark:text-teal-400 font-medium">
-              不透明度を調整しながら正確になぞり描きが可能です。
+              下絵の不透明度や配置倍率を調整できます。
             </div>
           </div>
 
@@ -166,17 +166,17 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
                 <div className="p-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
                   <Shapes className="w-4 h-4" />
                 </div>
-                <h5 className="text-xs font-extrabold">③ 幾何学・デザイン作図コース</h5>
+                <h5 className="text-xs font-extrabold">③ 幾何学・図形作図コース</h5>
               </div>
               <span className="text-[9.5px] px-1.5 py-0.2 rounded font-mono font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 inline-block">
-                ロゴ・POP文字向け
+                幾何図形
               </span>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                矩形・円・直線ツールやペンツールを組み合わせて、幾何学的なフォントを作図できます。ガイド線やスナップ機能を活用し、パスの結合ツールで一体化します。
+                矩形・円・直線ツールやペンツールを組み合わせて作図します。ガイド線やスナップ機能を用いて配置し、パス結合ツールで輪郭を統合します。
               </p>
             </div>
             <div className="text-[10.5px] text-indigo-700 dark:text-indigo-400 font-medium">
-              定規機能を利用してストローク幅を均一に保てます。
+              定規機能を利用してストローク幅を計測できます。
             </div>
           </div>
         </div>
@@ -270,11 +270,11 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
                 <h5 className="text-xs font-bold">「試し打ち」で文章確認</h5>
               </div>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                上部バーの「<strong>試し打ち</strong>」を開くと、任意の文章を入力してリアルタイムに文字の並びや文字間バランスをプレビュー確認できます。
+                上部バーの「<strong>試し打ち</strong>」を開き、任意の文字列を入力して文字の並びや文字間隔のバランスを確認します。
               </p>
             </div>
             <div className="mt-2 text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
-              ショートカット: Alt + T で即座に確認画面を起動できます
+              ショートカット: Alt + T で確認画面を表示できます
             </div>
           </div>
         </div>
@@ -294,7 +294,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
             <div>
               <h5 className="text-xs font-extrabold">「フォント出力」からファイルを書き出し</h5>
               <p className="text-xs opacity-80">
-                画面右上の「フォント出力」ボタンから、完成したフォントをPCやiPadですぐに使用できる形式（TTF / OTF / WOFF）としてダウンロードできます。
+                画面右上の「フォント出力」ボタンから、フォントファイル（TTF / OTF / WOFF）を書き出してダウンロードします。
               </p>
             </div>
           </div>
@@ -313,7 +313,7 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 font-bold text-xs">
             <HelpCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <span>初心者のよくある疑問・お悩み解決</span>
+            <span>よくある質問と対処法</span>
           </div>
           <button
             onClick={onOpenGlossary}
@@ -325,15 +325,15 @@ export const BeginnerTutorialTab: React.FC<BeginnerTutorialTabProps> = ({ isLigh
 
         <div className="space-y-2 text-xs leading-relaxed">
           <div>
-            <strong>Q. 文字同士がくっついて読みにくい時は？</strong>
+            <strong>Q. 文字同士が重なる・間隔が狭い場合は？</strong>
             <p className="text-stone-700 dark:text-stone-300 opacity-90 pl-3 mt-0.5">
-              左右の余白（サイドベアリング）が不足している状態です。キーボードの <strong>Shift + Alt + S</strong> を押すか、右サイドバーの「字幅自動設定」を実行することで、余白が自動調整されます。
+              左右の余白（サイドベアリング）が不足しています。キーボードの <strong>Shift + Alt + S</strong> を押すか、右サイドバーの「字幅自動設定」を実行することで余白を再計算して設定できます。
             </p>
           </div>
           <div>
-            <strong>Q. 手書きした線がガタガタになってしまう時は？</strong>
+            <strong>Q. 手書きした線の凹凸を抑えるには？</strong>
             <p className="text-stone-700 dark:text-stone-300 opacity-90 pl-3 mt-0.5">
-              筆ツールの「手ブレ補正」を50〜75%程度に設定して描画するか、描画後に <strong>Alt + S（パス単純化）</strong> を実行することで、余分なアンカーポイントを削減して滑らかな曲線に補正できます。
+              筆ツールの「手ブレ補正」の数値を上げて描画するか、描画後に <strong>Alt + S（パス単純化）</strong> を実行して不要なアンカーポイントを削減します。
             </p>
           </div>
         </div>

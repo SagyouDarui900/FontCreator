@@ -1792,7 +1792,7 @@ export default function App() {
       {isMobileThemeModalOpen && (
         <div className="sm:hidden fixed inset-0 z-50 flex flex-col justify-end">
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+            className="fixed inset-0 bg-black/60 animate-in fade-in duration-150"
             onClick={() => setIsMobileThemeModalOpen(false)}
           />
           <div

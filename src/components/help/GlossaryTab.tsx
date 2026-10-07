@@ -50,7 +50,7 @@ export const GlossaryTab: React.FC<GlossaryTabProps> = ({ isLight }) => {
             </span>
           </h3>
           <p className="text-xs leading-relaxed opacity-90">
-            フォント制作で用いられる専門用語（グリフ、ベジェ曲線、サイドベアリングなど）を、初心者の方にも直感的に理解できるよう図解と平易な言葉で整理・解説しています。
+            フォント制作で用いられる専門用語（グリフ、ベジェ曲線、サイドベアリングなど）について、図解と平易な語彙で整理・解説しています。
           </p>
         </div>
       </div>
@@ -63,7 +63,7 @@ export const GlossaryTab: React.FC<GlossaryTabProps> = ({ isLight }) => {
       >
         <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center space-x-1.5">
           <Layers className="w-4 h-4" />
-          <span>ひと目でわかる！フォントのマス目と余白の仕組み（図解）</span>
+          <span>フォントのマス目と余白の仕組み（図解）</span>
         </h4>
 
         <div

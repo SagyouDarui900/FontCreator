@@ -14,7 +14,7 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['apple-touch-icon.png', 'icon.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
-          id: '/',
+          id: '/FontCreator/',
           name: 'FontCreator',
           short_name: 'FontCreator',
           description: 'ブラウザ上で手書き・デザインフォントの作成、パス輪郭の単純化、サイドベアリング自動設定、TTF出力ができるフォント開発スタジオ。',

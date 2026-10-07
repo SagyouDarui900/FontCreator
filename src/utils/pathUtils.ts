@@ -3099,16 +3099,17 @@ export function strokePointsToOutline(
 
   const numRaw = rawPts.length;
 
-  // Check if stroke was created using a mouse to adaptively absorb optical sensor discretization jitter
+  // Check if stroke was created using a mouse or touch
   const isMouseInput = rawPts.some((p) => p.pointerType === 'mouse');
+  const isTouchInput = rawPts.some((p) => p.pointerType === 'touch');
 
-  // For mouse inputs: pre-filter 1px discrete staircasing steps with moving-average coordinate smoothing
+  // For mouse inputs: gentle 1px sub-pixel noise filtering without cutting sharp corners
   if (isMouseInput && rawPts.length >= 4) {
     const origX = rawPts.map((p) => p.x);
     const origY = rawPts.map((p) => p.y);
     for (let i = 1; i < rawPts.length - 1; i++) {
-      rawPts[i].x = origX[i - 1] * 0.25 + origX[i] * 0.50 + origX[i + 1] * 0.25;
-      rawPts[i].y = origY[i - 1] * 0.25 + origY[i] * 0.50 + origY[i + 1] * 0.25;
+      rawPts[i].x = origX[i - 1] * 0.10 + origX[i] * 0.80 + origX[i + 1] * 0.10;
+      rawPts[i].y = origY[i - 1] * 0.10 + origY[i] * 0.80 + origY[i + 1] * 0.10;
     }
   }
 
@@ -3142,8 +3143,8 @@ export function strokePointsToOutline(
       // If stroke is genuinely intended as a straight line (high straightness ratio & tiny deviation), straighten raw points
       const isAutoStraight =
         !options?.disableAutoStraight &&
-        straightnessRatio > 0.992 &&
-        maxDev < Math.min(3.5, totalRawArcLen * 0.02);
+        straightnessRatio > 0.998 &&
+        maxDev < Math.min(1.8, totalRawArcLen * 0.012);
       if (isAutoStraight) {
         for (let i = 1; i < numRaw - 1; i++) {
           const t = rawArcLengths[i] / totalRawArcLen;
@@ -3191,9 +3192,9 @@ export function strokePointsToOutline(
 
   if (numRaw >= 3 && intensityNorm > 0.05 && totalRawArcLen > 2) {
     // Physical filter radius in font coordinate units
-    const baseSigma = isMouseInput ? 4.5 : 1.8;
-    const maxSigmaBonus = isMouseInput ? 24.0 : 13.0;
-    const sigma = baseSigma + maxSigmaBonus * intensityNorm; // ~4.5px up to 28.5px physical smoothing radius for mouse
+    const baseSigma = isMouseInput ? 2.2 : 1.8;
+    const maxSigmaBonus = isMouseInput ? 11.0 : 13.0;
+    const sigma = baseSigma + maxSigmaBonus * intensityNorm;
     const filterRadius = sigma * 2.5;
     const twoSigmaSq = 2 * sigma * sigma;
 
@@ -3433,13 +3434,14 @@ export function strokePointsToOutline(
     const vEnd = resampled[n - 1].speed ?? 0.5;
     const vBefore = resampled[Math.max(0, Math.floor(n * 0.7))].speed ?? 0.5;
 
-    // A: Pressure dropped significantly towards the end (pen lift)
-    const isPressureDropping = pressureSensitivity !== 'off' && (pEnd < 0.38 || (pEnd - pBefore) < -0.12);
-    // B: High velocity flick or acceleration towards end (fast swipe with mouse or pen)
-    const isSpeedFlick = vEnd > 1.05 || (vEnd > 0.72 && vEnd > vBefore * 1.25);
+    // A: Pressure dropped significantly towards the end (pen lift on stylus)
+    const isStylusStroke = rawPts.some((p) => p.pointerType === 'pen');
+    const isPressureDropping = isStylusStroke && pressureSensitivity !== 'off' && (pEnd < 0.38 || (pEnd - pBefore) < -0.12);
+    // B: High velocity flick or acceleration towards end (fast deliberate swipe)
+    const isSpeedFlick = isStylusStroke ? (vEnd > 1.05 || (vEnd > 0.72 && vEnd > vBefore * 1.25)) : (vEnd > 1.8 && vEnd > vBefore * 1.5);
     // C: Terminal hook / jump (跳ね) with quick release
     const endTurnAngle = Math.abs(turnArr[Math.max(0, n - 2)] || 0);
-    const isHookFlick = endTurnAngle > 0.32 && (vEnd > 0.60 || pEnd < 0.45);
+    const isHookFlick = isStylusStroke && endTurnAngle > 0.32 && (vEnd > 0.60 || pEnd < 0.45);
 
     isTailFlick = isPressureDropping || isSpeedFlick || isHookFlick;
   }
@@ -8130,6 +8132,5 @@ export function expandStrokeContours(
 }
 
 export { booleanSubtractContours, booleanIntersectContours } from './vectorBoolean';
-
 
 
