@@ -1,0 +1,410 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --breakpoint-xs: 480px;
+}
+
+html, body, #root {
+  height: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure smooth touch scrolling on iOS / iPad / Android scrollable containers */
+.overflow-y-auto,
+.overflow-y-scroll {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.overflow-x-auto,
+.overflow-x-scroll {
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.overflow-auto {
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  line-height: 1.6;
+  line-break: strict;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-wrap: wrap;
+}
+
+/* Ensure badges, chips, and single-line pill buttons don't wrap awkwardly mid-word */
+.badge, .chip, .btn-nowrap {
+  white-space: nowrap;
+}
+
+/* Controls should stay compact without forcing descriptive labels to overflow. */
+button, kbd {
+  text-wrap: nowrap;
+}
+
+button {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.25;
+}
+
+/* Preserve icon size while allowing Japanese labels to shrink or ellipsize. */
+button > span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Form labels and helper text may wrap at natural Japanese boundaries. */
+label {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+/* Custom subtle, clean scrollbars for all scrollable containers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 150, 140, 0.45);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 135, 120, 0.7);
+}
+.dark ::-webkit-scrollbar-thumb,
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+}
+.dark ::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+/* Hide scrollbar while maintaining full scrollability */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Helper for smooth touch and mouse horizontal scrollable tab bars */
+.touch-scroll-x {
+  overflow-x: auto;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(140, 150, 140, 0.45) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(140, 150, 140, 0.45);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 150, 140, 0.7);
+}
+.dark .custom-scrollbar,
+[data-theme="dark"] .custom-scrollbar {
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb,
+[data-theme="dark"] .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Custom high-contrast, prominent range sliders for superior accessibility */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Webkit Track */
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.35);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+.dark input[type="range"]::-webkit-slider-runnable-track,
+[data-theme="dark"] input[type="range"]::-webkit-slider-runnable-track {
+  background: rgba(16, 185, 129, 0.4);
+  border: 1px solid rgba(16, 185, 129, 0.6);
+}
+
+/* Webkit Thumb */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px; /* Centers thumb on 8px track */
+  background-color: #059669;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.18);
+  background-color: #10b981;
+}
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.25);
+  background-color: #047857;
+}
+
+/* Firefox Track & Thumb */
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.35);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+input[type="range"]::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background-color: #059669;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* Modal header and description responsive typography */
+p {
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+/*
+ * The editor is information-dense by design. On desktop, decorative blur,
+ * oversized shadows, and entrance motion reduce usable visual space without
+ * adding interaction value. Keep mobile overlays unchanged for touch feedback.
+ */
+@media (min-width: 769px) {
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .shadow-2xl,
+  .shadow-xl,
+  .shadow-lg {
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12) !important;
+  }
+
+  .animate-in,
+  .animate-fadeIn,
+  .animate-fade-in,
+  .animate-slideUp,
+  .animate-slide-in-from-left,
+  .animate-slide-in-from-right,
+  .animate-zoom-in,
+  .animate-zoom-in-95 {
+    animation: none !important;
+  }
+}
+
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.35;
+  line-break: strict;
+}
+
+/* Accessibility: Honor user preference for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   CANVAS PERFORMANCE & HARDWARE ACCELERATION
+   Enables GPU rasterization and zero-latency pan/zoom transformations on containers
+   (Note: We strictly avoid setting CSS transform on SVG <g> elements to prevent overriding SVG matrix attributes)
+   ========================================================================== */
+.glyph-canvas-container,
+#canvas-container {
+  will-change: transform;
+}
+
+/* ==========================================================================
+   MOBILE & SMARTPHONE PERFORMANCE OPTIMIZATIONS
+   Completely removes and disables GPU-intensive backdrop blurs on mobile layouts
+   (<768px / touch devices) to prevent GPU throttling and guarantee fluid canvas manipulation.
+   ========================================================================== */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  /* Disable backdrop-filter blurs across all classes */
+  [class*="backdrop-blur"],
+  .backdrop-blur-md,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl,
+  .backdrop-blur-sm,
+  .backdrop-blur-xs,
+  .backdrop-blur-2xs {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Fallback high-contrast solid backgrounds for blurred overlays on mobile */
+  .bg-black\/50,
+  .bg-black\/60,
+  .bg-black\/65,
+  .bg-black\/70 {
+    background-color: rgba(0, 0, 0, 0.88) !important;
+  }
+}
+
+/* ==========================================================================
+   THEME STYLING SYSTEM
+   Lightweight CSS variable tokens for high-performance theme transitions
+   ========================================================================== */
+
+/* --- 1. SEPIA / 和紙珈琲 THEME --- */
+[data-theme="sepia"] {
+  --color-emerald-50: #faf6ee;
+  --color-emerald-100: #f4ebd9;
+  --color-emerald-200: #e7d4b7;
+  --color-emerald-300: #d5b58c;
+  --color-emerald-400: #be925a;
+  --color-emerald-500: #9e6f36;
+  --color-emerald-600: #854d0e;
+  --color-emerald-700: #713f12;
+  --color-emerald-800: #552f0f;
+  --color-emerald-900: #3f220a;
+  --color-emerald-950: #291505;
+}
+
+[data-theme="sepia"] body {
+  background-color: #f4ede2;
+  color: #3d2b1f;
+}
+
+/* --- 2. WARM / ブルーライト低減・黄昏暖色 THEME --- */
+[data-theme="warm"] {
+  --color-emerald-50: #fff7ed;
+  --color-emerald-100: #ffedd5;
+  --color-emerald-200: #fed7aa;
+  --color-emerald-300: #fdba74;
+  --color-emerald-400: #fb923c;
+  --color-emerald-500: #f97316;
+  --color-emerald-600: #ea580c;
+  --color-emerald-700: #c2410c;
+  --color-emerald-800: #9a3412;
+  --color-emerald-900: #7c2d12;
+  --color-emerald-950: #431407;
+}
+
+[data-theme="warm"] body {
+  background-color: #fbf3e8;
+  color: #431407;
+}
+
+/* --- 3. NORD / 北欧フロスト THEME --- */
+[data-theme="nord"] {
+  --color-emerald-50: #ebf5f8;
+  --color-emerald-100: #d8eef3;
+  --color-emerald-200: #b5e0ea;
+  --color-emerald-300: #88c0d0;
+  --color-emerald-400: #81a1c1;
+  --color-emerald-500: #5e81ac;
+  --color-emerald-600: #4c6f99;
+  --color-emerald-700: #3b5577;
+  --color-emerald-800: #2b3d56;
+  --color-emerald-900: #1d2a3c;
+  --color-emerald-950: #111823;
+}
+
+[data-theme="nord"] body {
+  background-color: #2e3440;
+  color: #eceff4;
+}
+
+/* --- 4. MONOCHROME / 高コントラスト・白黒 THEME --- */
+[data-theme="monochrome"] {
+  --color-emerald-50: #fafafa;
+  --color-emerald-100: #f4f4f5;
+  --color-emerald-200: #e4e4e7;
+  --color-emerald-300: #d4d4d8;
+  --color-emerald-400: #a1a1aa;
+  --color-emerald-500: #71717a;
+  --color-emerald-600: #3f3f46;
+  --color-emerald-700: #27272a;
+  --color-emerald-800: #18181b;
+  --color-emerald-900: #09090b;
+  --color-emerald-950: #000000;
+}
+
+[data-theme="monochrome"] body {
+  background-color: #f4f4f5;
+  color: #09090b;
+}
+
+/* --- 5. LIGHT / 標準ライト (白・翡翠) THEME --- */
+[data-theme="light"] body {
+  background-color: #f7faf8;
+  color: #1c1917;
+}
+
+/* --- 6. DARK / 夜間ダーク (深碧・墨黒) THEME --- */
+[data-theme="dark"] body {
+  background-color: #0f1712;
+  color: #ecfdf5;
+}
