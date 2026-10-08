@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   FontProject,
   GlyphData,
@@ -20,24 +20,17 @@ import { ToolBar } from './components/ToolBar';
 import { GlyphCanvas } from './components/GlyphCanvas';
 import { MetricsPanel } from './components/MetricsPanel';
 import { RadicalsDrawer } from './components/RadicalsDrawer';
-import { TestPreviewModal } from './components/TestPreviewModal';
 import { FontInfoModal } from './components/FontInfoModal';
 import { TraceSettingsModal } from './components/TraceSettingsModal';
-import { SvgVectorizerModal } from './components/SvgVectorizerModal';
 import { BatchNormalizeModal } from './components/BatchNormalizeModal';
-import { FontQualityModal } from './components/FontQualityModal';
 import { GlyphSynthesisModal } from './components/GlyphSynthesisModal';
 import { KerningModal } from './components/KerningModal';
-import { WeightInterpolationModal } from './components/WeightInterpolationModal';
-import { GlyphCompareModal } from './components/GlyphCompareModal';
-import { RadicalStudioModal } from './components/RadicalStudioModal';
 import { StorageManagerModal } from './components/StorageManagerModal';
 import { PenPresetsModal } from './components/PenPresetsModal';
 import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
 import { ExportModal } from './components/ExportModal';
 import { OpenTypeFeaturesModal } from './components/OpenTypeFeaturesModal';
 import { GridFittingModal } from './components/GridFittingModal';
-import { PixelFontStudioModal } from './components/PixelFontStudioModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Toast, ToastMessage } from './components/Toast';
 import { ThemeMode, isLightTheme, getThemeClasses, THEME_PRESETS, getThemePreset } from './utils/theme';
@@ -62,6 +55,28 @@ import { Grid, Paintbrush, Sliders, Eye, Undo2, Redo2, ChevronRight, Layers, Pal
 
 const LOCAL_STORAGE_KEY = LOCAL_STORAGE_PROJECT_KEY;
 const THEME_STORAGE_KEY = 'font_editor_theme_mode';
+
+const TestPreviewModal = lazy(() =>
+  import('./components/TestPreviewModal').then((module) => ({ default: module.TestPreviewModal }))
+);
+const SvgVectorizerModal = lazy(() =>
+  import('./components/SvgVectorizerModal').then((module) => ({ default: module.SvgVectorizerModal }))
+);
+const FontQualityModal = lazy(() =>
+  import('./components/FontQualityModal').then((module) => ({ default: module.FontQualityModal }))
+);
+const WeightInterpolationModal = lazy(() =>
+  import('./components/WeightInterpolationModal').then((module) => ({ default: module.WeightInterpolationModal }))
+);
+const GlyphCompareModal = lazy(() =>
+  import('./components/GlyphCompareModal').then((module) => ({ default: module.GlyphCompareModal }))
+);
+const RadicalStudioModal = lazy(() =>
+  import('./components/RadicalStudioModal').then((module) => ({ default: module.RadicalStudioModal }))
+);
+const PixelFontStudioModal = lazy(() =>
+  import('./components/PixelFontStudioModal').then((module) => ({ default: module.PixelFontStudioModal }))
+);
 
 export default function App() {
   // Theme Mode ('light' | 'dark' | 'sepia' | 'warm' | 'nord' | 'monochrome')
@@ -383,7 +398,7 @@ export default function App() {
   // Modals & Drawers Visibility
   const [showRadicals, setShowRadicals] = useState<boolean>(false);
   const [showGridDrawer, setShowGridDrawer] = useState<boolean>(() => {
-    return typeof window !== 'undefined' ? window.innerWidth >= 1024 : true;
+    return typeof window !== 'undefined' ? window.innerWidth >= 1280 : true;
   });
   const [showMetricsDrawer, setShowMetricsDrawer] = useState<boolean>(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState<boolean>(false);
@@ -547,8 +562,29 @@ export default function App() {
   // Quota warning throttle ref
   const lastQuotaWarningRef = useRef<number>(0);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const indexedDbSaveInFlightRef = useRef(false);
+  const pendingIndexedDbProjectRef = useRef<FontProject | null>(null);
 
-  // Dual Auto-save to LocalStorage & IndexedDB with 2000ms debounce
+  const saveProjectToIndexedDbWhenIdle = useCallback(async (nextProject: FontProject) => {
+    pendingIndexedDbProjectRef.current = nextProject;
+    if (indexedDbSaveInFlightRef.current) return;
+
+    indexedDbSaveInFlightRef.current = true;
+    try {
+      while (pendingIndexedDbProjectRef.current) {
+        const projectToSave = pendingIndexedDbProjectRef.current;
+        pendingIndexedDbProjectRef.current = null;
+        const saved = await saveProjectToIndexedDB(projectToSave);
+        if (!saved) {
+          console.warn('Background IndexedDB auto-save did not complete.');
+        }
+      }
+    } finally {
+      indexedDbSaveInFlightRef.current = false;
+    }
+  }, []);
+
+  // LocalStorage is the synchronous recovery copy; IndexedDB is written in the background.
   useEffect(() => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
@@ -568,16 +604,13 @@ export default function App() {
         if (isQuota && Date.now() - lastQuotaWarningRef.current > 120000) {
           lastQuotaWarningRef.current = Date.now();
           showToast(
-            'LocalStorage容量上限に達しましたが、IndexedDB大容量ストレージへ安全にデュアル自動保存されています。',
-            'info'
+            'LocalStorage容量上限に達しました。IndexedDBへのバックグラウンド保存を試行しています。',
+            'warning'
           );
         }
       }
 
-      // 2. Dual-save asynchronously to IndexedDB (bypasses LocalStorage 5MB quota)
-      saveProjectToIndexedDB(projectRef.current).catch((err) => {
-        console.warn('Background IndexedDB auto-save error:', err);
-      });
+      void saveProjectToIndexedDbWhenIdle(projectRef.current);
     }, 2000);
 
     return () => {
@@ -585,17 +618,17 @@ export default function App() {
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [project.updatedAt, showToast]);
+  }, [project.updatedAt, showToast, saveProjectToIndexedDbWhenIdle]);
 
-  // Ensure synchronous flush to LocalStorage & IndexedDB before window closes, refreshes, or tab hides
+  // Persist the synchronous recovery copy before leaving. IndexedDB writes are not
+  // awaited here because browsers may terminate the page immediately.
   useEffect(() => {
     const handleBeforeUnload = () => {
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projectRef.current));
         setLastAutoSaveTimestamp(Date.now());
-        saveProjectToIndexedDB(projectRef.current);
-      } catch {
-        // Ignored
+      } catch (error) {
+        console.warn('Final localStorage project save failed:', error);
       }
     };
 
@@ -604,9 +637,9 @@ export default function App() {
         try {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projectRef.current));
           setLastAutoSaveTimestamp(Date.now());
-          saveProjectToIndexedDB(projectRef.current);
-        } catch {
-          // Ignored
+          void saveProjectToIndexedDbWhenIdle(projectRef.current);
+        } catch (error) {
+          console.warn('Visibility-change project save failed:', error);
         }
       }
     };
@@ -617,7 +650,7 @@ export default function App() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [saveProjectToIndexedDbWhenIdle]);
 
   // Quick Save Current Glyph (即座にLocalStorageへ永続化 + 単体JSONファイル書き出しバックアップ)
   const handleQuickSaveCurrentGlyph = useCallback(() => {
@@ -625,6 +658,7 @@ export default function App() {
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projectRef.current));
       setLastAutoSaveTimestamp(Date.now());
+      void saveProjectToIndexedDbWhenIdle(projectRef.current);
     } catch (e) {
       console.warn('Immediate project save failed:', e);
     }
@@ -1502,6 +1536,7 @@ export default function App() {
     <div
       className={`flex flex-col h-full w-full overflow-hidden font-sans select-none ${themeClasses.appBg}`}
     >
+      <Suspense fallback={null}>
       {/* Top Main Navigation Bar */}
       <Header
         project={project}
@@ -1550,7 +1585,7 @@ export default function App() {
       <div className={`flex-1 flex flex-col sm:flex-row min-h-0 min-w-0 w-full flex-grow flex-shrink grow shrink relative overflow-hidden isolate ${isAnyModalOpen ? 'pointer-events-none select-none' : ''}`}>
         
         {/* 1. Stationary Design Dock (Leftmost): ToolBar */}
-        <div className="order-last sm:order-first shrink-0 w-full sm:w-auto z-20">
+        <div className="order-last sm:order-first shrink-0 w-full sm:w-auto h-auto sm:h-full sm:min-h-0 z-20 flex flex-col">
           <ToolBar
             toolMode={toolMode}
             setToolMode={setToolMode}
@@ -2119,6 +2154,7 @@ export default function App() {
 
       {/* Offline Connectivity Status Indicator */}
       <OfflineIndicator />
+      </Suspense>
     </div>
   );
 }

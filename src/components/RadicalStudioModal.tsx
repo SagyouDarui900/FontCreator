@@ -3,6 +3,7 @@ import {
  X,
  Sparkles,
  Plus,
+ Minus,
  Trash2,
  Copy,
  Download,
@@ -369,6 +370,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  const [brushWidth, setBrushWidth] = useState<number>(36);
  const [brushStyle, setBrushStyle] = useState<BrushStyle>('brush');
  const [pressureSensitivity, setPressureSensitivity] = useState<'high' | 'normal' | 'low' | 'off'>('normal');
+ const isPressureSensitivity = (value: string): value is 'high' | 'normal' | 'low' | 'off' =>
+   value === 'high' || value === 'normal' || value === 'low' || value === 'off';
  const [isStraightMode, setIsStraightMode] = useState<boolean>(false);
  const [isAutoUnionMode, setIsAutoUnionMode] = useState<boolean>(true);
  const [showPenShortcutsHelp, setShowPenShortcutsHelp] = useState<boolean>(false);
@@ -407,6 +410,19 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  const [isDraggingContour, setIsDraggingContour] = useState(false);
  const [dragStartPoint, setDragStartPoint] = useState<Point>({ x: 0, y: 0 });
  const dragStartContoursRef = useRef<PathContour[] | null>(null);
+ const dragCurrentContoursRef = useRef<PathContour[] | null>(null);
+
+ // Spacebar pan navigation & hover & transform states
+ const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
+ const [hoveredContourId, setHoveredContourId] = useState<string | null>(null);
+ const [isMoveAllPart, setIsMoveAllPart] = useState<boolean>(false);
+ const [transformHandle, setTransformHandle] = useState<'move' | 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | null>(null);
+ const transformSessionRef = useRef<{
+   handle: 'move' | 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+   startPoint: Point;
+   initialBBox: { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number; centerX: number; centerY: number };
+   initialContours: PathContour[];
+ } | null>(null);
 
  // Brush / Shape / Pen tool in-progress state & high-performance drawing refs
  const [isDrawingStroke, setIsDrawingStroke] = useState(false);
@@ -416,6 +432,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  const mouseSmoothSpeedRef = useRef<number>(0.5);
  const isPenDraggingHandleRef = useRef<boolean>(false);
  const [isPenNearFirstNode, setIsPenNearFirstNode] = useState<boolean>(false);
+
+ const getBrushPreviewPoints = useCallback((points: StrokePoint[], maxPoints = 180): StrokePoint[] => {
+   if (points.length <= 2) return points;
+   const stride = Math.max(1, Math.ceil(points.length / maxPoints));
+   const sampled = points.filter((_, index) => index === 0 || index === points.length - 1 || index % stride === 0);
+   return sampled.length >= 2 ? sampled : [points[0], points[points.length - 1]];
+ }, []);
 
  const [shapeStartPoint, setShapeStartPoint] = useState<Point | null>(null);
  const [shapeCurrentPoint, setShapeCurrentPoint] = useState<Point | null>(null);
@@ -468,6 +491,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  const [eraserRadius, setEraserRadius] = useState<number>(24);
  const isErasingRef = useRef<boolean>(false);
  const eraserStrokePointsRef = useRef<Point[]>([]);
+ const eraserInitialContoursRef = useRef<PathContour[] | null>(null);
+ const eraserCurrentContoursRef = useRef<PathContour[] | null>(null);
  const [eraserHoverPos, setEraserHoverPos] = useState<Point | null>(null);
  const activeEraserSvgDRef = useRef<string>('');
  const activeEraserPathRef = useRef<SVGPathElement | null>(null);
@@ -499,6 +524,32 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  );
 
  const lastSavedPartsJsonRef = useRef<string>('');
+ const partsSaveTimerRef = useRef<number | null>(null);
+ const partsSaveInFlightRef = useRef(false);
+ const pendingPartsSaveRef = useRef<CustomPart[] | null>(null);
+
+ const flushPartsSave = useCallback(async () => {
+   if (partsSaveInFlightRef.current || !pendingPartsSaveRef.current) return;
+   partsSaveInFlightRef.current = true;
+   const partsToSave = pendingPartsSaveRef.current;
+   pendingPartsSaveRef.current = null;
+
+   try {
+     const saved = await saveCustomParts(partsToSave);
+     if (saved) {
+       window.dispatchEvent(new Event('font_custom_parts_updated'));
+     } else {
+       notify('部首パーツの自動保存に失敗しました。JSON書き出しでバックアップしてください', 'warning');
+     }
+   } catch {
+     notify('部首パーツの自動保存に失敗しました。JSON書き出しでバックアップしてください', 'warning');
+   } finally {
+     partsSaveInFlightRef.current = false;
+     if (pendingPartsSaveRef.current) {
+       void flushPartsSave();
+     }
+   }
+ }, [notify]);
 
  // Reload custom parts from IndexedDB
  const reloadPartsFromStorage = useCallback(async () => {
@@ -531,17 +582,35 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  prevIsOpenRef.current = isOpen;
  }, [isOpen, selectedChar, reloadPartsFromStorage]);
 
- // Save parts to IndexedDB whenever they change while modal is open, and notify external listeners
+ // Save the complete part content, not only IDs. Editing nodes keeps the same
+ // part ID, so an ID-only fingerprint silently skipped contour changes.
  useEffect(() => {
- if (!isOpen || !parts || parts.length === 0) return;
- const jsonKey = JSON.stringify(parts.map((p) => p.id));
+ if (!isOpen || !parts) return;
+ const jsonKey = JSON.stringify(parts);
  if (jsonKey === lastSavedPartsJsonRef.current) return;
  lastSavedPartsJsonRef.current = jsonKey;
+ pendingPartsSaveRef.current = parts;
+ if (partsSaveTimerRef.current !== null) {
+   window.clearTimeout(partsSaveTimerRef.current);
+ }
+ partsSaveTimerRef.current = window.setTimeout(() => {
+   partsSaveTimerRef.current = null;
+   void flushPartsSave();
+ }, 250);
 
- saveCustomParts(parts).then(() => {
- window.dispatchEvent(new Event('font_custom_parts_updated'));
- });
- }, [parts, isOpen]);
+ return () => {
+   if (partsSaveTimerRef.current !== null) {
+     window.clearTimeout(partsSaveTimerRef.current);
+     partsSaveTimerRef.current = null;
+   }
+ };
+ }, [parts, isOpen, flushPartsSave]);
+
+ useEffect(() => {
+   if (!isOpen && pendingPartsSaveRef.current) {
+     void flushPartsSave();
+   }
+ }, [isOpen, flushPartsSave]);
 
  // Center editor view whenever selected part changes or on initial open
  const resetView = useCallback(() => {
@@ -567,42 +636,6 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  return () => clearTimeout(timer);
  }
  }, [isOpen, resetView]);
-
- useEffect(() => {
- const el = canvasContainerRef.current;
- if (!el || !isOpen) return;
-
- const handleWheelNative = (e: WheelEvent) => {
- if (e.cancelable) {
- e.preventDefault();
- }
-
- const rect = el.getBoundingClientRect();
- const mouseX = e.clientX - rect.left;
- const mouseY = e.clientY - rect.top;
-
- let delta = e.deltaY;
- if (e.deltaMode === 1) delta *= 16;
- else if (e.deltaMode === 2) delta *= 800;
-
- const zoomFactor = Math.pow(1.12, -delta / 120);
-
- setZoom((prevZoom) => {
- const nextZoom = Math.max(0.15, Math.min(6.0, prevZoom * zoomFactor));
- const scale = nextZoom / prevZoom;
-
- setPan((prevPan) => ({
- x: mouseX - (mouseX - prevPan.x) * scale,
- y: mouseY - (mouseY - prevPan.y) * scale,
- }));
-
- return nextZoom;
- });
- };
-
- el.addEventListener('wheel', handleWheelNative, { passive: false });
- return () => el.removeEventListener('wheel', handleWheelNative);
- }, [isOpen]);
 
  useEffect(() => {
  setUndoStack([]);
@@ -731,11 +764,90 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  return;
  }
 
+ // Select all / Move all: Ctrl+A / Cmd+A
+ if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyA' || e.key === 'a' || e.key === 'A')) {
+ e.preventDefault();
+ setIsMoveAllPart(true);
+ setSelectedContourId(null);
+ setSelectedNodeId(null);
+ notify('部首の全ストロークを選択しました（全体移動可能）', 'info');
+ return;
+ }
+
  // Save shortcut
  if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyS' || e.key === 's' || e.key === 'S')) {
  e.preventDefault();
  handleExportLibraryJson();
  return;
+ }
+
+ // Spacebar navigation pan
+ if (e.code === 'Space' && !e.repeat) {
+ e.preventDefault();
+ setIsSpacePressed(true);
+ return;
+ }
+
+ // Arrow Keys nudge (1px or 10px with Shift)
+ if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+ e.preventDefault();
+ const step = e.shiftKey ? 10 : 1;
+ let dx = 0;
+ let dy = 0;
+ if (e.key === 'ArrowLeft') dx = -step;
+ if (e.key === 'ArrowRight') dx = step;
+ if (e.key === 'ArrowUp') dy = -step;
+ if (e.key === 'ArrowDown') dy = step;
+
+ if (selectedNodeId && selectedContourId && activePart) {
+ const updated = activePart.contours.map((c) => {
+ if (c.id !== selectedContourId) return c;
+ return {
+ ...c,
+ nodes: c.nodes.map((n) => {
+ if (n.id !== selectedNodeId) return n;
+ return {
+ ...n,
+ x: n.x + dx,
+ y: n.y + dy,
+ handleIn: n.handleIn ? { x: n.handleIn.x + dx, y: n.handleIn.y + dy } : null,
+ handleOut: n.handleOut ? { x: n.handleOut.x + dx, y: n.handleOut.y + dy } : null,
+ };
+ }),
+ };
+ });
+ commitPartChange(updated);
+ return;
+ } else if (selectedContourId && activePart) {
+ const updated = activePart.contours.map((c) => {
+ if (c.id !== selectedContourId) return c;
+ return {
+ ...c,
+ nodes: c.nodes.map((n) => ({
+ ...n,
+ x: n.x + dx,
+ y: n.y + dy,
+ handleIn: n.handleIn ? { x: n.handleIn.x + dx, y: n.handleIn.y + dy } : null,
+ handleOut: n.handleOut ? { x: n.handleOut.x + dx, y: n.handleOut.y + dy } : null,
+ })),
+ };
+ });
+ commitPartChange(updated);
+ return;
+ } else if (activePart && activePart.contours.length > 0) {
+ const updated = activePart.contours.map((c) => ({
+ ...c,
+ nodes: c.nodes.map((n) => ({
+ ...n,
+ x: n.x + dx,
+ y: n.y + dy,
+ handleIn: n.handleIn ? { x: n.handleIn.x + dx, y: n.handleIn.y + dy } : null,
+ handleOut: n.handleOut ? { x: n.handleOut.x + dx, y: n.handleOut.y + dy } : null,
+ })),
+ }));
+ commitPartChange(updated);
+ return;
+ }
  }
 
  // Tool Switching Shortcuts
@@ -776,13 +888,24 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  } else {
  setSelectedNodeId(null);
  setSelectedContourId(null);
+ setIsMoveAllPart(false);
  }
  }
  }
  };
 
+ const handleKeyUp = (e: KeyboardEvent) => {
+ if (e.code === 'Space') {
+ setIsSpacePressed(false);
+ }
+ };
+
  window.addEventListener('keydown', handleKeyDown);
- return () => window.removeEventListener('keydown', handleKeyDown);
+ window.addEventListener('keyup', handleKeyUp);
+ return () => {
+ window.removeEventListener('keydown', handleKeyDown);
+ window.removeEventListener('keyup', handleKeyUp);
+ };
  }, [
  isOpen,
  activePenContour,
@@ -1629,7 +1752,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  }
  };
 
- // Wheel zoom & pan on canvas
+ // Wheel zoom & pan on canvas. This is intentionally handled only here;
+ // registering a second native listener causes every wheel gesture to apply twice.
  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
  e.preventDefault();
  let dx = e.deltaX;
@@ -1640,6 +1764,14 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  } else if (e.deltaMode === 2) {
  dx *= 400;
  dy *= 400;
+ }
+
+ if (isSpacePressed || e.shiftKey || (!e.ctrlKey && !e.metaKey && Math.abs(dx) > Math.abs(dy))) {
+ setPan((prev) => ({
+ x: prev.x - (e.shiftKey ? dy : dx),
+ y: prev.y - (e.shiftKey ? 0 : dy),
+ }));
+ return;
  }
 
  if (e.ctrlKey || e.metaKey) {
@@ -1683,13 +1815,14 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  }
  }
 
+ try {
+ (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+ } catch {}
+
  const pos = getCanvasCoords(e);
 
  // Hand tool / Middle click pan / Space key pan
- if (toolMode === 'hand' || e.button === 1 || e.spaceKey) {
- try {
- (e.target as Element).setPointerCapture?.(e.pointerId);
- } catch {}
+ if (toolMode === 'hand' || e.button === 1 || isSpacePressed) {
  setIsPanning(true);
  setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
  return;
@@ -1725,13 +1858,24 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  // Shape Tools
  const isShape = [
  'rect',
+ 'square',
  'ellipse',
+ 'circle',
+ 'rounded_rect',
+ 'pill',
  'triangle',
+ 'triangle_down',
+ 'right_triangle',
+ 'semicircle',
+ 'ring',
+ 'parallelogram',
  'star',
  'heart',
  'sparkle',
  'starburst',
  'diamond',
+ 'polygon',
+ 'crescent',
  ].includes(toolMode);
 
  if (isShape) {
@@ -1747,6 +1891,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  } catch {}
  isErasingRef.current = true;
  eraserStrokePointsRef.current = [pos];
+ eraserInitialContoursRef.current = JSON.parse(JSON.stringify(activePart.contours));
+ eraserCurrentContoursRef.current = activePart.contours;
  setEraserHoverPos(pos);
 
  if (eraserMode === 'cut') {
@@ -1756,9 +1902,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  activeEraserPathRef.current.setAttribute('d', d);
  }
  } else {
- const remaining = eraseContoursAtPoint(activePart.contours, pos, eraserRadius, eraserMode);
- if (remaining.length !== activePart.contours.length) {
- commitPartChange(remaining);
+ const sourceContours = eraserCurrentContoursRef.current || activePart.contours;
+ const remaining = eraseContoursAtPoint(sourceContours, pos, eraserRadius, eraserMode);
+ if (remaining.length !== sourceContours.length) {
+ eraserCurrentContoursRef.current = remaining;
+ setParts((prevParts) =>
+ prevParts.map((p) => (p.id === activePart.id ? { ...p, contours: remaining } : p))
+ );
  }
  }
  return;
@@ -1821,7 +1971,15 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
  // Select Tool
  if (toolMode === 'select') {
- dragStartContoursRef.current = JSON.parse(JSON.stringify(activePart.contours));
+ const initialContours = JSON.parse(JSON.stringify(activePart.contours)) as PathContour[];
+ dragStartContoursRef.current = initialContours;
+ dragCurrentContoursRef.current = initialContours;
+ if (isMoveAllPart) {
+ setSelectedHandleType(null);
+ setIsDraggingContour(true);
+ setDragStartPoint(pos);
+ return;
+ }
  const hitRadius = Math.max(12, 16 / zoom);
 
  // 1. Check Handle Hits on currently selected node first
@@ -1981,11 +2139,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  activeEraserPathRef.current.setAttribute('d', d);
  }
  } else {
- const remaining = eraseContoursAtPoint(activePart.contours, pos, eraserRadius, eraserMode, prev);
- if (remaining.length !== activePart.contours.length) {
+ const sourceContours = eraserCurrentContoursRef.current || activePart.contours;
+ const remaining = eraseContoursAtPoint(sourceContours, pos, eraserRadius, eraserMode, prev);
+ if (remaining.length !== sourceContours.length) {
  setParts((prevParts) =>
  prevParts.map((p) => (p.id === activePart.id ? { ...p, contours: remaining } : p))
  );
+ eraserCurrentContoursRef.current = remaining;
  }
  }
  return;
@@ -1996,8 +2156,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  const native = e.nativeEvent as PointerEvent & { getCoalescedEvents?: () => PointerEvent[] };
  const events = native.getCoalescedEvents ? native.getCoalescedEvents() : [native];
  
- const lastPt = brushStrokePointsRef.current[brushStrokePointsRef.current.length - 1];
  for (const evt of events) {
+ const lastPt = brushStrokePointsRef.current[brushStrokePointsRef.current.length - 1];
  const rawPos = getCanvasCoordsFromClient(evt.clientX, evt.clientY);
  let p = evt.pressure;
  const isMouse = (evt.pointerType || e.pointerType) === 'mouse';
@@ -2030,13 +2190,23 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  brushRafIdRef.current = requestAnimationFrame(() => {
  brushRafIdRef.current = null;
  if (brushStrokePointsRef.current.length >= 2 && activeBrushPathRef.current) {
+ const sampledPoints = getBrushPreviewPoints(brushStrokePointsRef.current);
  const pts = isStraightMode || e.shiftKey
  ? [
  brushStrokePointsRef.current[0],
  brushStrokePointsRef.current[brushStrokePointsRef.current.length - 1],
  ]
- : brushStrokePointsRef.current;
- const contour = strokePointsToOutline(pts, brushWidth, brushStyle);
+ : sampledPoints;
+ const contour = strokePointsToOutline(
+   pts,
+   brushWidth,
+   brushStyle,
+   true,
+   pressureSensitivity,
+   undefined,
+   55,
+   { density: 'normal', subdivisionStep: 2.5, widthSmoothingPasses: 1 },
+ );
  if (contour && contour.nodes.length >= 3) {
  activeBrushPathRef.current.setAttribute('d', contoursToSvgPath([contour]));
  }
@@ -2088,7 +2258,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  const dx = pos.x - dragStartPoint.x;
  const dy = pos.y - dragStartPoint.y;
 
- const updated = activePart.contours.map((contour) => {
+ const sourceContours = dragCurrentContoursRef.current || activePart.contours;
+ const updated = sourceContours.map((contour) => {
  if (contour.id !== selectedContourId) return contour;
  return {
  ...contour,
@@ -2141,6 +2312,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  };
  });
 
+ dragCurrentContoursRef.current = updated;
  setParts((prev) =>
  prev.map((p) => (p.id === activePart.id ? { ...p, contours: updated } : p))
  );
@@ -2149,12 +2321,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  }
 
  // Dragging whole selected contour
- if (isDraggingContour && selectedContourId && activePart) {
+ if (isDraggingContour && activePart && (selectedContourId || isMoveAllPart)) {
  const dx = pos.x - dragStartPoint.x;
  const dy = pos.y - dragStartPoint.y;
 
- const updated = activePart.contours.map((contour) => {
- if (contour.id !== selectedContourId) return contour;
+ const sourceContours = dragCurrentContoursRef.current || activePart.contours;
+ const updated = sourceContours.map((contour) => {
+ if (!isMoveAllPart && contour.id !== selectedContourId) return contour;
  return {
  ...contour,
  nodes: contour.nodes.map((node) => ({
@@ -2171,6 +2344,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  };
  });
 
+ dragCurrentContoursRef.current = updated;
  setParts((prev) =>
  prev.map((p) => (p.id === activePart.id ? { ...p, contours: updated } : p))
  );
@@ -2192,6 +2366,9 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  setIsDraggingContour(false);
  setSelectedHandleType(null);
  setActiveSnapLines({ x: null, y: null });
+ try {
+ (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+ } catch {}
 
  // Finalize Eraser Tool
  if (isErasingRef.current && toolMode === 'eraser') {
@@ -2217,22 +2394,42 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  }
  } else {
  eraserStrokePointsRef.current = [];
- if (activePart) {
- commitPartChange(activePart.contours);
+ const initialContours = eraserInitialContoursRef.current;
+ const currentContours = eraserCurrentContoursRef.current;
+ if (initialContours && currentContours && JSON.stringify(initialContours) !== JSON.stringify(currentContours)) {
+ setUndoStack((prev) => [...prev.slice(-25), initialContours]);
+ setRedoStack([]);
+ setParts((prevParts) =>
+   prevParts.map((p) =>
+     p.id === activePart?.id
+       ? { ...p, contours: currentContours, updatedAt: Date.now() }
+       : p
+   )
+ );
  }
  }
+ eraserInitialContoursRef.current = null;
+ eraserCurrentContoursRef.current = null;
  return;
  }
 
  // Record undo state if a node or contour drag occurred in select mode
- if (dragStartContoursRef.current && activePart) {
+ if (dragStartContoursRef.current && dragCurrentContoursRef.current && activePart) {
  const startJson = JSON.stringify(dragStartContoursRef.current);
- const currentJson = JSON.stringify(activePart.contours);
+ const currentJson = JSON.stringify(dragCurrentContoursRef.current);
  if (startJson !== currentJson) {
  setUndoStack((prev) => [...prev.slice(-25), dragStartContoursRef.current!]);
  setRedoStack([]);
+ setParts((prevParts) =>
+   prevParts.map((p) =>
+     p.id === activePart.id
+       ? { ...p, contours: dragCurrentContoursRef.current!, updatedAt: Date.now() }
+       : p
+   )
+ );
  }
  dragStartContoursRef.current = null;
+ dragCurrentContoursRef.current = null;
  }
 
  // Finalize Pen dragging
@@ -2250,16 +2447,21 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  brushRafIdRef.current = null;
  }
  if (brushStrokePointsRef.current.length >= 2) {
- const pts = isStraightMode || e.shiftKey
+ const finalPoints = isStraightMode || e.shiftKey
  ? [
  brushStrokePointsRef.current[0],
  brushStrokePointsRef.current[brushStrokePointsRef.current.length - 1],
  ]
- : brushStrokePointsRef.current;
+ : getBrushPreviewPoints(brushStrokePointsRef.current, 600);
  const rawContour = strokePointsToOutline(
- pts,
+ finalPoints,
  brushWidth,
- brushStyle
+ brushStyle,
+ true,
+ pressureSensitivity,
+ undefined,
+ 65,
+ { density: 'normal', subdivisionStep: 1.8, widthSmoothingPasses: 2 },
  );
  if (rawContour && rawContour.nodes.length >= 3) {
  let strokeContour = rawContour;
@@ -2757,44 +2959,58 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  {/* Quick Workspace Switchers (Desktop/Tablet only) */}
  <div className="hidden md:flex items-center space-x-1.5 shrink-0">
  {/* Toggle Left Sidebar */}
- <button
- onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
- className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-all ${
- isLeftSidebarOpen
- ? isLight
- ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
- : 'bg-[#1e2d22] border-emerald-700 text-emerald-200'
- : isLight
- ? 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
- : 'bg-[#18231c] border-[#25362b] text-stone-400 hover:bg-[#202e25]'
- }`}
- title="パーツ一覧の表示/非表示（非表示にするとキャンバスが広大になります）"
- >
- <Shapes className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
- <span className="hidden sm:inline">ライブラリ</span>
- </button>
+          <button
+            onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+              isLeftSidebarOpen
+                ? isLight
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-2xs'
+                  : 'bg-[#1e2d22] border-emerald-700 text-emerald-200 shadow-2xs'
+                : isLight
+                ? 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                : 'bg-[#18231c] border-[#25362b] text-stone-400 hover:bg-[#202e25]'
+            }`}
+            title={isLeftSidebarOpen ? 'ライブラリを収納してキャンバス作業領域を最大化' : '部首・パーツライブラリを展開'}
+          >
+            <Shapes className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="hidden sm:inline">ライブラリ</span>
+            <span className={`text-[10px] px-1 py-0.5 rounded font-mono font-bold leading-none ${
+              isLeftSidebarOpen
+                ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-950 dark:text-emerald-200'
+                : 'bg-stone-200 dark:bg-stone-800 text-stone-500 dark:text-stone-400'
+            }`}>
+              {isLeftSidebarOpen ? '展開中' : '収納'}
+            </span>
+          </button>
 
- {/* Toggle Right Sidebar */}
- <button
- onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
- className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-all ${
- isRightSidebarOpen
- ? isLight
- ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
- : 'bg-[#1e2d22] border-emerald-700 text-emerald-200'
- : isLight
- ? 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
- : 'bg-[#18231c] border-[#25362b] text-stone-400 hover:bg-[#202e25]'
- }`}
- title="変形・合成サイドバーの表示/非表示（非表示にするとキャンバスがさらに広大になります）"
- >
- <Sliders className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
- <span className="hidden sm:inline">詳細・変形</span>
- </button>
- </div>
+          {/* Toggle Right Sidebar */}
+          <button
+            onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+              isRightSidebarOpen
+                ? isLight
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-2xs'
+                  : 'bg-[#1e2d22] border-emerald-700 text-emerald-200 shadow-2xs'
+                : isLight
+                ? 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                : 'bg-[#18231c] border-[#25362b] text-stone-400 hover:bg-[#202e25]'
+            }`}
+            title={isRightSidebarOpen ? '変形・合成パネルを収納してキャンバス作業領域を最大化' : '変形・合成パネルを展開'}
+          >
+            <Sliders className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="hidden sm:inline">詳細・変形</span>
+            <span className={`text-[10px] px-1 py-0.5 rounded font-mono font-bold leading-none ${
+              isRightSidebarOpen
+                ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-950 dark:text-emerald-200'
+                : 'bg-stone-200 dark:bg-stone-800 text-stone-500 dark:text-stone-400'
+            }`}>
+              {isRightSidebarOpen ? '展開中' : '収納'}
+            </span>
+          </button>
+        </div>
 
- <div className="flex items-center space-x-1.5 shrink-0">
- {/* JSON Export/Import */}
+        <div className="flex items-center space-x-1.5 shrink-0">
+          {/* JSON Export/Import */}
  <button
  onClick={handleExportLibraryJson}
  className={`p-1.5 px-2 rounded-md border text-xs font-semibold hidden sm:flex items-center space-x-1 transition-all ${
@@ -2861,36 +3077,41 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  {/* ================= 3-COLUMN WORKSPACE ================= */}
  <div className="flex-1 flex min-h-0 overflow-hidden">
  {/* ================= LEFT COLUMN: PARTS LIBRARY & PRESETS ================= */}
- {!isLeftSidebarOpen ? (
- <div
- className={`hidden md:flex w-10 border-r flex-col items-center py-3 shrink-0 cursor-pointer select-none transition-colors ${
- isLight
- ? 'bg-white border-[#d8e6df] hover:bg-emerald-50/70 text-stone-600'
- : 'bg-[#162119] border-[#25362b] hover:bg-[#1f2e23] text-emerald-300'
- }`}
- onClick={() => setIsLeftSidebarOpen(true)}
- title="部首・パーツライブラリを展開"
- >
- <button
- type="button"
- className="p-1 rounded text-emerald-700 dark:text-emerald-400"
- >
- <ChevronRight className="w-5 h-5" />
- </button>
- <div className="mt-6 flex flex-col items-center space-y-2">
- <Shapes className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
- <span className="text-[10.5px] font-bold [writing-mode:vertical-rl] tracking-wider opacity-80">
- {leftSidebarTab === 'presets' ? `標準部首 (${filteredPresets.length})` : `マイパーツ (${parts.length})`}
- </span>
- </div>
- </div>
- ) : (
- <div
- className={`hidden md:flex static inset-y-0 left-0 w-72 xl:w-88 border-r flex-col shrink-0 min-h-0 relative overflow-hidden transition-all ${
- isLight ? 'bg-white border-stone-200/60' : 'bg-[#162119] border-stone-800/60'
- }`}
- >
- {/* Left Column Header with collapse button */}
+        {!isLeftSidebarOpen ? (
+          <div
+            className={`hidden md:flex w-9 sm:w-10 border-r flex-col items-center py-2.5 shrink-0 cursor-pointer select-none transition-colors group ${
+              isLight
+                ? 'bg-stone-50/80 border-stone-200/80 hover:bg-emerald-50/80 text-stone-600'
+                : 'bg-[#131d16] border-[#223326] hover:bg-[#1a2820] text-emerald-300'
+            }`}
+            onClick={() => setIsLeftSidebarOpen(true)}
+            title="部首・パーツライブラリを展開 (クリックで開く)"
+          >
+            <button
+              type="button"
+              className="p-1.5 rounded-md hover:bg-emerald-100 dark:hover:bg-[#25382b] text-emerald-700 dark:text-emerald-400 transition-colors shadow-2xs"
+              title="ライブラリを展開"
+            >
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+            <div className="mt-5 flex flex-col items-center space-y-2">
+              <Shapes className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-[10px] font-bold [writing-mode:vertical-rl] tracking-wider opacity-85">
+                {leftSidebarTab === 'presets'
+                  ? `標準部首 (${filteredPresets.length})`
+                  : leftSidebarTab === 'kanji_db'
+                  ? '部首別漢字'
+                  : `マイパーツ (${parts.length})`}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={`hidden md:flex static inset-y-0 left-0 w-72 xl:w-88 border-r flex-col shrink-0 min-h-0 relative overflow-hidden transition-all ${
+              isLight ? 'bg-white border-stone-200/60' : 'bg-[#162119] border-stone-800/60'
+            }`}
+          >
+            {/* Left Column Header with collapse button */}
  <div
  className={`p-2 px-3 border-b flex items-center justify-between shrink-0 ${
  isLight ? 'bg-stone-50/80 border-stone-200/60' : 'bg-[#131d16] border-stone-800/60'
@@ -3573,7 +3794,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  )}
 
  {/* ================= CENTER COLUMN: DEDICATED PART CANVAS ================= */}
- <div className="flex-1 flex flex-col min-w-0 min-h-0 relative overflow-hidden flex pb-14 md:pb-0">
+ <div className="flex-1 flex flex-col min-w-0 min-h-0 relative overflow-hidden pb-14 md:pb-0">
  {/* Top Quick Action / Insertion Ribbon (作字・即時配置バー) */}
  <div
  className={`px-3 py-1.5 border-b flex items-center justify-between gap-2 shrink-0 overflow-x-auto scrollbar-none z-20 ${
@@ -3650,63 +3871,36 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </button>
  </div>
 
- {/* Fast Extract & Quick Transform Group */}
- <div className="flex items-center space-x-1.5 shrink-0">
- <button
- onClick={handleExtractFromCurrentGlyph}
- className={`px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 border transition-all active:scale-95 ${
- isLight
- ? 'bg-white border-emerald-300 text-emerald-900 hover:bg-emerald-100'
- : 'bg-[#1a2b20] border-emerald-700 text-emerald-200 hover:bg-[#22382a]'
- }`}
- title={`文字「${selectedChar}」の描画輪郭をパーツとして取り込みます`}
- >
- <Scissors className="w-3.5 h-3.5 text-emerald-600" />
- <span className="hidden md:inline">「{selectedChar}」輪郭を取込</span>
- </button>
-
- <div className="h-4 w-[1px] bg-emerald-300 dark:bg-emerald-800 mx-0.5" />
-
- <button
- onClick={handleCenterPartInCanvas}
- disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
- className={`p-1 rounded text-xs transition-colors disabled:opacity-30 ${
- isLight ? 'hover:bg-emerald-200 text-emerald-900' : 'hover:bg-[#203427] text-emerald-200'
- }`}
- title="キャンバス中央揃え"
- >
- <Maximize2 className="w-3.5 h-3.5" />
- </button>
-
- <button
- onClick={handleFlipHPart}
- disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
- className={`p-1 rounded text-xs transition-colors disabled:opacity-30 ${
- isLight ? 'hover:bg-emerald-200 text-emerald-900' : 'hover:bg-[#203427] text-emerald-200'
- }`}
- title="水平反転 (左右)"
- >
- <FlipHorizontal className="w-3.5 h-3.5" />
- </button>
-
- <button
- onClick={handleFlipVPart}
- disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
- className={`p-1 rounded text-xs transition-colors disabled:opacity-30 ${
- isLight ? 'hover:bg-emerald-200 text-emerald-900' : 'hover:bg-[#203427] text-emerald-200'
- }`}
- title="垂直反転 (上下)"
- >
- <FlipVertical className="w-3.5 h-3.5" />
- </button>
- </div>
- </div>
- {/* Canvas Toolbar */}
- <div
- className={`px-2 sm:px-3 py-1.5 border-b flex items-center justify-between gap-1.5 sm:gap-2 shrink-0 overflow-x-auto scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-700 min-w-0 relative z-10 ${
- isLight ? 'bg-white border-stone-200/60' : 'bg-[#141d16] border-stone-800/60'
- }`}
- >
+ {/* Fast Extract from Current Glyph */}
+          <div className="flex items-center space-x-1.5 shrink-0">
+            <button
+              onClick={handleExtractFromCurrentGlyph}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center space-x-1.5 border transition-all active:scale-95 shadow-2xs ${
+                isLight
+                  ? 'bg-white border-emerald-300 text-emerald-900 hover:bg-emerald-50'
+                  : 'bg-[#1a2b20] border-emerald-700 text-emerald-200 hover:bg-[#22382a]'
+              }`}
+              title={`現在編集中の文字「${selectedChar}」の描画輪郭を作字パーツとして取り込みます`}
+            >
+              <Scissors className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>「${selectedChar}」輪郭を取込</span>
+            </button>
+          </div>
+        </div>
+        {/* Canvas Toolbar */}
+        <div
+          onWheel={(e) => {
+            if (e.currentTarget.scrollWidth > e.currentTarget.clientWidth) {
+              if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) && e.deltaY !== 0) {
+                const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+                e.currentTarget.scrollLeft += delta;
+              }
+            }
+          }}
+          className={`px-2 sm:px-3 py-1.5 border-b flex items-center justify-between gap-1.5 sm:gap-2 shrink-0 overflow-x-auto touch-scroll-x custom-scrollbar scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-700 min-w-0 relative z-10 ${
+            isLight ? "bg-white border-stone-200/60" : "bg-[#141d16] border-stone-800/60"
+          }`}
+        >
  {/* Primary Tool Buttons */}
  <div className="flex items-center space-x-1 shrink-0">
  <button
@@ -4159,146 +4353,157 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </button>
 
  {/* Target Character Watermark Guide & Related Kanji Picker */}
- <div className="relative flex items-center space-x-1 shrink-0">
- <button
- onClick={() => setShowWatermark(!showWatermark)}
- className={`p-1 px-1.5 sm:px-2 rounded text-[11px] font-bold border transition-colors shrink-0 ${
- showWatermark
- ? isLight
- ? 'bg-emerald-100 border-emerald-400 text-emerald-900'
- : 'bg-emerald-950 border-emerald-600 text-emerald-300'
- : isLight
- ? 'bg-white border-[#d8e6df] text-stone-500 hover:bg-stone-50'
- : 'bg-[#1a261f] border-[#25362b] text-stone-400 hover:bg-[#223328]'
- }`}
- title="背景透かし文字ガイドの表示切替"
- >
- 透かし
- </button>
- {showWatermark && (
- <>
- <input
- type="text"
- maxLength={1}
- value={watermarkChar || ''}
- onChange={(e) => setWatermarkChar(e.target.value.slice(-1) || selectedChar)}
- className={`w-6 h-6 text-center text-xs font-bold rounded border outline-hidden transition-colors ${
- isLight
- ? 'bg-white border-emerald-300 text-emerald-950 focus:border-emerald-600'
- : 'bg-[#121c15] border-emerald-700 text-emerald-100 focus:border-emerald-500'
- }`}
- title="透かし表示する参照文字（例: 休）"
- />
- <button
- onClick={() => setShowWatermarkPicker(!showWatermarkPicker)}
- className={`px-1.5 py-0.5 rounded text-[11px] font-semibold border transition-colors flex items-center space-x-1 ${
- showWatermarkPicker
- ? 'bg-emerald-600 text-white border-emerald-600'
- : isLight
- ? 'bg-white border-stone-300 text-stone-700 hover:bg-emerald-50'
- : 'bg-[#18261e] border-emerald-800 text-emerald-200 hover:bg-[#22382b]'
- }`}
- title="この部首が含まれる漢字を選んで下絵に設定・濃さスケール調整"
- >
- <span>下絵設定</span>
- <ChevronDown className="w-3 h-3" />
- </button>
+          <div className="relative flex items-center space-x-1 shrink-0">
+            <button
+              onClick={() => setShowWatermark(!showWatermark)}
+              className={`p-1 px-2 rounded text-[11px] font-bold border transition-colors shrink-0 flex items-center space-x-1 ${
+                showWatermark
+                  ? isLight
+                    ? 'bg-emerald-100 border-emerald-400 text-emerald-950 shadow-2xs'
+                    : 'bg-emerald-950/80 border-emerald-600 text-emerald-200 shadow-2xs'
+                  : isLight
+                  ? 'bg-white border-[#d8e6df] text-stone-500 hover:bg-stone-50'
+                  : 'bg-[#1a261f] border-[#25362b] text-stone-400 hover:bg-[#223328]'
+              }`}
+              title={showWatermark ? '下絵ガイドを非表示にする' : '下絵ガイド（背景透かし文字）を表示する'}
+            >
+              <BookOpen className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span>下絵: {showWatermark ? `「${watermarkChar || selectedChar}」` : 'OFF'}</span>
+              {showWatermark && (
+                <span className="font-mono text-[10px] opacity-75 tabular-nums">
+                  {Math.round(watermarkOpacity * 100)}%
+                </span>
+              )}
+            </button>
+            {showWatermark && (
+              <>
+                <input
+                  type="text"
+                  maxLength={1}
+                  value={watermarkChar || ''}
+                  onChange={(e) => setWatermarkChar(e.target.value.slice(-1) || selectedChar)}
+                  className={`w-6 h-6 text-center text-xs font-bold rounded border outline-hidden transition-colors ${
+                    isLight
+                      ? 'bg-white border-emerald-300 text-emerald-950 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500'
+                      : 'bg-[#121c15] border-emerald-700 text-emerald-100 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-400'
+                  }`}
+                  title="透かし表示する参照文字を直接入力（例: 休）"
+                />
+                <button
+                  onClick={() => setShowWatermarkPicker(!showWatermarkPicker)}
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-semibold border transition-colors flex items-center space-x-0.5 ${
+                    showWatermarkPicker
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : isLight
+                      ? 'bg-white border-stone-300 text-stone-700 hover:bg-emerald-50'
+                      : 'bg-[#18261e] border-emerald-800 text-emerald-200 hover:bg-[#22382b]'
+                  }`}
+                  title="この部首が含まれる漢字を選んで下絵に設定・濃さスケール調整"
+                >
+                  <span>調整</span>
+                  <ChevronDown className="w-3 h-3" />
+                </button>
 
- {/* Floating Watermark Related Kanji Picker Panel */}
- {showWatermarkPicker && (
- <div
- className={`absolute top-full right-0 mt-1.5 z-40 p-3 rounded-xl border shadow-2xl w-72 sm:w-80 space-y-2.5 animate-in fade-in zoom-in-95 ${
- isLight
- ? 'bg-white/95 border-emerald-300 text-stone-800 '
- : 'bg-[#121d15]/95 border-emerald-700 text-emerald-100 '
- }`}
- onPointerDown={(e) => e.stopPropagation()}
- >
- <div className="flex items-center justify-between border-b pb-1.5 border-stone-200 dark:border-stone-800">
- <span className="text-xs font-bold flex items-center space-x-1 text-emerald-800 dark:text-emerald-300">
- <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
- <span>参照下絵（透かし漢字）の選択</span>
- </span>
- <button
- onClick={() => setShowWatermarkPicker(false)}
- className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 p-0.5 rounded"
- >
- <X className="w-3.5 h-3.5" />
- </button>
- </div>
+                {/* Floating Watermark Related Kanji Picker Panel */}
+                {showWatermarkPicker && (
+                  <div
+                    className={`absolute top-full right-0 mt-1.5 z-40 p-3 rounded-xl border shadow-2xl w-72 sm:w-80 space-y-2.5 animate-in fade-in zoom-in-95 ${
+                      isLight
+                        ? 'bg-white/95 border-emerald-300 text-stone-800 '
+                        : 'bg-[#121d15]/95 border-emerald-700 text-emerald-100 '
+                    }`}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between border-b pb-1.5 border-stone-200 dark:border-stone-800">
+                      <span className="text-xs font-bold flex items-center space-x-1 text-emerald-800 dark:text-emerald-300">
+                        <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>参照下絵（透かし漢字）の調整</span>
+                      </span>
+                      <button
+                        onClick={() => setShowWatermarkPicker(false)}
+                        className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 p-0.5 rounded"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
 
- <div>
- <label className="text-[10.5px] font-bold block mb-1 text-stone-600 dark:text-stone-300">
- 「{activePart?.name || '部首'}」を含む漢字から下絵を選択:
- </label>
- <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto p-1.5 rounded-lg border bg-stone-50 dark:bg-[#0c140e] border-stone-200 dark:border-stone-800">
- {relatedKanjiList.map((kanji, idx) => (
- <button
- key={`wm_kanji_${kanji}_${idx}`}
- onClick={() => {
- setWatermarkChar(kanji);
- setShowWatermark(true);
- }}
- className={`w-7 h-7 rounded-md font-bold text-xs flex items-center justify-center transition-all ${
- watermarkChar === kanji
- ? 'bg-emerald-700 text-white scale-105 ring-2 ring-emerald-400'
- : isLight
- ? 'bg-white border border-stone-200 text-stone-800 hover:border-emerald-400'
- : 'bg-[#1a2820] border border-stone-800 text-stone-200 hover:border-emerald-600'
- }`}
- title={`「${kanji}」を下絵文字に設定`}
- >
- {kanji}
- </button>
- ))}
- </div>
- </div>
+                    <div>
+                      <label className="text-[10.5px] font-bold block mb-1 text-stone-600 dark:text-stone-300">
+                        「{activePart?.name || '部首'}」を含む漢字から選択:
+                      </label>
+                      <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto p-1.5 rounded-lg border bg-stone-50 dark:bg-[#0c140e] border-stone-200 dark:border-stone-800">
+                        {relatedKanjiList.map((kanji, idx) => (
+                          <button
+                            key={`wm_kanji_${kanji}_${idx}`}
+                            onClick={() => {
+                              setWatermarkChar(kanji);
+                              setShowWatermark(true);
+                              notify(`下絵ガイドを「${kanji}」に設定しました`, 'info');
+                            }}
+                            className={`w-7 h-7 rounded-md font-bold text-xs flex items-center justify-center transition-all ${
+                              watermarkChar === kanji
+                                ? 'bg-emerald-700 text-white scale-105 ring-2 ring-emerald-400 font-extrabold'
+                                : isLight
+                                ? 'bg-white border border-stone-200 text-stone-800 hover:border-emerald-400'
+                                : 'bg-[#1a2820] border border-stone-800 text-stone-200 hover:border-emerald-600'
+                            }`}
+                            title={`「${kanji}」を下絵文字に設定`}
+                          >
+                            {kanji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
- <div className="grid grid-cols-2 gap-2 pt-1 border-t border-stone-200 dark:border-stone-800 text-[11px]">
- <div>
- <label className="block text-[10px] font-bold text-stone-500 dark:text-stone-400 mb-0.5">
- 下絵不透明度: {Math.round(watermarkOpacity * 100)}%
- </label>
- <input
- type="range"
- min={0.05}
- max={0.6}
- step={0.05}
- value={watermarkOpacity}
- onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
- className="w-full accent-emerald-600"
- />
- </div>
- <div>
- <label className="block text-[10px] font-bold text-stone-500 dark:text-stone-400 mb-0.5">
- 倍率: {Math.round(watermarkScale * 100)}%
- </label>
- <div className="flex items-center space-x-1">
- <button
- onClick={() => setWatermarkScale((s) => Math.max(0.5, Number((s - 0.1).toFixed(1))))}
- className="px-1.5 py-0.5 rounded border text-[10px] font-bold bg-stone-100 dark:bg-[#1a2820] hover:bg-emerald-100"
- >
- -
- </button>
- <span className="font-mono text-[11px] px-1 text-center font-bold">
- {Math.round(watermarkScale * 100)}%
- </span>
- <button
- onClick={() => setWatermarkScale((s) => Math.min(1.8, Number((s + 0.1).toFixed(1))))}
- className="px-1.5 py-0.5 rounded border text-[10px] font-bold bg-stone-100 dark:bg-[#1a2820] hover:bg-emerald-100"
- >
- +
- </button>
- </div>
- </div>
- </div>
- </div>
- )}
- </>
- )}
- </div>
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-stone-200 dark:border-stone-800 text-[11px]">
+                      <div>
+                        <label className="block text-[10px] font-bold text-stone-500 dark:text-stone-400 mb-0.5">
+                          下絵不透明度: <span className="font-mono tabular-nums">{Math.round(watermarkOpacity * 100)}%</span>
+                        </label>
+                        <input
+                          type="range"
+                          min={0.05}
+                          max={0.6}
+                          step={0.05}
+                          value={watermarkOpacity}
+                          onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
+                          className="w-full accent-emerald-600 h-1.5 cursor-pointer"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-stone-500 dark:text-stone-400 mb-0.5">
+                          倍率: <span className="font-mono tabular-nums">{Math.round(watermarkScale * 100)}%</span>
+                        </label>
+                        <div className="flex items-center space-x-1">
+                          <button
+                            type="button"
+                            onClick={() => setWatermarkScale((s) => Math.max(0.5, Number((s - 0.1).toFixed(1))))}
+                            className="px-1.5 py-0.5 rounded border text-[10px] font-bold bg-stone-100 dark:bg-[#1a2820] hover:bg-emerald-100 dark:hover:bg-[#253a2c]"
+                            title="倍率縮小 (-10%)"
+                          >
+                            <Minus className="w-2.5 h-2.5" />
+                          </button>
+                          <span className="font-mono tabular-nums text-[11px] px-1 text-center font-bold min-w-[34px]">
+                            {Math.round(watermarkScale * 100)}%
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setWatermarkScale((s) => Math.min(1.8, Number((s + 0.1).toFixed(1))))}
+                            className="px-1.5 py-0.5 rounded border text-[10px] font-bold bg-stone-100 dark:bg-[#1a2820] hover:bg-emerald-100 dark:hover:bg-[#253a2c]"
+                            title="倍率拡大 (+10%)"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
- {/* Clear All */}
+          {/* Clear All */}
  <button
  onClick={handleClearCanvas}
  disabled={!activePart || (activePart.contours?.length ?? 0) === 0}
@@ -4373,50 +4578,76 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </button>
  </div>
 
- {/* Brush Width Slider & Presets */}
- <div className="flex items-center space-x-2 shrink-0">
- <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 shrink-0">
- 太さ:
- </span>
- <input
- type="range"
- min={6}
- max={120}
- step={2}
- value={brushWidth}
- onChange={(e) => setBrushWidth(Number(e.target.value))}
- className="w-16 sm:w-24 accent-emerald-600 h-1.5 cursor-pointer"
- />
- <span className="font-mono font-bold text-[11px] text-emerald-700 dark:text-emerald-300 w-8">
- {brushWidth}px
- </span>
+ {/* Brush Width Stepper & Slider */}
+              <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0 px-2 py-0.5 rounded-lg bg-stone-100/80 dark:bg-[#16241b] border border-stone-200 dark:border-[#223627]">
+                <span className="text-[11px] font-bold text-stone-600 dark:text-stone-300 shrink-0">
+                  太さ:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setBrushWidth((w) => Math.max(2, w - (w > 20 ? 4 : 2)))}
+                  disabled={brushWidth <= 2}
+                  className="w-5 h-5 rounded flex items-center justify-center font-bold bg-white dark:bg-[#1e2e23] border border-stone-200 dark:border-[#2b4030] text-stone-700 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-[#283e2f] disabled:opacity-30 transition-colors shadow-2xs"
+                  title="線を細く (-2px / -4px)"
+                >
+                  <Minus className="w-2.5 h-2.5" />
+                </button>
+                <input
+                  type="range"
+                  min={2}
+                  max={120}
+                  step={2}
+                  value={brushWidth}
+                  onChange={(e) => setBrushWidth(Number(e.target.value))}
+                  className="w-14 sm:w-20 accent-emerald-600 h-1.5 cursor-pointer"
+                  title={`太さ: ${brushWidth}px`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setBrushWidth((w) => Math.min(120, w + (w >= 20 ? 4 : 2)))}
+                  disabled={brushWidth >= 120}
+                  className="w-5 h-5 rounded flex items-center justify-center font-bold bg-white dark:bg-[#1e2e23] border border-stone-200 dark:border-[#2b4030] text-stone-700 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-[#283e2f] disabled:opacity-30 transition-colors shadow-2xs"
+                  title="線を太く (+2px / +4px)"
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                </button>
+                <span className="font-mono tabular-nums font-bold text-[11px] text-emerald-700 dark:text-emerald-300 min-w-[34px] text-center">
+                  {brushWidth}px
+                </span>
 
- {/* Quick Width Buttons */}
- <div className="hidden lg:flex items-center space-x-1 border-l pl-2 border-stone-200 dark:border-[#25382b]">
- {[12, 24, 36, 48, 72].map((w) => (
- <button
- key={w}
- onClick={() => setBrushWidth(w)}
- className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold transition-all ${
- brushWidth === w
- ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-950 dark:text-emerald-200 font-bold'
- : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-[#1e2e23]'
- }`}
- >
- {w}
- </button>
- ))}
- </div>
- </div>
+                {/* Quick Preset Selector Dropdown */}
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (!isNaN(val)) setBrushWidth(val);
+                  }}
+                  className="text-[10px] font-mono font-bold px-1 py-0.5 rounded border border-stone-200 dark:border-[#283e2f] bg-white dark:bg-[#1c2c21] text-stone-700 dark:text-emerald-200 cursor-pointer outline-hidden hover:border-emerald-500"
+                  title="定型太さプリセット"
+                >
+                  <option value="" disabled hidden>プリセット</option>
+                  <option value="8">8px (極細)</option>
+                  <option value="16">16px (細)</option>
+                  <option value="24">24px (中細)</option>
+                  <option value="36">36px (標準)</option>
+                  <option value="48">48px (太)</option>
+                  <option value="64">64px (特太)</option>
+                  <option value="80">80px (極太)</option>
+                </select>
+              </div>
 
- {/* Pressure Sensitivity & Straight Mode */}
+              {/* Pressure Sensitivity & Straight Mode */}
  <div className="flex items-center space-x-1.5 shrink-0">
  <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 shrink-0 hidden xl:inline">
  筆圧:
  </span>
  <select
  value={pressureSensitivity}
- onChange={(e) => setPressureSensitivity(e.target.value as any)}
+ onChange={(e) => {
+   if (isPressureSensitivity(e.target.value)) {
+     setPressureSensitivity(e.target.value);
+   }
+ }}
  className={`text-[11px] font-semibold px-2 py-0.5 rounded border outline-hidden ${
  isLight
  ? 'bg-white border-stone-300 text-stone-700'
@@ -4986,7 +5217,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  ref={svgCanvasRef}
  style={{ touchAction: 'none' }}
  className={`w-full h-full select-none ${
- toolMode === 'hand' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'
+ toolMode === 'select'
+ ? isMoveAllPart
+ ? 'cursor-move'
+ : 'cursor-default'
+ : toolMode === 'hand' || isSpacePressed
+ ? (isPanning ? 'cursor-grabbing' : 'cursor-grab')
+ : 'cursor-crosshair'
  }`}
  onPointerDown={handlePointerDown}
  onPointerMove={handlePointerMove}
@@ -5577,36 +5814,37 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </div>
 
  {/* ================= RIGHT COLUMN: PART INSPECTOR & COMPOSITION ================= */}
- {!isRightSidebarOpen ? (
- <div
- className={`hidden md:flex w-10 border-l flex-col items-center py-3 shrink-0 cursor-pointer select-none transition-colors ${
- isLight
- ? 'bg-white border-[#d8e6df] hover:bg-emerald-50/70 text-stone-600'
- : 'bg-[#162119] border-[#25362b] hover:bg-[#1f2e23] text-emerald-300'
- }`}
- onClick={() => setIsRightSidebarOpen(true)}
- title="詳細・合成パネルを展開"
- >
- <button
- type="button"
- className="p-1 rounded text-emerald-700 dark:text-emerald-400"
- >
- <ChevronLeft className="w-5 h-5" />
- </button>
- <div className="mt-6 flex flex-col items-center space-y-2">
- <Sliders className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
- <span className="text-[10.5px] font-bold [writing-mode:vertical-rl] tracking-wider opacity-80">
- {rightTab === 'compose' ? '漢字合成・挿入' : '変形・詳細設定'}
- </span>
- </div>
- </div>
- ) : (
- <div
- className={`hidden md:flex static inset-y-0 right-0 w-80 lg:w-88 xl:w-96 border-l flex-col shrink-0 min-h-0 relative overflow-hidden transition-all ${
- isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#162119] border-[#25362b]'
- }`}
- >
- {/* Right Column Header with Tab Switcher & Collapse */}
+        {!isRightSidebarOpen ? (
+          <div
+            className={`hidden md:flex w-9 sm:w-10 border-l flex-col items-center py-2.5 shrink-0 cursor-pointer select-none transition-colors group ${
+              isLight
+                ? 'bg-stone-50/80 border-stone-200/80 hover:bg-emerald-50/80 text-stone-600'
+                : 'bg-[#131d16] border-[#223326] hover:bg-[#1a2820] text-emerald-300'
+            }`}
+            onClick={() => setIsRightSidebarOpen(true)}
+            title="詳細・合成パネルを展開 (クリックで開く)"
+          >
+            <button
+              type="button"
+              className="p-1.5 rounded-md hover:bg-emerald-100 dark:hover:bg-[#25382b] text-emerald-700 dark:text-emerald-400 transition-colors shadow-2xs"
+              title="パネルを展開"
+            >
+              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+            </button>
+            <div className="mt-5 flex flex-col items-center space-y-2">
+              <Sliders className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-[10px] font-bold [writing-mode:vertical-rl] tracking-wider opacity-85">
+                {rightTab === 'compose' ? '漢字合成・挿入' : '変形・詳細設定'}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={`hidden md:flex static inset-y-0 right-0 w-80 lg:w-88 xl:w-96 border-l flex-col shrink-0 min-h-0 relative overflow-hidden transition-all ${
+              isLight ? 'bg-white border-[#d8e6df]' : 'bg-[#162119] border-[#25362b]'
+            }`}
+          >
+            {/* Right Column Header with Tab Switcher & Collapse */}
  <div
  className={`p-2 px-3 border-b flex items-center justify-between gap-2 shrink-0 ${
  isLight ? 'bg-stone-50/80 border-[#d8e6df]' : 'bg-[#131d16] border-[#25362b]'
@@ -6741,7 +6979,9 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  <div className="grid grid-cols-4 gap-2">
  <button
  onClick={() => {
- const rotated = rotateSingleContour(activePart.contours[0] || ({} as any), -15);
+ const firstContour = activePart.contours[0];
+ if (!firstContour) return;
+ const rotated = rotateSingleContour(firstContour, -15);
  commitPartChange(activePart.contours.map((c, i) => i === 0 ? rotated : c));
  }}
  className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center space-x-1 active:scale-95 min-h-[44px]"
@@ -6751,7 +6991,9 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </button>
  <button
  onClick={() => {
- const rotated = rotateSingleContour(activePart.contours[0] || ({} as any), 15);
+ const firstContour = activePart.contours[0];
+ if (!firstContour) return;
+ const rotated = rotateSingleContour(firstContour, 15);
  commitPartChange(activePart.contours.map((c, i) => i === 0 ? rotated : c));
  }}
  className="py-2 rounded-lg text-xs font-bold bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center space-x-1 active:scale-95 min-h-[44px]"

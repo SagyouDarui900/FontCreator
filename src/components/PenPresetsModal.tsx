@@ -115,8 +115,8 @@ const CURVE_PRESET_LABELS: Record<string, { name: string; desc: string }> = {
  linear: { name: '標準 (リニア)', desc: '入力と太さが1:1の自然なレスポンス' },
  soft: { name: 'ソフト (高感度)', desc: '軽いタッチでもしっかり太さが出る' },
  hard: { name: 'ハード (重め)', desc: '強く押し込んで太く、細線がブレにくい' },
- 's-curve': { name: 'S字抑揚', desc: 'トメ・ハライのメリハリを劇的強調' },
- delicate: { name: '繊細・細字', desc: '抜き線や微細な筆圧変化を忠実に表現' },
+ 's-curve': { name: 'S字抑揚', desc: 'トメ・ハライの抑揚を強調' },
+ delicate: { name: '繊細・細字', desc: '抜き線や細かな筆圧変化を反映' },
 };
 
 type StudioTab = 'basic' | 'taper' | 'shape' | 'random' | 'type' | 'dynamic' | 'texture' | 'settings';
@@ -198,35 +198,38 @@ export const PenPresetsModal: React.FC<PenPresetsModalProps> = ({
  };
  });
 
- // Sync working preset when modal opens
- useEffect(() => {
- if (isOpen) {
- setWorkingPreset((prev) => ({
- ...prev,
- brushStyle: currentParams.brushStyle,
- brushWidth: currentParams.brushWidth,
- pressureSensitivity: currentParams.pressureSensitivity,
- pressureCurve: currentParams.pressureCurve || prev.pressureCurve,
- autoSmoothBrush: currentParams.autoSmoothBrush,
- smoothStrength: currentParams.smoothStrength,
- smoothPreserveCorners: currentParams.smoothPreserveCorners,
- autoUnionBrush: currentParams.autoUnionBrush,
- smoothingIntensity: currentParams.smoothingIntensity ?? prev.smoothingIntensity,
- taperStartLength: currentParams.taperStartLength ?? prev.taperStartLength,
- taperEndLength: currentParams.taperEndLength ?? prev.taperEndLength,
- taperStartWidth: currentParams.taperStartWidth ?? prev.taperStartWidth,
- taperEndWidth: currentParams.taperEndWidth ?? prev.taperEndWidth,
- forceTaper: currentParams.forceTaper ?? prev.forceTaper,
- forceTaperEnd: currentParams.forceTaperEnd ?? prev.forceTaperEnd,
- taperTipShape: currentParams.taperTipShape ?? prev.taperTipShape,
- nibAngle: currentParams.nibAngle ?? prev.nibAngle,
- nibAspectRatio: currentParams.nibAspectRatio ?? prev.nibAspectRatio,
- nibFollowDirection: currentParams.nibFollowDirection ?? prev.nibFollowDirection,
- speedWidthFactor: currentParams.speedWidthFactor ?? prev.speedWidthFactor,
- jitterSize: currentParams.jitterSize ?? prev.jitterSize,
- }));
- }
- }, [isOpen, currentParams]);
+ const prevIsOpenRef = useRef(false);
+
+	// Sync working preset only when modal transitions from closed to open
+	useEffect(() => {
+		if (isOpen && !prevIsOpenRef.current) {
+			setWorkingPreset((prev) => ({
+				...prev,
+				brushStyle: currentParams.brushStyle,
+				brushWidth: currentParams.brushWidth,
+				pressureSensitivity: currentParams.pressureSensitivity,
+				pressureCurve: currentParams.pressureCurve || prev.pressureCurve,
+				autoSmoothBrush: currentParams.autoSmoothBrush,
+				smoothStrength: currentParams.smoothStrength,
+				smoothPreserveCorners: currentParams.smoothPreserveCorners,
+				autoUnionBrush: currentParams.autoUnionBrush,
+				smoothingIntensity: currentParams.smoothingIntensity ?? prev.smoothingIntensity,
+				taperStartLength: currentParams.taperStartLength ?? prev.taperStartLength,
+				taperEndLength: currentParams.taperEndLength ?? prev.taperEndLength,
+				taperStartWidth: currentParams.taperStartWidth ?? prev.taperStartWidth,
+				taperEndWidth: currentParams.taperEndWidth ?? prev.taperEndWidth,
+				forceTaper: currentParams.forceTaper ?? prev.forceTaper,
+				forceTaperEnd: currentParams.forceTaperEnd ?? prev.forceTaperEnd,
+				taperTipShape: currentParams.taperTipShape ?? prev.taperTipShape,
+				nibAngle: currentParams.nibAngle ?? prev.nibAngle,
+				nibAspectRatio: currentParams.nibAspectRatio ?? prev.nibAspectRatio,
+				nibFollowDirection: currentParams.nibFollowDirection ?? prev.nibFollowDirection,
+				speedWidthFactor: currentParams.speedWidthFactor ?? prev.speedWidthFactor,
+				jitterSize: currentParams.jitterSize ?? prev.jitterSize,
+			}));
+		}
+		prevIsOpenRef.current = isOpen;
+	}, [isOpen, currentParams]);
 
  // Toast feedback helper
  const showToast = useCallback((msg: string) => {
@@ -524,8 +527,22 @@ export const PenPresetsModal: React.FC<PenPresetsModalProps> = ({
  } catch (_) {}
  };
 
- // Preset operations
- const handleSaveAsNewPreset = () => {
+ // Check if currently editing an existing custom preset
+	const isExistingCustomPreset = useMemo(() => {
+		return presets.some((p) => p.id === workingPreset.id && p.isCustom);
+	}, [presets, workingPreset.id]);
+
+	// Overwrite existing preset parameters
+	const handleOverwritePreset = () => {
+		const next = presets.map((p) => (p.id === workingPreset.id ? { ...workingPreset, name: workingPreset.name.trim() || p.name } : p));
+		onUpdatePresets(next);
+		saveUserPenPresets(next);
+		onApplyPreset(workingPreset);
+		showToast(`「${workingPreset.name}」の設定を上書き保存しました`);
+	};
+
+	// Preset operations
+	const handleSaveAsNewPreset = () => {
  const name = workingPreset.name.trim() || `カスタムペン ${presets.length + 1}`;
  const newP: UserPenPreset = {
  ...workingPreset,
@@ -730,17 +747,29 @@ export const PenPresetsModal: React.FC<PenPresetsModalProps> = ({
  className="px-2 py-0.5 text-xs bg-white dark:bg-stone-900 border border-emerald-500 rounded text-stone-900 dark:text-stone-100 font-bold focus:outline-none"
  autoFocus
  onKeyDown={(e) => {
- if (e.key === 'Enter') {
- setWorkingPreset((prev) => ({ ...prev, name: renameInput.trim() || prev.name }));
- setIsRenaming(false);
- }
- }}
- />
- <button
- onClick={() => {
- setWorkingPreset((prev) => ({ ...prev, name: renameInput.trim() || prev.name }));
- setIsRenaming(false);
- }}
+										if (e.key === 'Enter') {
+											const newName = renameInput.trim() || workingPreset.name;
+											setWorkingPreset((prev) => ({ ...prev, name: newName }));
+											setIsRenaming(false);
+											if (presets.some((p) => p.id === workingPreset.id)) {
+												const next = presets.map((p) => (p.id === workingPreset.id ? { ...p, name: newName } : p));
+												onUpdatePresets(next);
+												saveUserPenPresets(next);
+											}
+										}
+									}}
+								/>
+								<button
+									onClick={() => {
+										const newName = renameInput.trim() || workingPreset.name;
+										setWorkingPreset((prev) => ({ ...prev, name: newName }));
+										setIsRenaming(false);
+										if (presets.some((p) => p.id === workingPreset.id)) {
+											const next = presets.map((p) => (p.id === workingPreset.id ? { ...p, name: newName } : p));
+											onUpdatePresets(next);
+											saveUserPenPresets(next);
+										}
+									}}
  className="p-1 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 rounded"
  >
  <Check className="w-3.5 h-3.5" />
@@ -1500,12 +1529,21 @@ export const PenPresetsModal: React.FC<PenPresetsModalProps> = ({
  </button>
 
  <div className="flex items-center space-x-2">
- <button
- onClick={handleSaveAsNewPreset}
- className="px-3 py-1.5 rounded-md text-xs font-semibold border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 transition-colors"
- >
- 新規保存
- </button>
+					{isExistingCustomPreset && (
+						<button
+							onClick={handleOverwritePreset}
+							className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-700 hover:bg-emerald-600 text-white transition-colors flex items-center space-x-1"
+							title="選択中のプリセットに現在の設定を上書き保存します"
+						>
+							<span>上書き保存</span>
+						</button>
+					)}
+					<button
+						onClick={handleSaveAsNewPreset}
+						className="px-3 py-1.5 rounded-md text-xs font-semibold border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 transition-colors"
+					>
+						{isExistingCustomPreset ? '別名で新規保存' : '新規保存'}
+					</button>
  <button
  onClick={handleApplyCurrentAndClose}
  className="px-4 py-1.5 rounded-md text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all active:scale-95 flex items-center space-x-1.5"
@@ -1518,7 +1556,7 @@ export const PenPresetsModal: React.FC<PenPresetsModalProps> = ({
 
  {/* Floating Toast Notification */}
  {toastMessage && (
- <div className="absolute bottom-16 left-1/2 -translate-x-1/2 px-4 py-2 bg-stone-900/90 text-white text-xs font-medium rounded-full shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-none z-50">
+ <div className="absolute bottom-16 left-1/2 -translate-x-1/2 px-4 py-2 bg-stone-900/90 text-white text-xs font-medium rounded-full shadow-lg pointer-events-none z-50">
  {toastMessage}
  </div>
  )}

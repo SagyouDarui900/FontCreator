@@ -55,12 +55,38 @@ body {
   line-break: strict;
   overflow-wrap: break-word;
   word-break: normal;
-  text-wrap: pretty;
+  text-wrap: wrap;
 }
 
 /* Ensure badges, chips, and single-line pill buttons don't wrap awkwardly mid-word */
 .badge, .chip, .btn-nowrap {
   white-space: nowrap;
+}
+
+/* Controls should stay compact without forcing descriptive labels to overflow. */
+button, kbd {
+  text-wrap: nowrap;
+}
+
+button {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.25;
+}
+
+/* Preserve icon size while allowing Japanese labels to shrink or ellipsize. */
+button > span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Form labels and helper text may wrap at natural Japanese boundaries. */
+label {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 /* Custom subtle, clean scrollbars for all scrollable containers */
@@ -91,6 +117,15 @@ body {
   scrollbar-width: thin;
 }
 
+/* Hide scrollbar while maintaining full scrollability */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Helper for smooth touch and mouse horizontal scrollable tab bars */
 .touch-scroll-x {
   overflow-x: auto;
@@ -102,9 +137,31 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(140, 150, 140, 0.45) transparent;
 }
+.custom-scrollbar::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(140, 150, 140, 0.45);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 150, 140, 0.7);
+}
 .dark .custom-scrollbar,
 [data-theme="dark"] .custom-scrollbar {
   scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb,
+[data-theme="dark"] .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 /* Custom high-contrast, prominent range sliders for superior accessibility */
@@ -167,11 +224,38 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* Modal header and description responsive typography */
-
-/* Modal header and description responsive typography */
 p {
   line-height: 1.6;
   overflow-wrap: break-word;
+}
+
+/*
+ * The editor is information-dense by design. On desktop, decorative blur,
+ * oversized shadows, and entrance motion reduce usable visual space without
+ * adding interaction value. Keep mobile overlays unchanged for touch feedback.
+ */
+@media (min-width: 769px) {
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .shadow-2xl,
+  .shadow-xl,
+  .shadow-lg {
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12) !important;
+  }
+
+  .animate-in,
+  .animate-fadeIn,
+  .animate-fade-in,
+  .animate-slideUp,
+  .animate-slide-in-from-left,
+  .animate-slide-in-from-right,
+  .animate-zoom-in,
+  .animate-zoom-in-95 {
+    animation: none !important;
+  }
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -324,5 +408,3 @@ h1, h2, h3, h4, h5, h6 {
   background-color: #0f1712;
   color: #ecfdf5;
 }
-
-

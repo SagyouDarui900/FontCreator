@@ -321,6 +321,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
   const dragStartRef = useRef<{ startX: number; startY: number; initialPosX: number; initialPosY: number } | null>(null);
   const activeBlobUrlRef = useRef<string | null>(null);
   const fontVersionRef = useRef<number>(0);
+  const compileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleDragStart = (e: React.PointerEvent) => {
     if (isDocked) return;
@@ -424,66 +425,86 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
 
   // Compile font dynamically and create @font-face style rule with FontFace API
   useEffect(() => {
-    if (!isOpen) return;
-
-    try {
-      fontVersionRef.current += 1;
-      const currentVer = fontVersionRef.current;
-
-      const { blobUrl } = compileFont(project, {
-        scaleFactor: fontScaleMultiplier,
-        balanceSideBearings: autoBalanceMargins,
-        mergeOverlaps: true,
-        normalizeWinding: true,
-      });
-
-      const newFontName = `CustomTestFont_v${currentVer}_${Date.now()}`;
-
-      if (typeof FontFace !== 'undefined') {
-        const ff = new FontFace(newFontName, `url('${blobUrl}')`);
-        ff.load()
-          .then((loadedFace) => {
-            try {
-              document.fonts.add(loadedFace);
-            } catch (_) {}
-            setFontFamilyName(newFontName);
-            if (activeBlobUrlRef.current && activeBlobUrlRef.current !== blobUrl) {
-              const oldUrl = activeBlobUrlRef.current;
-              setTimeout(() => {
-                try { URL.revokeObjectURL(oldUrl); } catch (_) {}
-              }, 1200);
-            }
-            activeBlobUrlRef.current = blobUrl;
-          })
-          .catch(() => {
-            setFontFamilyName(newFontName);
-          });
-      } else {
-        setFontFamilyName(newFontName);
+    if (!isOpen) {
+      if (compileTimerRef.current) {
+        clearTimeout(compileTimerRef.current);
+        compileTimerRef.current = null;
       }
-
-      const styleId = 'dynamic-preview-font-face';
-      let styleTag = document.getElementById(styleId) as HTMLStyleElement;
-      if (!styleTag) {
-        styleTag = document.createElement('style');
-        styleTag.id = styleId;
-        document.head.appendChild(styleTag);
-      }
-
-      styleTag.textContent = `
-        @font-face {
-          font-family: '${newFontName}';
-          src: url('${blobUrl}') format('truetype');
-          font-weight: normal;
-          font-style: normal;
-        }
-      `;
-      setErrorMsg(null);
-    } catch (err) {
-      console.error('Error compiling test font:', err);
-      setErrorMsg('フォントの生成中にエラーが発生しました。パスの構造を確認してください。');
+      return;
     }
-  }, [isOpen, project, autoBalanceMargins, fontScaleMultiplier]);
+
+    if (compileTimerRef.current) {
+      clearTimeout(compileTimerRef.current);
+    }
+
+    const compileVersion = ++fontVersionRef.current;
+    compileTimerRef.current = setTimeout(() => {
+      compileTimerRef.current = null;
+      try {
+        const { blobUrl } = compileFont(project, {
+          scaleFactor: fontScaleMultiplier,
+          balanceSideBearings: autoBalanceMargins,
+          mergeOverlaps: true,
+          normalizeWinding: true,
+        });
+        const newFontName = `CustomTestFont_v${compileVersion}_${Date.now()}`;
+
+        if (typeof FontFace !== 'undefined') {
+          const ff = new FontFace(newFontName, `url('${blobUrl}')`);
+          ff.load()
+            .then((loadedFace) => {
+              if (compileVersion !== fontVersionRef.current) {
+                URL.revokeObjectURL(blobUrl);
+                return;
+              }
+              document.fonts.add(loadedFace);
+              setFontFamilyName(newFontName);
+              if (activeBlobUrlRef.current && activeBlobUrlRef.current !== blobUrl) {
+                URL.revokeObjectURL(activeBlobUrlRef.current);
+              }
+              activeBlobUrlRef.current = blobUrl;
+            })
+            .catch(() => {
+              if (compileVersion === fontVersionRef.current) {
+                URL.revokeObjectURL(blobUrl);
+                setErrorMsg('プレビュー用フォントの読み込みに失敗しました。');
+              } else {
+                URL.revokeObjectURL(blobUrl);
+              }
+            });
+        } else {
+          setFontFamilyName(newFontName);
+        }
+
+        const styleId = 'dynamic-preview-font-face';
+        let styleTag = document.getElementById(styleId) as HTMLStyleElement;
+        if (!styleTag) {
+          styleTag = document.createElement('style');
+          styleTag.id = styleId;
+          document.head.appendChild(styleTag);
+        }
+        styleTag.textContent = `
+          @font-face {
+            font-family: '${newFontName}';
+            src: url('${blobUrl}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+          }
+        `;
+        setErrorMsg(null);
+      } catch (err) {
+        console.error('Error compiling test font:', err);
+        setErrorMsg('フォントの生成中にエラーが発生しました。パスの構造を確認してください。');
+      }
+    }, 250);
+
+    return () => {
+      if (compileTimerRef.current) {
+        clearTimeout(compileTimerRef.current);
+        compileTimerRef.current = null;
+      }
+    };
+  }, [isOpen, project.updatedAt, autoBalanceMargins, fontScaleMultiplier]);
 
   // Handle batch centering all glyphs in project
   const handleBatchCenterAll = () => {
@@ -497,7 +518,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
 
   // Helper to get glyph metric info
   const getGlyphMetric = (char: string) => {
-    const code = char.charCodeAt(0);
+    const code = char.codePointAt(0) ?? 0;
     const g = project.glyphs[code];
     if (!g || !g.contours || g.contours.length === 0) return null;
     const bbox = getContoursBoundingBox(g.contours);

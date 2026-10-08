@@ -73,6 +73,11 @@ const COLOR_OPTIONS = [
   { name: 'Cyan', hex: '#06b6d4' },
 ];
 
+type OverlayRenderMode = GlyphOverlaySettings['renderMode'];
+
+const isOverlayRenderMode = (value: string): value is OverlayRenderMode =>
+  value === 'outline' || value === 'fill' || value === 'difference';
+
 export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
   isOpen,
   onClose,
@@ -88,6 +93,7 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
 
   // Fullscreen mode state
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [glyphSearchQuery, setGlyphSearchQuery] = useState('');
 
   // Keyboard shortcut listener: Escape and F
   useEffect(() => {
@@ -123,17 +129,30 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
     return glyphList
       .filter((g) => g && g.contours && g.contours.length > 0)
       .map((g) => ({
-        char: g.char || String.fromCharCode(g.unicode),
+        char: g.char || String.fromCodePoint(g.unicode),
         unicode: g.unicode,
-      }));
+      }))
+      .sort((a, b) => a.unicode - b.unicode);
   }, [project.glyphs]);
+
+  const filteredDrawnChars = useMemo(() => {
+    const query = glyphSearchQuery.trim().toLowerCase();
+    const filtered = query
+      ? projectDrawnChars.filter(
+          (g) =>
+            g.char.toLowerCase().includes(query) ||
+            g.unicode.toString(16).toLowerCase().includes(query.replace(/^u\+/i, ''))
+        )
+      : projectDrawnChars;
+    return filtered.slice(0, 240);
+  }, [projectDrawnChars, glyphSearchQuery]);
 
   const handleSelectRefChar = (char: string, unicode?: number) => {
     onChangeOverlaySettings((prev) => ({
       ...prev,
       enabled: true,
       referenceChar: char,
-      referenceUnicode: unicode ?? char.charCodeAt(0),
+      referenceUnicode: unicode ?? (char.codePointAt(0) ?? 0),
     }));
     onShowToast?.(`「${char}」を比較参照文字に設定しました`, 'info');
   };
@@ -167,14 +186,14 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
               ? 'w-screen h-screen rounded-none border-none shadow-none bg-white text-stone-800'
               : 'w-screen h-screen rounded-none border-none shadow-none bg-[#141c16] text-emerald-100'
             : isLight
-            ? 'w-full max-w-2xl xl:max-w-3xl rounded-2xl shadow-2xl max-h-[92vh] border border-stone-200 bg-white text-stone-800'
-            : 'w-full max-w-2xl xl:max-w-3xl rounded-2xl shadow-2xl max-h-[92vh] border border-[#25362b] bg-[#141c16] text-emerald-100'
+            ? 'w-full max-w-2xl xl:max-w-3xl rounded-xl shadow-xl max-h-[90vh] border border-stone-200 bg-white text-stone-800'
+            : 'w-full max-w-2xl xl:max-w-3xl rounded-xl shadow-xl max-h-[90vh] border border-[#25362b] bg-[#141c16] text-emerald-100'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div
-          className={`px-5 py-4 flex items-center justify-between border-b shrink-0 ${
+          className={`px-3.5 py-3 flex items-center justify-between border-b shrink-0 ${
             isLight ? 'bg-stone-50/80 border-stone-200' : 'bg-[#101712] border-[#25362b]'
           }`}
         >
@@ -243,10 +262,10 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 sm:space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-3">
           {/* Master Enable Switch */}
           <div
-            className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
+            className={`p-3 rounded-lg border flex items-center justify-between transition-all ${
               overlaySettings.enabled
                 ? 'bg-sky-50/70 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800/60'
                 : isLight
@@ -288,7 +307,7 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
             <div className="flex flex-wrap gap-2">
               {recommendedChars.map((ch) => {
                 const isSelected = overlaySettings.referenceChar === ch;
-                const isDrawn = project.glyphs[ch.charCodeAt(0)]?.contours?.length > 0;
+                const isDrawn = project.glyphs[ch.codePointAt(0) ?? 0]?.contours?.length > 0;
                 return (
                   <button
                     key={ch}
@@ -314,14 +333,30 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
 
           {/* Project Drawn Glyphs Selector */}
           <div>
-            <label className="text-xs font-bold block mb-2 opacity-90">
-              プロジェクト内の作成済み文字から選択 ({projectDrawnChars.length}文字)
-            </label>
-            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 rounded-xl border border-stone-200 dark:border-[#25362b] bg-stone-50/50 dark:bg-[#101712]/50">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <label className="text-xs font-bold opacity-90">
+                プロジェクト内の作成済み文字から選択 ({projectDrawnChars.length}文字)
+              </label>
+              <input
+                type="search"
+                value={glyphSearchQuery}
+                onChange={(e) => setGlyphSearchQuery(e.target.value)}
+                placeholder="文字 / U+"
+                aria-label="作成済み文字を検索"
+                className={`w-24 sm:w-32 px-2 py-1 rounded-md border text-[11px] outline-hidden ${
+                  isLight
+                    ? 'bg-white border-stone-200 text-stone-800 placeholder:text-stone-400'
+                    : 'bg-[#101712] border-[#25362b] text-stone-200 placeholder:text-stone-500'
+                }`}
+              />
+            </div>
+            <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto p-1.5 rounded-lg border border-stone-200 dark:border-[#25362b] bg-stone-50/50 dark:bg-[#101712]/50">
               {projectDrawnChars.length === 0 ? (
                 <div className="text-xs text-stone-400 p-2">まだ作成済みの文字がありません</div>
+              ) : filteredDrawnChars.length === 0 ? (
+                <div className="text-xs text-stone-400 p-2">一致する作成済み文字がありません</div>
               ) : (
-                projectDrawnChars.map((g) => {
+                filteredDrawnChars.map((g) => {
                   const isSelected =
                     overlaySettings.referenceChar === g.char ||
                     overlaySettings.referenceUnicode === g.unicode;
@@ -329,7 +364,7 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
                     <button
                       key={g.unicode}
                       onClick={() => handleSelectRefChar(g.char, g.unicode)}
-                      className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all ${
+                      className={`px-2 py-0.5 rounded-md border text-xs font-bold transition-all ${
                         isSelected
                           ? 'bg-sky-600 text-white border-sky-600 '
                           : isLight
@@ -343,13 +378,18 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
                 })
               )}
             </div>
+            {filteredDrawnChars.length < projectDrawnChars.length && (
+              <p className="mt-1 text-[10px] text-stone-400">
+                {filteredDrawnChars.length}件を表示中。検索で絞り込めます。
+              </p>
+            )}
           </div>
 
           {/* Render Mode & Color Options */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Render Mode */}
             <div
-              className={`p-4 rounded-xl border ${
+              className={`p-3 rounded-lg border ${
                 isLight ? 'bg-stone-50/60 border-stone-200' : 'bg-[#162018] border-[#25362b]'
               }`}
             >
@@ -366,7 +406,9 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
                   <button
                     key={m.id}
                     onClick={() =>
-                      onChangeOverlaySettings((prev) => ({ ...prev, renderMode: m.id as any }))
+                      onChangeOverlaySettings((prev) =>
+                        isOverlayRenderMode(m.id) ? { ...prev, renderMode: m.id } : prev
+                      )
                     }
                     className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all ${
                       overlaySettings.renderMode === m.id
@@ -384,7 +426,7 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
 
             {/* Color Palette */}
             <div
-              className={`p-4 rounded-xl border ${
+              className={`p-3 rounded-lg border ${
                 isLight ? 'bg-stone-50/60 border-stone-200' : 'bg-[#162018] border-[#25362b]'
               }`}
             >
@@ -417,7 +459,7 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
 
           {/* Opacity & Fine Offset Sliders */}
           <div
-            className={`p-4 rounded-xl border space-y-3 ${
+            className={`p-3 rounded-lg border space-y-2.5 ${
               isLight ? 'bg-stone-50/60 border-stone-200' : 'bg-[#162018] border-[#25362b]'
             }`}
           >
@@ -520,7 +562,7 @@ export const GlyphCompareModal: React.FC<GlyphCompareModalProps> = ({
 
         {/* Footer */}
         <div
-          className={`p-4 border-t flex items-center justify-between shrink-0 ${
+          className={`p-3 border-t flex items-center justify-between shrink-0 ${
             isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#101712] border-[#25362b]'
           }`}
         >

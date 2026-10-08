@@ -48,6 +48,21 @@ import { exportProjectJsonFile } from '../utils/storageManager';
 import { ExportModal } from './ExportModal';
 import { PWAInstallButton } from './PWAInstallButton';
 
+interface VendorDocument extends Document {
+ webkitFullscreenElement?: Element | null;
+ mozFullScreenElement?: Element | null;
+ msFullscreenElement?: Element | null;
+ webkitExitFullscreen?: () => Promise<void>;
+ mozCancelFullScreen?: () => Promise<void>;
+ msExitFullscreen?: () => Promise<void>;
+}
+
+interface VendorDocumentElement extends HTMLElement {
+ webkitRequestFullscreen?: () => Promise<void>;
+ mozRequestFullScreen?: () => Promise<void>;
+ msRequestFullscreen?: () => Promise<void>;
+}
+
 interface HeaderProps {
  project: FontProject;
  setProject: React.Dispatch<React.SetStateAction<FontProject>>;
@@ -133,6 +148,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  onChangeTheme,
  onShowToast,
 }) => {
+ const vendorDocument = document as VendorDocument;
  const fileInputRef = useRef<HTMLInputElement>(null);
  const projectInputRef = useRef<HTMLInputElement>(null);
  const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -148,9 +164,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  if (typeof document === 'undefined') return false;
  return !!(
  document.fullscreenElement ||
- (document as any).webkitFullscreenElement ||
- (document as any).mozFullScreenElement ||
- (document as any).msFullscreenElement
+ vendorDocument.webkitFullscreenElement ||
+ vendorDocument.mozFullScreenElement ||
+ vendorDocument.msFullscreenElement
  );
  });
 
@@ -158,9 +174,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  const handleFullscreenChange = () => {
  const isFs = !!(
  document.fullscreenElement ||
- (document as any).webkitFullscreenElement ||
- (document as any).mozFullScreenElement ||
- (document as any).msFullscreenElement
+ vendorDocument.webkitFullscreenElement ||
+ vendorDocument.mozFullScreenElement ||
+ vendorDocument.msFullscreenElement
  );
  setIsFullscreen(isFs);
  };
@@ -175,13 +191,13 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  const toggleFullscreen = () => {
  const isCurrentlyFs = !!(
  document.fullscreenElement ||
- (document as any).webkitFullscreenElement ||
- (document as any).mozFullScreenElement ||
- (document as any).msFullscreenElement
+ vendorDocument.webkitFullscreenElement ||
+ vendorDocument.mozFullScreenElement ||
+ vendorDocument.msFullscreenElement
  );
 
  if (!isCurrentlyFs) {
- const docEl = document.documentElement as any;
+ const docEl = document.documentElement as VendorDocumentElement;
  const requestFs =
  docEl.requestFullscreen ||
  docEl.webkitRequestFullscreen ||
@@ -199,7 +215,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  onToggleZenMode();
  }
  } else {
- const doc = document as any;
+ const doc = vendorDocument;
  const exitFs =
  doc.exitFullscreen ||
  doc.webkitExitFullscreen ||
@@ -328,7 +344,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
 
  return (
  <header
- className={`min-h-[44px] h-[calc(2.75rem+env(safe-area-inset-top,0px))] sm:h-[calc(3rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] border-b flex items-center justify-between px-2 sm:px-3 shrink-0 z-40 select-none relative transition-colors overflow-hidden gap-1.5 sm:gap-2 ${themeClasses.headerBg}`}
+ className={`min-h-[44px] h-[calc(2.75rem+env(safe-area-inset-top,0px))] sm:h-[calc(3rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] border-b flex items-center justify-between px-2 sm:px-3 shrink-0 z-40 select-none relative transition-colors overflow-x-auto no-scrollbar gap-1.5 sm:gap-2 ${themeClasses.headerBg}`}
  >
  {/* Hidden file inputs */}
  <input
@@ -556,7 +572,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  <div className="relative shrink-0" ref={toolsMenuRef}>
  <button
  onClick={() => setShowToolsMenu(!showToolsMenu)}
- className={`px-2 sm:px-2.5 py-1 sm:py-1.5 h-8 sm:h-8.5 rounded-lg sm:rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border active:scale-95 shrink-0 ${
+ className={`px-2 sm:px-2.5 py-1 sm:py-1.5 h-8 rounded-lg sm:rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border active:scale-95 shrink-0 ${
  showToolsMenu
  ? isLight
  ? 'bg-emerald-100 text-emerald-950 border-emerald-300 ring-2 ring-emerald-500/20'
@@ -692,7 +708,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform text-xs font-bold">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform text-xs font-bold">
  <Grid className="w-3.5 h-3.5" />
  </div>
  <div className="min-w-0 flex-1">
@@ -716,7 +732,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <Shapes className="w-4 h-4" />
  </div>
  <div className="min-w-0 flex-1">
@@ -740,7 +756,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-stone-200 dark:bg-[#23352b] text-stone-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <Sliders className="w-4 h-4" />
  </div>
  <div className="min-w-0 flex-1">
@@ -764,7 +780,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <Layers className="w-4 h-4" />
  </div>
  <div className="min-w-0 flex-1">
@@ -787,7 +803,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <FileCode className="w-4 h-4" />
  </div>
  <div className="min-w-0 flex-1">
@@ -819,7 +835,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <Wand2 className="w-4 h-4" />
  </div>
  <div className="min-w-0 flex-1">
@@ -867,7 +883,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <Sliders className="w-4 h-4" />
  </div>
  <div className="min-w-0 flex-1">
@@ -892,7 +908,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <ArrowLeftRight className="w-4 h-4" />
  </div>
  <div className="min-w-0 flex-1">
@@ -917,7 +933,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <ShieldCheck className="w-4 h-4" />
  </div>
  <div className="min-w-0 flex-1">
@@ -942,7 +958,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <Eye className="w-4 h-4" />
  </div>
  <div className="min-w-0 flex-1">
@@ -967,7 +983,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <FileCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
  </div>
  <div className="min-w-0 flex-1">
@@ -992,7 +1008,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
  <Grid className="w-4 h-4 text-amber-600 dark:text-amber-400" />
  </div>
  <div className="min-w-0 flex-1">
@@ -1161,7 +1177,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  <div className="relative shrink-0" ref={themeMenuRef}>
  <button
  onClick={() => setShowThemeMenu((prev) => !prev)}
- className={`p-1.5 sm:p-2 h-8 sm:h-8.5 rounded-lg sm:rounded-xl transition-all flex items-center space-x-1 border ${
+ className={`p-1.5 sm:p-2 h-8 rounded-lg sm:rounded-xl transition-all flex items-center space-x-1 border ${
  isLight
  ? 'bg-stone-100/80 hover:bg-stone-200/80 text-stone-700 border-stone-200/90'
  : 'bg-[#18241d] hover:bg-[#203027] text-emerald-300 border-[#25362b]'
@@ -1316,7 +1332,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  {/* Export Font Modal Prominent Trigger */}
  <button
  onClick={handleExportTtf}
- className={`px-2.5 sm:px-3 py-1 sm:py-1.5 h-8 sm:h-8.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 shrink-0 shadow-xs ${themeClasses.accentBtn}`}
+ className={`px-2.5 sm:px-3 py-1 sm:py-1.5 h-8 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 shrink-0 shadow-xs ${themeClasses.accentBtn}`}
  title="OSやiPad・アプリで使えるフォントを出力 (TTF/OTF/WOFF)"
  >
  <Download className="w-3.5 h-3.5 shrink-0" />

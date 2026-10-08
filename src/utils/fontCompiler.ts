@@ -329,6 +329,23 @@ export function compileFont(
 
   const upm = project.metadata.unitsPerEm || DEFAULT_UPM;
   const baselineY = project.metadata.ascender || Math.round(upm * 0.8);
+  const featureConfig = project.openTypeFeatures;
+  const openTypeFeaturesEnabled = featureConfig?.enabled !== false;
+  const verticalWritingEnabled = openTypeFeaturesEnabled && featureConfig?.verticalWriting?.enabled !== false;
+  const enabledVerticalSubstitutions = new Set(
+    (featureConfig?.verticalWriting?.substitutions || [])
+      .filter((sub) => sub.enabled)
+      .map((sub) => `${sub.sourceUnicode}:${sub.vertUnicode}`)
+  );
+  const configuredKerning: Record<string, number> = { ...(project.kerning || {}) };
+
+  if (openTypeFeaturesEnabled) {
+    for (const pair of featureConfig?.customKerningPairs || []) {
+      if (!pair.enabled || !Number.isFinite(pair.amount)) continue;
+      const key = `${String.fromCodePoint(pair.firstUnicode)},${String.fromCodePoint(pair.secondUnicode)}`;
+      configuredKerning[key] = pair.amount;
+    }
+  }
 
   // Add all user defined glyphs
   const glyphEntries = Object.values(project.glyphs);
@@ -493,11 +510,21 @@ export function compileFont(
   const vertSubstPairs: { srcUnicode: number; targetUnicode: number; srcIndex?: number; vertIndex?: number }[] = [];
 
   for (const deriv of verticalDerivations) {
-    if (project.glyphs[deriv.sourceUnicode]) {
+    const substitutionKey = `${deriv.sourceUnicode}:${deriv.targetUnicode}`;
+    const explicitlyConfigured = featureConfig?.verticalWriting?.substitutions?.length > 0;
+    const substitutionEnabled =
+      verticalWritingEnabled &&
+      (!explicitlyConfigured || enabledVerticalSubstitutions.has(substitutionKey));
+
+    if (project.glyphs[deriv.sourceUnicode] && substitutionEnabled) {
       vertSubstPairs.push({ srcUnicode: deriv.sourceUnicode, targetUnicode: deriv.targetUnicode });
     }
 
-    if (!addedUnicodes.has(deriv.targetUnicode) && project.glyphs[deriv.sourceUnicode]) {
+    if (
+      substitutionEnabled &&
+      !addedUnicodes.has(deriv.targetUnicode) &&
+      project.glyphs[deriv.sourceUnicode]
+    ) {
       const srcGlyph = project.glyphs[deriv.sourceUnicode];
       if (srcGlyph.contours && srcGlyph.contours.length > 0) {
         const upm = project.metadata.unitsPerEm || DEFAULT_UPM;
@@ -732,14 +759,14 @@ export function compileFont(
   // -------------------------------------------------------------
   // Kerning Pairs Processing (TrueType / OpenType kern table)
   // -------------------------------------------------------------
-  if (project.kerning && Object.keys(project.kerning).length > 0) {
+  if (Object.keys(configuredKerning).length > 0) {
     if (!font.kerningPairs) {
       font.kerningPairs = {};
     }
 
     const validKerningPairs: { leftIndex: number; rightIndex: number; value: number }[] = [];
 
-    for (const [pairKey, val] of Object.entries(project.kerning)) {
+    for (const [pairKey, val] of Object.entries(configuredKerning)) {
       if (typeof val !== 'number' || Math.abs(val) < 0.1) continue;
 
       let leftChar = '';
@@ -831,7 +858,13 @@ export function compileFont(
           subtableFields.push({ name: `value_${i}`, type: 'SHORT', value: pair.value });
         }
 
-        const OpentypeTable = (opentype as any).Table;
+        const opentypeRuntime = opentype as unknown as {
+          ['Table']?: new (name: string, fields: unknown[]) => unknown;
+        };
+        const OpentypeTable = opentypeRuntime['Table'];
+        if (!OpentypeTable) {
+          throw new Error('opentype.js Table API is unavailable; retaining kerningPairs fallback');
+        }
         const subtable = new OpentypeTable('kernSubtable', subtableFields);
         (font as any).tables.kern = new OpentypeTable('kern', [
           { name: 'version', type: 'USHORT', value: 0 },
@@ -890,6 +923,61 @@ export function compileFont(
       }
     } catch (gsubErr) {
       console.warn('Failed to generate OpenType GSUB vertical writing table:', gsubErr);
+    }
+  }
+
+  // Apply user-configured ligatures and vertical substitutions to the exported GSUB table.
+  if (font.substitution && openTypeFeaturesEnabled) {
+    const substitutionApi = font.substitution as unknown as {
+      add?: (
+        feature: string,
+        substitution: { sub: number[]; by: number },
+        script: string
+      ) => void;
+      addSingle?: (feature: string, substitution: { sub: number; by: number }, script: string) => void;
+    };
+    const glyphIndexByUnicode = new Map<number, number>();
+    for (let i = 0; i < font.glyphs.length; i++) {
+      const glyph = font.glyphs.get(i);
+      if (typeof glyph.unicode === 'number' && glyph.unicode > 0) {
+        glyphIndexByUnicode.set(glyph.unicode, i);
+      }
+      for (const unicode of glyph.unicodes || []) {
+        if (typeof unicode === 'number' && unicode > 0) {
+          glyphIndexByUnicode.set(unicode, i);
+        }
+      }
+    }
+
+    const scripts = ['DFLT', 'latn', 'hani', 'kana'];
+    if (typeof substitutionApi.addSingle === 'function') {
+      for (const sub of featureConfig?.verticalWriting?.substitutions || []) {
+        if (!sub.enabled) continue;
+        const sourceIndex = glyphIndexByUnicode.get(sub.sourceUnicode);
+        const targetIndex = glyphIndexByUnicode.get(sub.vertUnicode);
+        if (sourceIndex === undefined || targetIndex === undefined || sourceIndex === targetIndex) continue;
+        for (const script of scripts) {
+          substitutionApi.addSingle('vert', { sub: sourceIndex, by: targetIndex }, script);
+        }
+      }
+    }
+
+    if (typeof substitutionApi.add === 'function') {
+      for (const ligature of featureConfig?.ligatures || []) {
+        if (!ligature.enabled || ligature.inputChars.length < 2) continue;
+        const sourceIndices = ligature.inputChars
+          .map((char) => char.codePointAt(0))
+          .map((unicode) => (unicode === undefined ? undefined : glyphIndexByUnicode.get(unicode)));
+        const targetIndex = glyphIndexByUnicode.get(ligature.substituteUnicode);
+        if (sourceIndices.some((index) => index === undefined) || targetIndex === undefined) continue;
+        for (const script of scripts) {
+          substitutionApi.add(
+            ligature.type,
+            { sub: sourceIndices as number[], by: targetIndex },
+            script
+          );
+        }
+      }
     }
   }
 
@@ -1257,4 +1345,3 @@ export function balanceProjectGlyphMargins(project: FontProject): { project: Fon
     modifiedCount,
   };
 }
-

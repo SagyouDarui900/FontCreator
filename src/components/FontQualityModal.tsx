@@ -82,6 +82,30 @@ interface FontQualityModalProps {
 }
 
 type TabFilter = 'all' | QualityIssueType;
+type EqualizationMode = 'balanced' | 'boost_thin' | 'shrink_thick';
+type OptimizationScope = 'all' | 'excessive' | 'filtered';
+type EqualizationScope = 'all' | 'uneven' | 'filtered';
+type OptimizationLevel = 'mild' | 'normal' | 'strong';
+type ExtremaSensitivity = 'normal' | 'strict' | 'fine';
+type ExtremaScope = 'all' | 'missing' | 'filtered';
+
+const isEqualizationMode = (value: string): value is EqualizationMode =>
+  value === 'balanced' || value === 'boost_thin' || value === 'shrink_thick';
+
+const isOptimizationScope = (value: string): value is OptimizationScope =>
+  value === 'all' || value === 'excessive' || value === 'filtered';
+
+const isEqualizationScope = (value: string): value is EqualizationScope =>
+  value === 'all' || value === 'uneven' || value === 'filtered';
+
+const isOptimizationLevel = (value: string): value is OptimizationLevel =>
+  value === 'mild' || value === 'normal' || value === 'strong';
+
+const isExtremaSensitivity = (value: string): value is ExtremaSensitivity =>
+  value === 'normal' || value === 'strict' || value === 'fine';
+
+const isExtremaScope = (value: string): value is ExtremaScope =>
+  value === 'all' || value === 'missing' || value === 'filtered';
 
 export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   isOpen,
@@ -103,24 +127,24 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
 
   // Node Optimization panel state
   const [isOptimizePanelOpen, setIsOptimizePanelOpen] = useState<boolean>(false);
-  const [optLevel, setOptLevel] = useState<'mild' | 'normal' | 'strong'>('normal');
-  const [optScope, setOptScope] = useState<'all' | 'excessive' | 'filtered'>('all');
+  const [optLevel, setOptLevel] = useState<OptimizationLevel>('normal');
+  const [optScope, setOptScope] = useState<OptimizationScope>('all');
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
   const [lastOptimizationResult, setLastOptimizationResult] = useState<BatchNodeOptimizationResult | null>(null);
 
   // Stroke Equalization panel state
   const [isEqualizePanelOpen, setIsEqualizePanelOpen] = useState<boolean>(false);
-  const [eqMode, setEqMode] = useState<'balanced' | 'boost_thin' | 'shrink_thick'>('balanced');
+  const [eqMode, setEqMode] = useState<EqualizationMode>('balanced');
   const [eqStrength, setEqStrength] = useState<number>(0.65);
-  const [eqScope, setEqScope] = useState<'all' | 'uneven' | 'filtered'>('all');
+  const [eqScope, setEqScope] = useState<EqualizationScope>('all');
   const [isEqualizing, setIsEqualizing] = useState<boolean>(false);
   const [lastEqualizationResult, setLastEqualizationResult] = useState<BatchStrokeEqualizationResult | null>(null);
 
   // Extrema Optimization panel state
   const [isExtremaPanelOpen, setIsExtremaPanelOpen] = useState<boolean>(false);
   const [extAlignAxis, setExtAlignAxis] = useState<boolean>(true);
-  const [extSensitivity, setExtSensitivity] = useState<'normal' | 'strict' | 'fine'>('normal');
-  const [extScope, setExtScope] = useState<'all' | 'missing' | 'filtered'>('all');
+  const [extSensitivity, setExtSensitivity] = useState<ExtremaSensitivity>('normal');
+  const [extScope, setExtScope] = useState<ExtremaScope>('all');
   const [isOptimizingExtrema, setIsOptimizingExtrema] = useState<boolean>(false);
   const [lastExtremaResult, setLastExtremaResult] = useState<BatchExtremaOptimizationResult | null>(null);
 
@@ -156,6 +180,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const diagSearchInputRef = React.useRef<HTMLInputElement>(null);
+  const scanTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const notify = (text: string, type: 'success' | 'info' | 'warning' | 'error' = 'info') => {
     if (onShowToast) {
@@ -336,11 +361,32 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   }, [isOpen, isFullscreen, onClose, runScan, runDiagnostics, excessiveNodesUnicodes, mainView]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+        scanTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Quality checks are geometry-heavy. Coalesce rapid editor updates into one scan
+    // so pointer-driven edits do not start overlapping full-project analyses.
+    if (scanTimerRef.current) {
+      clearTimeout(scanTimerRef.current);
+    }
+    scanTimerRef.current = setTimeout(() => {
+      scanTimerRef.current = null;
       runScan();
       runDiagnostics();
-    }
-  }, [isOpen, project, diagScope]);
+    }, 350);
+
+    return () => {
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+        scanTimerRef.current = null;
+      }
+    };
+  }, [isOpen, project.updatedAt, diagScope]);
 
   // Filtered issue list
   const filteredIssues = useMemo(() => {
@@ -830,13 +876,13 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
               ? 'w-screen h-screen rounded-none border-none shadow-none bg-white text-stone-900'
               : 'w-screen h-screen rounded-none border-none shadow-none bg-[#151f18] text-emerald-100'
             : isLight
-            ? 'w-full max-w-5xl xl:max-w-6xl rounded-2xl border border-stone-200 shadow-2xl max-h-[94vh] bg-white text-stone-900 '
-            : 'w-full max-w-5xl xl:max-w-6xl rounded-2xl border border-[#25362b] shadow-2xl max-h-[94vh] bg-[#151f18] text-emerald-100 '
+            ? 'w-full max-w-4xl xl:max-w-5xl rounded-xl border border-stone-200 shadow-xl max-h-[90vh] bg-white text-stone-900 '
+            : 'w-full max-w-4xl xl:max-w-5xl rounded-xl border border-[#25362b] shadow-xl max-h-[90vh] bg-[#151f18] text-emerald-100 '
         }`}
       >
         {/* Header */}
         <div
-          className={`flex flex-col md:flex-row md:items-center justify-between gap-2.5 px-3 py-3 sm:px-5 sm:py-4 border-b ${
+          className={`flex flex-col md:flex-row md:items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3 border-b ${
             isLight ? 'bg-stone-50/80 border-stone-200' : 'bg-[#111a14] border-[#25362b]'
           }`}
         >
@@ -1097,7 +1143,11 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => setEqMode(m.id as any)}
+                      onClick={() => {
+                        if (isEqualizationMode(m.id)) {
+                          setEqMode(m.id);
+                        }
+                      }}
                       className={`w-full text-left p-2 rounded-lg border transition-all text-xs ${
                         eqMode === m.id
                           ? isLight
@@ -1151,7 +1201,11 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                     <button
                       key={sc.id}
                       type="button"
-                      onClick={() => setEqScope(sc.id as any)}
+                      onClick={() => {
+                        if (isEqualizationScope(sc.id)) {
+                          setEqScope(sc.id);
+                        }
+                      }}
                       className={`w-full text-left p-2 rounded-lg border transition-all text-xs ${
                         eqScope === sc.id
                           ? isLight
@@ -1347,7 +1401,11 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                     <button
                       key={lvl.id}
                       type="button"
-                      onClick={() => setOptLevel(lvl.id as any)}
+                      onClick={() => {
+                        if (isOptimizationLevel(lvl.id)) {
+                          setOptLevel(lvl.id);
+                        }
+                      }}
                       className={`w-full text-left p-2 rounded-lg border transition-all text-xs ${
                         optLevel === lvl.id
                           ? isLight
@@ -1401,7 +1459,11 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                     <button
                       key={sc.id}
                       type="button"
-                      onClick={() => setOptScope(sc.id as any)}
+                      onClick={() => {
+                        if (isOptimizationScope(sc.id)) {
+                          setOptScope(sc.id);
+                        }
+                      }}
                       className={`w-full text-left p-2 rounded-lg border transition-all text-xs ${
                         optScope === sc.id
                           ? isLight
@@ -1640,7 +1702,11 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => setExtSensitivity(s.id as any)}
+                      onClick={() => {
+                        if (isExtremaSensitivity(s.id)) {
+                          setExtSensitivity(s.id);
+                        }
+                      }}
                       className={`w-full text-left p-2 rounded-lg border transition-all text-xs ${
                         extSensitivity === s.id
                           ? isLight
@@ -1695,7 +1761,11 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                       <button
                         key={sc.id}
                         type="button"
-                        onClick={() => setExtScope(sc.id as any)}
+                        onClick={() => {
+                          if (isExtremaScope(sc.id)) {
+                            setExtScope(sc.id);
+                          }
+                        }}
                         className={`w-full text-left p-1.5 rounded-lg border transition-all text-xs ${
                           extScope === sc.id
                             ? isLight
@@ -1793,7 +1863,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
           <>
             {/* Top Quality Health Summary & Compact Controls */}
             <div
-              className={`p-3 sm:p-4 border-b shrink-0 transition-colors space-y-2.5 ${
+              className={`p-2.5 sm:p-3 border-b shrink-0 transition-colors space-y-2 ${
                 isLight ? 'bg-stone-50/70 border-stone-200' : 'bg-[#131d16] border-[#223326]'
               }`}
             >

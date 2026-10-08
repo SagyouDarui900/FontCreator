@@ -319,6 +319,10 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState<boolean>(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategoryId, searchQuery, statusFilter, gridDensity]);
+
   // Close custom category dropdown on outside click
   useEffect(() => {
     const handleCategoryClickOutside = (e: MouseEvent) => {
@@ -715,7 +719,9 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
               setSidebarWidth(330);
               try {
                 localStorage.setItem('fontforge_sidebar_width', '330');
-              } catch (_) {}
+              } catch (error) {
+                console.warn('Failed to persist sidebar width:', error);
+              }
             }}
           >
             <div
@@ -775,7 +781,11 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   <button
                     onClick={() => {
                       setSidebarWidth(250);
-                      try { localStorage.setItem('fontforge_sidebar_width', '250'); } catch (_) {}
+                      try {
+                        localStorage.setItem('fontforge_sidebar_width', '250');
+                      } catch (error) {
+                        console.warn('Failed to persist sidebar width:', error);
+                      }
                     }}
                     title="幅: 狭め (250px) - キャンバス重視"
                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
@@ -793,7 +803,11 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   <button
                     onClick={() => {
                       setSidebarWidth(330);
-                      try { localStorage.setItem('fontforge_sidebar_width', '330'); } catch (_) {}
+                      try {
+                        localStorage.setItem('fontforge_sidebar_width', '330');
+                      } catch (error) {
+                        console.warn('Failed to persist sidebar width:', error);
+                      }
                     }}
                     title="幅: 標準 (330px)"
                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
@@ -811,7 +825,11 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   <button
                     onClick={() => {
                       setSidebarWidth(440);
-                      try { localStorage.setItem('fontforge_sidebar_width', '440'); } catch (_) {}
+                      try {
+                        localStorage.setItem('fontforge_sidebar_width', '440');
+                      } catch (error) {
+                        console.warn('Failed to persist sidebar width:', error);
+                      }
                     }}
                     title="幅: 広め (440px) - 一覧性重視"
                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${

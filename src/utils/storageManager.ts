@@ -213,7 +213,9 @@ export function getLastBackupTimestamp(): number | null {
       const num = parseInt(raw, 10);
       if (!isNaN(num) && num > 0) return num;
     }
-  } catch (_) {}
+  } catch (error) {
+    console.warn('Failed to read last backup timestamp:', error);
+  }
   return null;
 }
 
@@ -224,7 +226,9 @@ export function setLastBackupTimestamp(timestamp: number = Date.now()): void {
   try {
     localStorage.setItem(LAST_BACKUP_TIMESTAMP_KEY, String(timestamp));
     window.dispatchEvent(new Event('storage'));
-  } catch (_) {}
+  } catch (error) {
+    console.warn('Failed to persist last backup timestamp:', error);
+  }
 }
 
 /**
@@ -237,7 +241,9 @@ export function getLastAutoSaveTimestamp(): number | null {
       const num = parseInt(raw, 10);
       if (!isNaN(num) && num > 0) return num;
     }
-  } catch (_) {}
+  } catch (error) {
+    console.warn('Failed to read last autosave timestamp:', error);
+  }
   return null;
 }
 
@@ -247,7 +253,9 @@ export function getLastAutoSaveTimestamp(): number | null {
 export function setLastAutoSaveTimestamp(timestamp: number = Date.now()): void {
   try {
     localStorage.setItem(LAST_AUTOSAVE_TIMESTAMP_KEY, String(timestamp));
-  } catch (_) {}
+  } catch (error) {
+    console.warn('Failed to persist last autosave timestamp:', error);
+  }
 }
 
 /**
@@ -660,4 +668,3 @@ export function exportGlyphJsonFile(
     return { success: false, filename: '', sizeBytes: 0 };
   }
 }
-

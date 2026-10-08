@@ -127,12 +127,17 @@ export async function saveCustomParts(parts: CustomPart[]): Promise<boolean> {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
 
-    // Clear existing records and write fresh list
-    await new Promise<void>((resolve, reject) => {
-      const clearReq = store.clear();
-      clearReq.onsuccess = () => resolve();
-      clearReq.onerror = () => reject(clearReq.error);
+    const existingKeys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+      const keysReq = store.getAllKeys();
+      keysReq.onsuccess = () => resolve(keysReq.result);
+      keysReq.onerror = () => reject(keysReq.error);
     });
+    const nextIds = new Set(compacted.map((item) => item.id));
+    for (const key of existingKeys) {
+      if (typeof key === 'string' && !nextIds.has(key)) {
+        store.delete(key);
+      }
+    }
 
     for (const item of compacted) {
       store.put(item);

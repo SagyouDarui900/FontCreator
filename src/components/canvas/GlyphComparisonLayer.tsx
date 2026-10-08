@@ -27,7 +27,7 @@ export const GlyphComparisonLayer: React.FC<GlyphComparisonLayerProps> = React.m
       }
 
       if (overlaySettings.referenceChar) {
-        const u = overlaySettings.referenceChar.charCodeAt(0);
+        const u = overlaySettings.referenceChar.codePointAt(0) ?? 0;
         if (project.glyphs[u]) return project.glyphs[u];
         // Search through all glyphs
         const glyphList = Object.values(project.glyphs) as GlyphData[];

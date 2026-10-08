@@ -17,6 +17,23 @@ import { ThemeMode, isLightTheme } from '../utils/theme';
 import { normalizeGlyph, getContoursBoundingBox, contoursToSvgPath, normalizeGlyphContoursWinding } from '../utils/pathUtils';
 import { KANA_PAIRS } from '../data/unicodeTables';
 
+type AlignHorizontal = 'center' | 'keep';
+type AlignVertical = 'center' | 'baseline' | 'keep';
+type SizePreset = 'standard' | 'large' | 'kana' | 'compact' | 'custom';
+
+const isAlignHorizontal = (value: string): value is AlignHorizontal =>
+  value === 'center' || value === 'keep';
+
+const isAlignVertical = (value: string): value is AlignVertical =>
+  value === 'center' || value === 'baseline' || value === 'keep';
+
+const isSizePreset = (value: string): value is SizePreset =>
+  value === 'standard' ||
+  value === 'large' ||
+  value === 'kana' ||
+  value === 'compact' ||
+  value === 'custom';
+
 interface BatchNormalizeModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,11 +58,11 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
   const isLight = isLightTheme(theme);
 
   const [scope, setScope] = useState<TargetScope>('all');
-  const [sizePreset, setSizePreset] = useState<'standard' | 'large' | 'kana' | 'compact' | 'custom'>('standard');
+  const [sizePreset, setSizePreset] = useState<SizePreset>('standard');
   const [targetWidth, setTargetWidth] = useState<number>(820);
   const [targetHeight, setTargetHeight] = useState<number>(820);
-  const [alignH, setAlignH] = useState<'center' | 'keep'>('center');
-  const [alignV, setAlignV] = useState<'center' | 'baseline' | 'keep'>('center');
+  const [alignH, setAlignH] = useState<AlignHorizontal>('center');
+  const [alignV, setAlignV] = useState<AlignVertical>('center');
   const [unifyAdvance, setUnifyAdvance] = useState<boolean>(true);
   const [advanceWidth, setAdvanceWidth] = useState<number>(1000);
   const [optimizePoints, setOptimizePoints] = useState<boolean>(true);
@@ -78,7 +95,7 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
   }, [isOpen, isFullscreen, onClose]);
 
   // Apply preset values
-  const handlePresetChange = (preset: 'standard' | 'large' | 'kana' | 'compact' | 'custom') => {
+  const handlePresetChange = (preset: SizePreset) => {
     setSizePreset(preset);
     if (preset === 'standard') {
       setTargetWidth(820);
@@ -456,7 +473,11 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
               ].map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => handlePresetChange(p.id as any)}
+                  onClick={() => {
+                    if (isSizePreset(p.id)) {
+                      handlePresetChange(p.id);
+                    }
+                  }}
                   className={`p-2 rounded border text-center transition-all ${
                     sizePreset === p.id
                       ? isLight
@@ -554,7 +575,11 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
                   <label className="text-[10px] text-stone-500 dark:text-emerald-400 block mb-1">水平揃え</label>
                   <select
                     value={alignH}
-                    onChange={(e) => setAlignH(e.target.value as any)}
+                    onChange={(e) => {
+                      if (isAlignHorizontal(e.target.value)) {
+                        setAlignH(e.target.value);
+                      }
+                    }}
                     className={`w-full border rounded p-1.5 text-xs ${
                       isLight ? 'bg-stone-50 border-[#c8ded3]' : 'bg-[#18231c] border-[#25362b]'
                     }`}
@@ -568,7 +593,11 @@ export const BatchNormalizeModal: React.FC<BatchNormalizeModalProps> = ({
                   <label className="text-[10px] text-stone-500 dark:text-emerald-400 block mb-1">垂直揃え</label>
                   <select
                     value={alignV}
-                    onChange={(e) => setAlignV(e.target.value as any)}
+                    onChange={(e) => {
+                      if (isAlignVertical(e.target.value)) {
+                        setAlignV(e.target.value);
+                      }
+                    }}
                     className={`w-full border rounded p-1.5 text-xs ${
                       isLight ? 'bg-stone-50 border-[#c8ded3]' : 'bg-[#18231c] border-[#25362b]'
                     }`}

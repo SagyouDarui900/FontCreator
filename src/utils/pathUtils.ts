@@ -6417,17 +6417,19 @@ export function splitCubicBezier(
 
   const p0123 = { x: (1 - t) * p012.x + t * p123.x, y: (1 - t) * p012.y + t * p123.y };
 
-  const left = [p0, p01, p012, p0123] as any;
-  left.p0 = p0;
-  left.p1 = p01;
-  left.p2 = p012;
-  left.p3 = p0123;
+  const left: CubicBezierSegment = Object.assign([p0, p01, p012, p0123] as [Point, Point, Point, Point], {
+    p0,
+    p1: p01,
+    p2: p012,
+    p3: p0123,
+  });
 
-  const right = [p0123, p123, p23, p3] as any;
-  right.p0 = p0123;
-  right.p1 = p123;
-  right.p2 = p23;
-  right.p3 = p3;
+  const right: CubicBezierSegment = Object.assign([p0123, p123, p23, p3] as [Point, Point, Point, Point], {
+    p0: p0123,
+    p1: p123,
+    p2: p23,
+    p3,
+  });
 
   return {
     left,
@@ -8132,5 +8134,3 @@ export function expandStrokeContours(
 }
 
 export { booleanSubtractContours, booleanIntersectContours } from './vectorBoolean';
-
-

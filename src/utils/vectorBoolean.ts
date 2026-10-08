@@ -16,7 +16,7 @@ function getPaperScope(): paper.PaperScope {
     }
   }
   if (!paperScopeInstance.project) {
-    new paperScopeInstance.Project(null as any);
+    paperScopeInstance.setup([3000, 3000]);
   }
   paperScopeInstance.activate();
   return paperScopeInstance;

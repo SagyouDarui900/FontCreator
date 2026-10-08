@@ -1,302 +1,270 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
- ZoomIn,
- ZoomOut,
- Maximize2,
- Move,
- Eye,
- EyeOff,
- RotateCcw,
- Layers,
- Undo,
- Redo,
- Italic,
- RotateCw,
- FlipHorizontal,
- FlipVertical,
- Copy,
- Trash2,
- Plus,
- Minus,
- Ruler,
- Compass,
- Sparkles,
- Info,
- X,
- Square,
- Circle,
- Triangle,
- Star,
- Heart,
- Diamond,
- Spline,
- Zap,
- Activity,
- ChevronLeft,
- ChevronRight,
- Sliders,
- Wand2,
- Paintbrush,
- Check,
- Bookmark,
- Magnet,
- Crosshair,
- CornerDownLeft,
- MousePointer,
- PenTool,
- Maximize,
- Minimize,
- Grid,
- GripVertical,
- ChevronDown,
- Hexagon,
- Lock,
- Unlock,
- Shield,
- ShieldCheck,
- ChevronUp,
- PanelBottomClose,
- PanelBottomOpen,
- HelpCircle,
- Type,
- ArrowRightLeft,
- Hand,
- CircleDot,
- Disc,
- Moon,
- Slash,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Move,
+  Eye,
+  EyeOff,
+  RotateCcw,
+  Layers,
+  Undo,
+  Redo,
+  Italic,
+  RotateCw,
+  FlipHorizontal,
+  FlipVertical,
+  Copy,
+  Trash2,
+  Plus,
+  Minus,
+  Ruler,
+  Compass,
+  Sparkles,
+  Info,
+  X,
+  Square,
+  Circle,
+  Triangle,
+  Star,
+  Heart,
+  Diamond,
+  Spline,
+  Zap,
+  Activity,
+  ChevronLeft,
+  ChevronRight,
+  Sliders,
+  Wand2,
+  Paintbrush,
+  Check,
+  Bookmark,
+  Magnet,
+  Crosshair,
+  CornerDownLeft,
+  MousePointer,
+  PenTool,
+  Maximize,
+  Minimize,
+  Grid,
+  GripVertical,
+  ChevronDown,
+  Hexagon,
+  Lock,
+  Unlock,
+  Shield,
+  ShieldCheck,
+  ChevronUp,
+  PanelBottomClose,
+  PanelBottomOpen,
+  HelpCircle,
+  Type,
+  ArrowRightLeft,
+  Hand,
+  CircleDot,
+  Disc,
+  Moon,
+  Slash,
 } from 'lucide-react';
 import {
- PathContour,
- BezierNode,
- Point,
- StrokePoint,
- BrushStyle,
- ToolMode,
- TraceSettings,
- GridSettings,
- SnapGuideLine,
- CustomGuideline,
- GlyphOverlaySettings,
- FontProject,
- PressureCurveConfig,
- UserPenPreset,
+  PathContour,
+  BezierNode,
+  Point,
+  StrokePoint,
+  BrushStyle,
+  ToolMode,
+  TraceSettings,
+  GridSettings,
+  JapaneseGuidePattern,
+  VerticalGuidePattern,
+  SnapGuideLine,
+  CustomGuideline,
+  GlyphOverlaySettings,
+  FontProject,
+  PressureCurveConfig,
+  UserPenPreset,
 } from '../types';
 import {
- snapContourMovement,
- snapSinglePoint,
+  ThemeMode,
+  isLightTheme,
+  getThemeClasses,
+} from '../utils/theme';
+import {
+  DAKUTEN_MAPPINGS,
+} from '../utils/dakutenHelper';
+import {
+  snapContourMovement,
+  snapSinglePoint,
 } from '../utils/snapUtils';
 import {
- generateId,
- contoursToSvgPath,
- generateFastStrokeSvgPath,
- strokePointsToOutline,
- simplifyContour,
- smoothStrokeContour,
- smoothContoursPreservingShape,
- convertContourToCorners,
- convertContourToSmooth,
- createRectContour,
- createRoundedRectContour,
- createEllipseContour,
- createTriangleContour,
- createStarContour,
- createHeartContour,
- createSparkleContour,
- createStarburstContour,
- createDiamondContour,
- createHexagonContour,
- createRightTriangleContour,
- createSemicircleContour,
- createRingContours,
- createPillContour,
- createParallelogramContour,
- createCrescentContour,
- createLineContour,
- snapToStraightAngle,
- generateStraightStrokePoints,
- slantSingleContour,
- rotateSingleContour,
- scaleSingleContour,
- flipSingleContourH,
- flipSingleContourV,
- duplicateContour,
- rotateMultipleContours,
- scaleMultipleContours,
- flipMultipleContoursH,
- flipMultipleContoursV,
- duplicateMultipleContours,
- unionContours,
- doContoursIntersectOrTouch,
- normalizeGlyphContoursWinding,
- groupContoursWithHoles,
- resolveContourOverlaps,
- hasContourIntersections,
- reverseContour,
- getContoursBoundingBox,
- isPointNearContour,
- eraseContoursAtPoint,
- subtractEraserStrokeFromContours,
- PEN_PRESETS,
- insertNodeOnContourAtPoint,
- toggleNodeType,
- straightenWobblyContour,
- booleanSubtractContours,
- booleanIntersectContours,
- expandStrokeContours,
+  PEN_PRESETS,
+  generateId,
+  contoursToSvgPath,
+  generateFastStrokeSvgPath,
+  strokePointsToOutline,
+  simplifyContour,
+  smoothStrokeContour,
+  smoothContoursPreservingShape,
+  convertContourToCorners,
+  convertContourToSmooth,
+  createRectContour,
+  createRoundedRectContour,
+  createEllipseContour,
+  createTriangleContour,
+  createStarContour,
+  createHeartContour,
+  createSparkleContour,
+  createStarburstContour,
+  createDiamondContour,
+  createHexagonContour,
+  createRightTriangleContour,
+  createSemicircleContour,
+  createRingContours,
+  createPillContour,
+  createParallelogramContour,
+  createLineContour,
+  createCrescentContour,
+  flipContoursHorizontal,
+  flipContoursVertical,
+  slantContours,
+  scaleContours,
+  rotateContours,
+  centerContoursInBox,
+  fitContoursToEmBox,
+  getContoursBoundingBox,
+  outlineOpenContour,
+  simplifyGlyphContours,
+  smoothAndFixTransformedContours,
+  transformContours,
+  unionContours,
+  hasContourIntersections,
+  expandStrokeContours,
+  eraseContoursAtPoint,
+  subtractEraserStrokeFromContours,
+  snapToStraightAngle,
+  generateStraightStrokePoints,
+  straightenWobblyContour,
+  duplicateContour,
+  duplicateMultipleContours,
+  slantSingleContour,
+  rotateSingleContour,
+  rotateMultipleContours,
+  scaleSingleContour,
+  scaleMultipleContours,
+  flipSingleContourH,
+  flipMultipleContoursH,
+  flipSingleContourV,
+  flipMultipleContoursV,
+  reverseContour,
+  toggleNodeType,
+  insertNodeOnContourAtPoint,
+  isPointNearContour,
 } from '../utils/pathUtils';
+
+const JAPANESE_GUIDE_OPTIONS: { id: JapaneseGuidePattern; label: string; sub: string }[] = [
+ { id: 'none', label: 'なし', sub: '非表示' },
+ { id: 'cross', label: '十字格', sub: '中心' },
+ { id: 'tian', label: '田字格', sub: '4象限' },
+ { id: 'jiugong', label: '九宮格', sub: '3×3分割' },
+ { id: 'sixteen', label: '十六宮格', sub: '4×4分割' },
+ { id: 'mi', label: '米字格', sub: '対角線' },
+];
+
+const VERTICAL_GUIDE_OPTIONS: { id: VerticalGuidePattern; label: string; sub: string }[] = [
+ { id: 'none', label: 'なし', sub: 'OFF' },
+ { id: 'center', label: '左右中心', sub: '' },
+ { id: 'thirds', label: '3分割', sub: '偏・中・旁' },
+ { id: 'quarters', label: '4分割', sub: '1/4, 1/2, 3/4' },
+ { id: 'eighths', label: '8分割', sub: '精密配置' },
+];
 import {
- DAKUTEN_MAPPINGS,
- createDakutenContours,
- createHandakutenContours,
- cloneContours,
-} from '../utils/dakutenHelper';
-import { SCREEN_BASELINE_Y } from '../utils/fontCompiler';
-import { ThemeMode, isLightTheme, getThemeClasses } from '../utils/theme';
-import { JapaneseGuidesLayer } from './canvas/JapaneseGuidesLayer';
+  booleanSubtractContours,
+  booleanIntersectContours,
+} from '../utils/vectorBoolean';
 import { CanvasBackgroundLayer } from './canvas/CanvasBackgroundLayer';
+import { JapaneseGuidesLayer } from './canvas/JapaneseGuidesLayer';
 import { AdjacentGlyphsLayer } from './canvas/AdjacentGlyphsLayer';
 import { GlyphComparisonLayer } from './canvas/GlyphComparisonLayer';
-import { MetricsGuidesLayer } from './canvas/MetricsGuidesLayer';
-import { CanvasRulersLayer } from './canvas/CanvasRulersLayer';
 import { TraceReferenceLayer, TraceResizeHandle } from './canvas/TraceReferenceLayer';
+import { CanvasRulersLayer } from './canvas/CanvasRulersLayer';
+import { MetricsGuidesLayer } from './canvas/MetricsGuidesLayer';
 import { CustomGuidelinesLayer } from './canvas/CustomGuidelinesLayer';
 import { RulerMeasurementLayer } from './canvas/RulerMeasurementLayer';
 import { MainGlyphContoursLayer } from './canvas/MainGlyphContoursLayer';
 
-const CANVAS_SHAPE_LIST: { id: ToolMode; label: string; icon: React.FC<{ className?: string }> }[] = [
- { id: 'rect', label: '長方形 (Rectangle)', icon: Square },
- { id: 'square', label: '正方形 (Square)', icon: Square },
- { id: 'ellipse', label: '楕円 (Ellipse)', icon: Circle },
- { id: 'circle', label: '正円 (Circle)', icon: Circle },
- { id: 'rounded_rect', label: '角丸四角 (Rounded)', icon: Square },
- { id: 'pill', label: 'カプセル (Pill)', icon: CircleDot },
- { id: 'triangle', label: '正三角形 (Triangle)', icon: Triangle },
- { id: 'triangle_down', label: '逆三角形 (Inverted)', icon: Triangle },
- { id: 'right_triangle', label: '直角三角形 (Right Triangle)', icon: Triangle },
- { id: 'semicircle', label: '半円 (Semicircle)', icon: Circle },
- { id: 'ring', label: 'ドーナツ・二重円 (Ring)', icon: Disc },
- { id: 'parallelogram', label: '平行四辺形 (Parallelogram)', icon: Slash },
- { id: 'diamond', label: '菱形 (Diamond)', icon: Diamond },
- { id: 'polygon', label: '正六角形 (Hexagon)', icon: Hexagon },
- { id: 'line', label: '直線バー (Line)', icon: Minus },
- { id: 'star', label: '星型 (Star)', icon: Star },
- { id: 'sparkle', label: '4芒星 (Sparkle)', icon: Sparkles },
- { id: 'starburst', label: '8芒星 (Starburst)', icon: Sparkles },
- { id: 'heart', label: 'ハート (Heart)', icon: Heart },
- { id: 'crescent', label: '三日月 (Crescent)', icon: Moon },
-];
+const HIGH_CONTRAST_GRAB_CURSOR = 'grab';
+const HIGH_CONTRAST_GRABBING_CURSOR = 'grabbing';
+const HIGH_CONTRAST_PEN_CURSOR = 'crosshair';
+const HIGH_CONTRAST_NODE_CURSOR = 'default';
+const HIGH_CONTRAST_ANCHOR_ERASER_CURSOR = 'crosshair';
+const HIGH_CONTRAST_ERASER_CURSOR = 'crosshair';
+const HIGH_CONTRAST_CROSSHAIR_CURSOR = 'crosshair';
 
-// Cache individual contour SVG path strings by contour object identity for instant stroke commits
-const contourPathStringCache = new WeakMap<PathContour, string>();
+const getDecimatedPointsForLivePreview = (pts: StrokePoint[]): StrokePoint[] => {
+  if (pts.length <= 4) return pts;
+  return pts.filter((_, idx) => idx % 2 === 0 || idx === pts.length - 1);
+};
 
-function getCachedContourSvgPath(c: PathContour): string {
- let d = contourPathStringCache.get(c);
- if (d === undefined) {
- d = contoursToSvgPath([c]);
- contourPathStringCache.set(c, d);
- }
- return d;
+const contourSvgCache = new Map<string, string>();
+const getCachedContourSvgPath = (c: PathContour): string => {
+  const key = `${c.id}_${c.closed}_${c.nodes?.length}_${c.nodes?.[0]?.x}_${c.nodes?.[c.nodes?.length - 1]?.y}`;
+  if (!contourSvgCache.has(key)) {
+    contourSvgCache.set(key, contoursToSvgPath([c]));
+  }
+  return contourSvgCache.get(key)!;
+};
+
+export interface GlyphCanvasProps {
+  contours: PathContour[];
+  onChangeContours: (contours: PathContour[]) => void;
+  advanceWidth: number;
+  lsb: number;
+  onChangeAdvanceWidth: (w: number) => void;
+  onChangeLsb: (lsb: number) => void;
+  toolMode: ToolMode;
+  onSetToolMode?: (mode: ToolMode) => void;
+  brushWidth: number;
+  brushStyle?: BrushStyle;
+  onChangeBrushStyle?: (style: BrushStyle) => void;
+  onChangeBrushWidth?: (w: number) => void;
+  pressureSensitivity?: 'high' | 'normal' | 'low' | 'off';
+  onChangePressureSensitivity?: (val: 'high' | 'normal' | 'low' | 'off') => void;
+  pressureCurve?: PressureCurveConfig;
+  smoothingIntensity?: number;
+  onChangeSmoothingIntensity?: (val: number) => void;
+  traceSettings: TraceSettings;
+  onChangeTraceSettings?: React.Dispatch<React.SetStateAction<TraceSettings>>;
+  selectedUnicode: number;
+  gridSettings: GridSettings;
+  onChangeGridSettings?: React.Dispatch<React.SetStateAction<GridSettings>>;
+  activeChar: string;
+  onSelectPrevGlyph?: () => void;
+  onSelectNextGlyph?: () => void;
+  onCommitHistory?: () => void;
+  theme: ThemeMode;
+  onCopyFromChar?: (char: string) => void;
+  onGenerateDakutenTarget?: (char: string, isHandaku?: boolean) => void;
+  onToggleGridDrawer?: () => void;
+  showGridDrawer?: boolean;
+  onToggleMetricsDrawer?: () => void;
+  showMetricsDrawer?: boolean;
+  onToggleRadicals?: () => void;
+  showRadicals?: boolean;
+  onToggleZenMode?: () => void;
+  isZenMode?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onOpenPenPresetsModal?: () => void;
+  activePenPreset?: UserPenPreset;
+  isAnyModalOpen?: boolean;
+  overlaySettings?: GlyphOverlaySettings;
+  project: FontProject;
+  onOpenGlyphCompareModal?: () => void;
+  outlineOnly?: boolean;
+  onChangeOutlineOnly?: (val: boolean) => void;
 }
-
-// Lightweight decimation for live preview to keep frame rate constant (60/120fps)
-// while fully preserving continuous fine-segmented pressure dynamics and fidelity
-function getDecimatedPointsForLivePreview(pts: StrokePoint[]): StrokePoint[] {
- const len = pts.length;
- if (len <= 80) return pts;
- // Keep the most recent 50 points at 100% full fidelity for ultra-smooth dynamic response
- const tailCount = 50;
- const headCount = len - tailCount;
- const decimated: StrokePoint[] = [pts[0]];
- let lastX = pts[0].x;
- let lastY = pts[0].y;
- let lastP = pts[0].pressure ?? 0.5;
- for (let i = 1; i < headCount; i++) {
- const p = pts[i];
- const dx = p.x - lastX;
- const dy = p.y - lastY;
- const dp = Math.abs((p.pressure ?? 0.5) - lastP);
- // Dynamic distance threshold: preserve fine sampling for smooth curve rendering
- const distSq = dx * dx + dy * dy;
- if (distSq >= 2.25 || dp >= 0.015) {
- decimated.push(p);
- lastX = p.x;
- lastY = p.y;
- lastP = p.pressure ?? 0.5;
- }
- }
- for (let i = headCount; i < len; i++) {
- decimated.push(pts[i]);
- }
- return decimated;
-}
-
-interface GlyphCanvasProps {
- contours: PathContour[];
- onChangeContours: (contours: PathContour[], options?: { skipHistory?: boolean }) => void;
- advanceWidth: number;
- lsb: number;
- onChangeAdvanceWidth: (width: number) => void;
- onChangeLsb: (lsb: number) => void;
- toolMode: ToolMode;
- onSetToolMode?: (mode: ToolMode) => void;
- brushWidth: number;
- brushStyle?: BrushStyle;
- onChangeBrushStyle?: (style: BrushStyle) => void;
- onChangeBrushWidth?: (width: number) => void;
- pressureSensitivity?: 'high' | 'normal' | 'low' | 'off';
- onChangePressureSensitivity?: (s: 'high' | 'normal' | 'low' | 'off') => void;
- pressureCurve?: PressureCurveConfig;
- smoothingIntensity?: number;
- onChangeSmoothingIntensity?: (val: number) => void;
- traceSettings: TraceSettings;
- onChangeTraceSettings?: (fn: (prev: TraceSettings) => TraceSettings) => void;
- selectedUnicode?: number;
- gridSettings: GridSettings;
- onChangeGridSettings?: React.Dispatch<React.SetStateAction<GridSettings>>;
- activeChar: string;
- onCommitHistory: () => void;
- theme: ThemeMode;
- onSelectPrevGlyph?: () => void;
- onSelectNextGlyph?: () => void;
- onCopyFromChar?: (sourceChar: string) => void;
- onGenerateDakutenTarget?: (targetChar: string, isHandakuten: boolean) => void;
- onToggleGridDrawer?: () => void;
- showGridDrawer?: boolean;
- onToggleMetricsDrawer?: () => void;
- showMetricsDrawer?: boolean;
- onToggleRadicals?: () => void;
- showRadicals?: boolean;
- onToggleZenMode?: () => void;
- isZenMode?: boolean;
- onUndo?: () => void;
- onRedo?: () => void;
- canUndo?: boolean;
- canRedo?: boolean;
- onOpenPenPresetsModal?: () => void;
- activePenPreset?: UserPenPreset;
- isAnyModalOpen?: boolean;
- overlaySettings?: GlyphOverlaySettings;
- project?: FontProject;
- onOpenGlyphCompareModal?: () => void;
- outlineOnly?: boolean;
- onChangeOutlineOnly?: (val: boolean) => void;
-}
-
-// High-Contrast SVG Cursor Definitions (Dual-layer white-outer / black-inner for 100% visibility on any light/dark background or grid)
-const HIGH_CONTRAST_CROSSHAIR_CURSOR = `url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M16 2V12M16 20V30M2 16H12M20 16H30' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M16 2V12M16 20V30M2 16H12M20 16H30' stroke='%230f172a' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%2310b981' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, crosshair`;
-
-const HIGH_CONTRAST_GRAB_CURSOR = `url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 13V8C10 6.9 10.9 6 12 6C13.1 6 14 6.9 14 8V12M14 8C14 6.9 14.9 6 16 6C17.1 6 18 6.9 18 8V12M18 9C18 7.9 18.9 7 20 7C21.1 7 22 7.9 22 9V14M10 13C10 11.9 9.1 11 8 11C6.9 11 6 11.9 6 13V18C6 22.4 9.6 26 14 26H17C21.4 26 25 22.4 25 18V13C25 11.9 24.1 11 23 11C22.6 11 22.3 11.1 22 11.3V9' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M10 13V8C10 6.9 10.9 6 12 6C13.1 6 14 6.9 14 8V12M14 8C14 6.9 14.9 6 16 6C17.1 6 18 6.9 18 8V12M18 9C18 7.9 18.9 7 20 7C21.1 7 22 7.9 22 9V14M10 13C10 11.9 9.1 11 8 11C6.9 11 6 11.9 6 13V18C6 22.4 9.6 26 14 26H17C21.4 26 25 22.4 25 18V13C25 11.9 24.1 11 23 11C22.6 11 22.3 11.1 22 11.3V9' stroke='%230f172a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' fill='white'/%3E%3Ccircle cx='15.5' cy='18' r='2.5' fill='%2310b981' stroke='white' stroke-width='1'/%3E%3C/svg%3E") 15 15, grab`;
-
-const HIGH_CONTRAST_GRABBING_CURSOR = `url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 14C8 12.9 8.9 12 10 12H21C22.1 12 23 12.9 23 14V17C23 21.4 19.4 25 15 25H14C9.6 25 6 21.4 6 17V15C6 13.9 6.9 13 8 13V14Z' stroke='white' stroke-width='4.5' stroke-linejoin='round'/%3E%3Cpath d='M8 14C8 12.9 8.9 12 10 12H21C22.1 12 23 12.9 23 14V17C23 21.4 19.4 25 15 25H14C9.6 25 6 21.4 6 17V15C6 13.9 6.9 13 8 13V14Z' stroke='%230f172a' stroke-width='2' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M10 12V16M14 12V16M18 12V16' stroke='%230f172a' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='14.5' cy='20' r='2.5' fill='%2310b981' stroke='white' stroke-width='1'/%3E%3C/svg%3E") 15 15, grabbing`;
-
-const HIGH_CONTRAST_PEN_CURSOR = `url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 28L7 20L22 5C23.5 3.5 26.5 3.5 28 5C29.5 6.5 29.5 9.5 28 11L13 26L5 28L4 28Z' fill='white' stroke='%230f172a' stroke-width='2'/%3E%3Cpath d='M4 28L7 20L22 5C23.5 3.5 26.5 3.5 28 5C29.5 6.5 29.5 9.5 28 11L13 26L5 28L4 28Z' fill='%2310b981' fill-opacity='0.25'/%3E%3Ccircle cx='4' cy='28' r='2' fill='%23ef4444' stroke='white' stroke-width='1'/%3E%3C/svg%3E") 4 28, crosshair`;
-
-const HIGH_CONTRAST_NODE_CURSOR = `url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 4L22 14L14 16L11 25L6 4Z' fill='white' stroke='%230f172a' stroke-width='2.5' stroke-linejoin='round'/%3E%3Cpath d='M6 4L22 14L14 16L11 25L6 4Z' fill='%230284c7'/%3E%3C/svg%3E") 6 4, default`;
-
-const HIGH_CONTRAST_ERASER_CURSOR = `url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 22L16 12L22 18L12 28L6 28Z' fill='white' stroke='%230f172a' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M6 22L16 12L22 18L12 28L6 28Z' fill='%23ef4444' stroke='%230f172a' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M11 17L17 23' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M12 28H26' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='6' cy='28' r='2' fill='%2310b981' stroke='white' stroke-width='1'/%3E%3C/svg%3E") 6 28, crosshair`;
-
-const HIGH_CONTRAST_ANCHOR_ERASER_CURSOR = `url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='16' cy='16' r='13' stroke='white' stroke-width='3.5' stroke-dasharray='4 3'/%3E%3Ccircle cx='16' cy='16' r='13' stroke='%23f43f5e' stroke-width='2' stroke-dasharray='4 3'/%3E%3Cline x1='16' y1='3' x2='16' y2='29' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='16' y1='3' x2='16' y2='29' stroke='%23f43f5e' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='3' y1='16' x2='29' y2='16' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='3' y1='16' x2='29' y2='16' stroke='%23f43f5e' stroke-width='1.5' stroke-linecap='round'/%3E%3Crect x='11' y='11' width='10' height='10' rx='2' fill='white' stroke='%230f172a' stroke-width='2'/%3E%3Cline x1='13' y1='16' x2='19' y2='16' stroke='%23f43f5e' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 16 16, crosshair`;
 
 export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  contours,
@@ -657,6 +625,114 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  document.removeEventListener('mousedown', handleClickOutside);
  };
  }, [showShapePickerDropdown, showQuickGridSlider]);
+
+  // Sub-toolbar horizontal scrolling & drag support
+  const subToolbarRef = useRef<HTMLDivElement>(null);
+  const [subToolbarCanScrollLeft, setSubToolbarCanScrollLeft] = useState(false);
+  const [subToolbarCanScrollRight, setSubToolbarCanScrollRight] = useState(false);
+
+  const checkSubToolbarScroll = useCallback(() => {
+    const el = subToolbarRef.current;
+    if (!el) return;
+    setSubToolbarCanScrollLeft(el.scrollLeft > 6);
+    setSubToolbarCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 6);
+  }, []);
+
+  const handleSubToolbarScrollLeft = useCallback(() => {
+    if (subToolbarRef.current) {
+      subToolbarRef.current.scrollBy({ left: -260, behavior: "smooth" });
+    }
+  }, []);
+
+  const handleSubToolbarScrollRight = useCallback(() => {
+    if (subToolbarRef.current) {
+      subToolbarRef.current.scrollBy({ left: 260, behavior: "smooth" });
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = subToolbarRef.current;
+    if (!el || !showSubToolbar) return;
+
+    // 1. Mouse wheel mapping: Convert vertical scroll wheel to horizontal scrolling
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth > el.clientWidth) {
+        if (!e.ctrlKey && !e.metaKey) {
+          if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && e.deltaY !== 0) {
+            e.preventDefault();
+            let delta = e.deltaY;
+            if (e.deltaMode === 1) delta *= 33;
+            else if (e.deltaMode === 2) delta *= 400;
+            el.scrollLeft += delta;
+            checkSubToolbarScroll();
+          }
+        }
+      }
+    };
+
+    // 2. Drag-to-scroll implementation (smooth mouse pan on empty space)
+    let isDown = false;
+    let startX = 0;
+    let scrollStart = 0;
+
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("button, input, select, textarea, a, label, [role=\"button\"], [role=\"slider\"]")) {
+        return;
+      }
+      isDown = true;
+      startX = e.pageX - el.offsetLeft;
+      scrollStart = el.scrollLeft;
+      el.style.cursor = "grab";
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - el.offsetLeft;
+      const walk = (x - startX) * 1.3;
+      el.scrollLeft = scrollStart - walk;
+      el.style.cursor = "grabbing";
+      checkSubToolbarScroll();
+    };
+
+    const onMouseUp = () => {
+      if (isDown) {
+        isDown = false;
+        if (el) el.style.cursor = "";
+      }
+    };
+
+    const onScroll = () => {
+      checkSubToolbarScroll();
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    el.addEventListener("scroll", onScroll, { passive: true });
+
+    let ro = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => {
+        checkSubToolbarScroll();
+      });
+      ro.observe(el);
+    }
+
+    checkSubToolbarScroll();
+
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      el.removeEventListener("scroll", onScroll);
+      if (ro) ro.disconnect();
+    };
+  }, [showSubToolbar, toolMode, activeChar, checkSubToolbarScroll]);
+
 
  const isShapeTool = [
  'rect',
@@ -4580,9 +4656,30 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <div className={`w-full h-full flex flex-col relative overflow-hidden select-none transition-colors ${themeClasses.canvasOuterBg} ${isAnyModalOpen ? 'pointer-events-none' : ''}`}>
  {/* Universal Docked Sub-Toolbar (Outside SVG viewport, clean & non-overlapping, collapsible) */}
  {!isMobileFocusMode && showSubToolbar ? (
- <div
- className={`h-11 border-b flex items-center justify-between px-2.5 sm:px-3 shrink-0 z-20 select-none overflow-x-auto no-scrollbar gap-2 transition-colors ${themeClasses.subtoolbarBg}`}
- >
+          <div
+            ref={subToolbarRef}
+            onWheel={(e) => {
+              if (e.currentTarget.scrollWidth > e.currentTarget.clientWidth) {
+                if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) && e.deltaY !== 0) {
+                  const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+                  e.currentTarget.scrollLeft += delta;
+                  checkSubToolbarScroll();
+                }
+              }
+            }}
+            className={`h-11 border-b flex items-center justify-between px-2.5 sm:px-3 shrink-0 z-20 select-none overflow-x-auto touch-scroll-x custom-scrollbar gap-2 relative transition-colors ${themeClasses.subtoolbarBg}`}
+          >
+            {/* Sticky Left Scroll Jump Button */}
+            {subToolbarCanScrollLeft && (
+              <button
+                type="button"
+                onClick={handleSubToolbarScrollLeft}
+                className="sticky left-0 z-30 shrink-0 flex items-center justify-center w-6 h-8 -my-1 rounded bg-stone-200/95 dark:bg-stone-800/95 hover:bg-emerald-100 dark:hover:bg-emerald-950/80 text-stone-700 dark:text-emerald-300 shadow-md border border-stone-300/80 dark:border-stone-700/80 transition-colors cursor-pointer"
+                title="ツールバーを左へスクロール"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+            )}
  {/* Left: Quick Character Switcher & Context Tool Settings */}
  <div className="flex items-center space-x-1.5 shrink-0">
  {onSelectPrevGlyph && (
@@ -4644,16 +4741,77 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  );
  })()}
 
- {/* Brush Tool Options in Header */}
- {toolMode === 'brush' && (
- <>
- {/* Mobile Brush Presets Sheet Trigger */}
- <button
- onClick={() => setShowMobileBrushSheet(true)}
- className="sm:hidden px-2 py-1 rounded text-xs font-bold border transition-colors flex items-center space-x-1 bg-emerald-100 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 shrink-0"
- title="ペンの種類と太さを設定"
- >
- <Paintbrush className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+          {/* Primary View Controls (Moved to Left for immediate visibility) */}
+          <div className="flex items-center space-x-1 pl-1 border-l border-stone-200 dark:border-stone-700 shrink-0">
+            {/* Node Points Visibility Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showNodes;
+                setShowNodes(next);
+                showCanvasToast(next ? '頂点・ハンドルを表示しました' : '頂点・ハンドルを非表示にしました');
+              }}
+              className={`p-1.5 sm:px-2 rounded border transition-colors flex items-center space-x-1 cursor-pointer shrink-0 ${
+                showNodes
+                  ? isLight
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                    : 'bg-emerald-950 border-emerald-700 text-emerald-200'
+                  : 'border-stone-200 dark:border-stone-700 text-stone-400 bg-stone-100 dark:bg-stone-800'
+              }`}
+              title={showNodes ? '頂点とハンドルを隠して文字の形を確認 (クリックで非表示) [Nキー]' : '頂点とハンドルを表示 (クリックで表示) [Nキー]'}
+            >
+              {showNodes ? <Eye className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span className="text-[11px] font-bold">
+                {showNodes ? '頂点表示' : '頂点隠す'}
+              </span>
+            </button>
+
+            {/* Outline-Only (Wireframe) Mode Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !isOutlineMode;
+                setOutlineOnly(next);
+                showCanvasToast(
+                  next
+                    ? '輪郭モードを有効にしました（パスの重なりや形状を透過確認）'
+                    : '塗りつぶし表示モードに戻しました'
+                );
+              }}
+              className={`p-1.5 sm:px-2 rounded border transition-colors flex items-center space-x-1 cursor-pointer shrink-0 ${
+                isOutlineMode
+                  ? isLight
+                    ? 'bg-sky-50 border-sky-400 text-sky-800'
+                    : 'bg-sky-950 border-sky-600 text-sky-200'
+                  : 'border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'
+              }`}
+              title={
+                isOutlineMode
+                  ? '輪郭モードON（クリックで塗りつぶし表示に戻す）[Shift+O / Alt+O]'
+                  : '輪郭モード（ワイヤーフレーム：パスの重なりや曲線の形を確認）[Shift+O / Alt+O]'
+              }
+            >
+              {isOutlineMode ? (
+                <Square className="w-3.5 h-3.5 stroke-[2.5] text-sky-500 fill-none" />
+              ) : (
+                <div className="w-3.5 h-3.5 rounded-xs border border-stone-500 bg-stone-700 dark:border-stone-400 dark:bg-stone-300" />
+              )}
+              <span className="text-[11px] font-bold">
+                {isOutlineMode ? '輪郭モード' : '塗り表示'}
+              </span>
+            </button>
+          </div>
+
+          {/* Brush Tool Options in Header */}
+          {toolMode === 'brush' && (
+            <>
+              {/* Mobile Brush Presets Sheet Trigger */}
+              <button
+                onClick={() => setShowMobileBrushSheet(true)}
+                className="sm:hidden px-2 py-1 rounded text-xs font-bold border transition-colors flex items-center space-x-1 bg-emerald-100 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 shrink-0"
+                title="ペンの種類と太さを設定"
+              >
+                <Paintbrush className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
  <span>{PEN_PRESETS.find((p) => p.id === brushStyle)?.name || 'ペン'}</span>
  <span className="font-mono text-[10px]">({brushWidth}px)</span>
  </button>
@@ -4699,55 +4857,28 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  </button>
  )}
 
- {/* Quick Width Presets */}
- {onChangeBrushWidth && (
- <div className="flex items-center gap-1">
- <div className="flex items-center space-x-0.5 bg-stone-100 dark:bg-[#18231c] p-0.5 rounded-lg border border-stone-200 dark:border-stone-700">
- {[15, 30, 50, 80].map((w) => (
- <button
- key={w}
- onClick={() => {
- onChangeBrushWidth(w);
- showCanvasToast(`太さを ${w}px に設定しました`);
- }}
- className={`px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold transition-all ${
- brushWidth === w
- ? isLight
- ? 'bg-emerald-700 text-white '
- : 'bg-emerald-600 text-white '
- : isLight
- ? 'text-stone-600 hover:bg-stone-200'
- : 'text-stone-400 hover:bg-[#202e24] text-emerald-300'
- }`}
- title={`太さ ${w}px`}
- >
- {w}px
- </button>
- ))}
- </div>
-
  {/* Width Stepper */}
- <div className="flex items-center gap-0.5 bg-stone-100 dark:bg-[#18231c] px-1.5 py-0.5 rounded-lg border border-stone-200 dark:border-stone-700 text-xs">
- <button
- onClick={() => onChangeBrushWidth(Math.max(4, brushWidth - 4))}
- className="px-1 py-0.5 font-bold hover:bg-stone-200 dark:hover:bg-stone-700 rounded text-stone-600 dark:text-stone-300"
- title="線を細く"
- >
- -
- </button>
- <span className="font-mono font-bold px-1 min-w-[32px] text-center">{brushWidth}px</span>
- <button
- onClick={() => onChangeBrushWidth(Math.min(150, brushWidth + 4))}
- className="px-1 py-0.5 font-bold hover:bg-stone-200 dark:hover:bg-stone-700 rounded text-stone-600 dark:text-stone-300"
- title="線を太く"
- >
- +
- </button>
- </div>
- </div>
- )}
+          {onChangeBrushWidth && (
+            <div className="flex items-center gap-0.5 bg-stone-100 dark:bg-[#18231c] px-1.5 py-0.5 rounded-lg border border-stone-200 dark:border-stone-700 text-xs">
+              <button
+                onClick={() => onChangeBrushWidth(Math.max(4, brushWidth - 4))}
+                className="px-1 py-0.5 font-bold hover:bg-stone-200 dark:hover:bg-stone-700 rounded text-stone-600 dark:text-stone-300"
+                title="線を細く"
+              >
+                -
+              </button>
+              <span className="font-mono font-bold px-1 min-w-[32px] text-center">{brushWidth}px</span>
+              <button
+                onClick={() => onChangeBrushWidth(Math.min(150, brushWidth + 4))}
+                className="px-1 py-0.5 font-bold hover:bg-stone-200 dark:hover:bg-stone-700 rounded text-stone-600 dark:text-stone-300"
+                title="線を太く"
+              >
+                +
+              </button>
+            </div>
+          )}
 
- {/* Pressure Sensitivity */}
+          {/* Pressure Sensitivity */}
  {onChangePressureSensitivity && (
  <div className="flex items-center gap-1">
  <button
@@ -4806,7 +4937,11 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  onClick={() => {
  const next = !autoResolveBrushOverlap;
  setAutoResolveBrushOverlap(next);
- try { localStorage.setItem('fontforge_auto_resolve_brush_overlap', String(next)); } catch {}
+ try {
+   localStorage.setItem('fontforge_auto_resolve_brush_overlap', String(next));
+ } catch (error) {
+   console.warn('Failed to persist brush overlap preference:', error);
+ }
  showCanvasToast(
  next
  ? '一筆書きの重なり白抜き防止をONにしました'
@@ -4830,7 +4965,11 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  onClick={() => {
  const next = !autoUnionBrush;
  setAutoUnionBrush(next);
- try { localStorage.setItem('fontforge_auto_union_brush', String(next)); } catch {}
+ try {
+   localStorage.setItem('fontforge_auto_union_brush', String(next));
+ } catch (error) {
+   console.warn('Failed to persist brush union preference:', error);
+ }
  showCanvasToast(
  next
  ? 'ストローク描画ごとの自動合体をONにしました'
@@ -4915,20 +5054,20 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  </div>
 
  {/* Straighten Wobbly Contour Action */}
- <button
- onClick={handleStraightenWobblySelected}
- className="px-2 py-1 rounded-lg text-xs font-bold border transition-colors flex items-center space-x-1 bg-amber-600 hover:bg-amber-700 text-white border-amber-600 "
- title="描いた線のうねり・ガタガタ歪みを自動でまっすぐ直線化補正します"
- >
- <Compass className="w-3 h-3" />
- <span className="hidden sm:inline">うねり直線補正</span>
- <span className="sm:hidden">直線補正</span>
- </button>
- </div>
- </>
- )}
+              <button
+                onClick={handleStraightenWobblySelected}
+                className="px-2 py-1 rounded-lg text-xs font-bold border transition-colors flex items-center space-x-1 bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 border-stone-300 dark:border-stone-700 active:scale-95 cursor-pointer"
+                title="描いた線のうねり・ガタガタ歪みを自動でまっすぐ直線化補正します"
+              >
+                <Compass className="w-3 h-3" />
+                <span className="hidden sm:inline">うねり直線補正</span>
+                <span className="sm:hidden">直線補正</span>
+              </button>
+            </div>
+          </>
+        )}
 
- {/* Pen Tool options in Header */}
+        {/* Pen Tool options in Header */}
  {toolMode === 'pen' && (
  <div className="flex items-center gap-1 ml-1 pl-1.5 border-l border-stone-200 dark:border-stone-700 shrink-0">
  {/* Curve / Corner Toggle */}
@@ -5260,7 +5399,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <Trash2 className="w-3 h-3 text-rose-600 dark:text-rose-400" />
  <span>削除</span>
  </button>
- </>
+            </>
  )}
  </div>
  )}
@@ -5308,7 +5447,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  </div>
 
  {/* Center: Selected Part Actions / Quick Transform Strip (Only in Select or Node tool modes) */}
- <div className="flex items-center space-x-1 shrink-0 overflow-x-auto no-scrollbar">
+        <div className="flex items-center space-x-1 shrink-0">
  {(toolMode === 'select' || toolMode === 'node') && selectedContourIds.length > 0 && (
  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-stone-100 dark:bg-[#18231c] border border-stone-200 dark:border-stone-700">
  <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 pr-0.5">
@@ -5362,7 +5501,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  >
  <span>交差</span>
  </button>
- </>
+            </>
  )}
  <button
  onClick={() => handleSmoothStrokeSelected(smoothStrength, smoothPreserveCorners)}
@@ -5458,67 +5597,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  )}
  </div>
 
- {/* Right: Japanese Guides & Nodes & Global Actions */}
+ {/* Right: Actions & Custom Guidelines */}
  <div className="flex items-center space-x-1.5 shrink-0">
- {/* Desktop Guide frame toggle */}
- <button
- onClick={() =>
- onChangeGridSettings?.((prev) => {
- const modes: Array<'none' | 'cross' | 'tian' | 'jiugong' | 'mi'> = ['cross', 'tian', 'jiugong', 'mi', 'none'];
- const curIdx = modes.indexOf(prev.japaneseGuide || 'cross');
- const nextMode = modes[(curIdx + 1) % modes.length];
- return { ...prev, japaneseGuide: nextMode };
- })
- }
- className={`hidden sm:inline-flex px-2 py-1 rounded text-xs font-bold border transition-all ${
- gridSettings.japaneseGuide && gridSettings.japaneseGuide !== 'none'
- ? isLight
- ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
- : 'bg-emerald-950 border-emerald-700 text-emerald-200'
- : 'border-stone-200 dark:border-stone-700 text-stone-400'
- }`}
- title="ガイド枠切替 (十字 / 田字格 / 九宮格 / 米字格 / なし)"
- >
- {gridSettings.japaneseGuide === 'jiugong' && '九宮格'}
- {gridSettings.japaneseGuide === 'mi' && '米字格'}
- {gridSettings.japaneseGuide === 'tian' && '田 田字格'}
- {gridSettings.japaneseGuide === 'cross' && '十字線'}
- {(!gridSettings.japaneseGuide || gridSettings.japaneseGuide === 'none') && 'ガイドなし'}
- </button>
-
- {/* 85% Frame (Desktop) */}
- <button
- onClick={() =>
- onChangeGridSettings?.((prev) => ({ ...prev, showBodyFrame: !prev.showBodyFrame }))
- }
- className={`hidden lg:inline-flex px-1.5 py-1 rounded text-[11px] font-bold border transition-all ${
- gridSettings.showBodyFrame
- ? isLight
- ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
- : 'bg-emerald-950/80 border-emerald-700 text-emerald-300'
- : 'border-stone-200 dark:border-stone-700 text-stone-400'
- }`}
- title="漢字字面枠 85%"
- >
- 85%
- </button>
-
- {/* 78% Frame (Desktop) */}
- <button
- onClick={() =>
- onChangeGridSettings?.((prev) => ({ ...prev, showKanaFrame: !prev.showKanaFrame }))
- }
- className={`hidden lg:inline-flex px-1.5 py-1 rounded text-[11px] font-bold border transition-all ${
- gridSettings.showKanaFrame
- ? isLight
- ? 'bg-amber-50 border-amber-300 text-amber-900'
- : 'bg-amber-950/80 border-amber-700 text-amber-300'
- : 'border-stone-200 dark:border-stone-700 text-stone-400'
- }`}
- title="仮名字面枠 78%"
- >
- 78%
- </button>
 
  {/* Custom Guidelines Lock & Clear if any exist */}
  {customGuidelines.length > 0 && (
@@ -5560,62 +5640,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  </div>
  )}
 
- {/* Node Points Visibility Toggle */}
- <button
- onClick={() => {
- const next = !showNodes;
- setShowNodes(next);
- showCanvasToast(next ? '頂点・ハンドルを表示しました' : '頂点・ハンドルを非表示にしました（文字形状プレビュー）');
- }}
- className={`p-1.5 rounded border transition-colors flex items-center space-x-1 ${
- showNodes
- ? isLight
- ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
- : 'bg-emerald-950 border-emerald-700 text-emerald-200'
- : 'border-stone-200 dark:border-stone-700 text-stone-400 bg-stone-100 dark:bg-stone-800'
- }`}
- title={showNodes ? '頂点とハンドルを隠して文字の形を確認 (クリックで非表示)' : '頂点とハンドルを表示 (クリックで表示)'}
- >
- {showNodes ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
- <span className="text-[10px] hidden md:inline font-bold">
- {showNodes ? '頂点表示' : '頂点隠す'}
- </span>
- </button>
-
- {/* Outline-Only (Wireframe) Mode Toggle */}
- <button
- onClick={() => {
- const next = !isOutlineMode;
- setOutlineOnly(next);
- showCanvasToast(
- next
- ? '輪郭表示モードを有効にしました（パスの重なりや形状を透過確認）'
- : '塗りつぶし表示モードに戻しました'
- );
- }}
- className={`p-1.5 rounded border transition-colors flex items-center space-x-1 ${
- isOutlineMode
- ? isLight
- ? 'bg-sky-50 border-sky-400 text-sky-800 '
- : 'bg-sky-950 border-sky-600 text-sky-200 '
- : 'border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'
- }`}
- title={
- isOutlineMode
- ? '輪郭モードON（クリックで塗りつぶし表示に戻す）[Shift+O / Alt+O]'
- : '輪郭のみ表示（ワイヤーフレーム：パスの重なりや曲線の形を確認）[Shift+O / Alt+O]'
- }
- >
- {isOutlineMode ? (
- <Square className="w-3.5 h-3.5 stroke-[2.5] text-sky-500 fill-none" />
- ) : (
- <div className="w-3.5 h-3.5 rounded-xs border border-stone-500 bg-stone-700 dark:border-stone-400 dark:bg-stone-300" />
- )}
- <span className="text-[10px] hidden md:inline font-bold">
- {isOutlineMode ? '輪郭のみ' : '塗り表示'}
- </span>
- </button>
-
  {/* Clear All button if has contours */}
  {contours.length > 0 && (
  <button
@@ -5636,6 +5660,18 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <ChevronUp className="w-3.5 h-3.5" />
  </button>
  </div>
+
+            {/* Sticky Right Scroll Jump Button */}
+            {subToolbarCanScrollRight && (
+              <button
+                type="button"
+                onClick={handleSubToolbarScrollRight}
+                className="sticky right-0 z-30 shrink-0 flex items-center justify-center w-6 h-8 -my-1 rounded bg-stone-200/95 dark:bg-stone-800/95 hover:bg-emerald-100 dark:hover:bg-emerald-950/80 text-stone-700 dark:text-emerald-300 shadow-md border border-stone-300/80 dark:border-stone-700/80 transition-colors cursor-pointer"
+                title="ツールバーを右へスクロール"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
  </div>
  ) : (
  /* Collapsed Floating Minimal Trigger (Zero layout height consumed) */
@@ -5887,7 +5923,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <option value="'Kaisei Tokumin', serif">特民明朝</option>
  </select>
  </div>
- </>
+            </>
  )}
 
  <div className={`h-3.5 w-[1px] shrink-0 ${isLight ? 'bg-stone-200' : 'bg-[#25362b]'}`} />
@@ -6012,7 +6048,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <div>
  オレンジ色の<strong>仮名字面枠 (78%)</strong>の内側に収まるよう作図します。欧文底線（赤線）ではなく、<strong>マスの中央</strong>を基準として配置してください。
  </div>
- </>
+            </>
  ) : /[\u4e00-\u9faf\u3400-\u4dbf]/.test(activeChar) ? (
  <>
  <div className="font-bold text-xs sm:text-sm text-emerald-800 dark:text-emerald-300 mb-1">
@@ -6021,7 +6057,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <div>
  緑色の<strong>漢字字面枠 (85%)</strong>の内側に収まるよう作図します。外枠（1000UPM）いっぱいまで描かず周囲に余白を残すことで、組版時の字間バランスが保たれます。
  </div>
- </>
+            </>
  ) : (
  <>
  <div className="font-bold text-xs sm:text-sm text-sky-800 dark:text-sky-300 mb-1">
@@ -6030,7 +6066,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <div>
  赤色の<strong>Baseline (底線)</strong>の上に文字の底部を揃えて作図します。大文字はCap Height、小文字はx-Heightを目安にしてください。
  </div>
- </>
+            </>
  )}
  </div>
 
@@ -7061,7 +7097,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  strokeWidth={1.2 / zoom}
  strokeLinecap="round"
  />
- </>
+            </>
  )}
  {/* Anchor point dot */}
  <circle
@@ -7208,7 +7244,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  />
  </g>
  )}
- </>
+            </>
  )}
 
  {/* Anchor Node: Invisible generous hit box for effortless clicking */}
@@ -7327,7 +7363,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  strokeLinecap="round"
  strokeLinejoin="round"
  />
- </>
+            </>
  )}
 
  {/* Rubber-band dynamic guide line from last node to current mouse/hover pos */}
@@ -7751,7 +7787,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  {guide.targetName}
  </text>
  </g>
- </>
+            </>
  ) : (
  <>
  {/* Outer Glow line */}
@@ -7813,7 +7849,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  {guide.targetName}
  </text>
  </g>
- </>
+            </>
  )}
  </g>
  );
@@ -7887,7 +7923,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
  {/* Dynamic Smooth Stroke & Operation Feedback Toast Notification (Bottom-Right Non-Intrusive) */}
  {canvasToast && (
- <div className="absolute bottom-14 sm:bottom-12 right-2 sm:right-3 z-30 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-150 max-w-[calc(100vw-32px)] sm:max-w-sm">
+ <div className="absolute bottom-14 sm:bottom-12 right-2 sm:right-3 z-30 pointer-events-none max-w-[calc(100vw-32px)] sm:max-w-sm">
  <div
  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full sm:rounded-lg border shadow-md sm:shadow-lg flex items-center gap-1.5 sm:gap-2 transition-all ${
  isLight
@@ -8566,7 +8602,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <ChevronDown className="w-4 h-4" />
  </button>
  </div>
- </>
+            </>
  )}
  </div>
 
@@ -9331,20 +9367,13 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <span className="text-[10px] text-stone-400 font-normal">正方形フレーム内</span>
  </div>
  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
- {[
- { id: 'none', label: 'なし', sub: '非表示' },
- { id: 'cross', label: '十字格', sub: '中心' },
- { id: 'tian', label: '田字格', sub: '4象限' },
- { id: 'jiugong', label: '九宮格', sub: '3×3分割' },
- { id: 'sixteen', label: '十六宮格', sub: '4×4分割' },
- { id: 'mi', label: '米字格', sub: '対角線' },
- ].map((g) => (
+ {JAPANESE_GUIDE_OPTIONS.map((g) => (
  <button
  key={g.id}
  onClick={() =>
  onChangeGridSettings?.((prev) => ({
  ...prev,
- japaneseGuide: g.id as any,
+ japaneseGuide: g.id,
  }))
  }
  className={`py-1.5 px-1 rounded-lg border text-center font-bold transition-all ${
@@ -9368,19 +9397,13 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <span className="text-[10px] text-stone-400 font-normal">偏・旁・ステム配置</span>
  </div>
  <div className="grid grid-cols-5 gap-1.5">
- {[
- { id: 'none', label: 'なし', sub: 'OFF' },
- { id: 'center', label: '左右中心', sub: `X=${upm / 2}` },
- { id: 'thirds', label: '3分割', sub: '偏・中・旁' },
- { id: 'quarters', label: '4分割', sub: '1/4, 1/2, 3/4' },
- { id: 'eighths', label: '8分割', sub: '精密配置' },
- ].map((vg) => (
+ {VERTICAL_GUIDE_OPTIONS.map((vg) => (
  <button
  key={vg.id}
  onClick={() =>
  onChangeGridSettings?.((prev) => ({
  ...prev,
- verticalGuide: vg.id as any,
+ verticalGuide: vg.id,
  }))
  }
  className={`py-1.5 px-1 rounded-lg border text-center font-bold transition-all ${
@@ -9391,7 +9414,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  title={`縦ガイド: ${vg.label} (${vg.sub})`}
  >
  <div className="text-xs">{vg.label}</div>
- <div className="text-[9px] opacity-75 font-normal">{vg.sub}</div>
+ <div className="text-[9px] opacity-75 font-normal">
+   {vg.id === 'center' ? `X=${upm / 2}` : vg.sub}
+ </div>
  </button>
  ))}
  </div>

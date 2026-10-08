@@ -36,6 +36,10 @@ interface WeightInterpolationModalProps {
 }
 
 export type WeightPresetKey = 'thin' | 'light' | 'regular' | 'medium' | 'semibold' | 'bold' | 'extrabold' | 'heavy' | 'custom';
+type WeightScope = 'all' | 'kanji' | 'kana' | 'latin' | 'current';
+
+const isWeightScope = (value: string): value is WeightScope =>
+  value === 'all' || value === 'kanji' || value === 'kana' || value === 'latin' || value === 'current';
 
 interface WeightPreset {
   key: WeightPresetKey;
@@ -73,7 +77,7 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
   // Family settings
   const [selectedPreset, setSelectedPreset] = useState<WeightPresetKey>('bold');
   const [weightDelta, setWeightDelta] = useState<number>(70);
-  const [scope, setScope] = useState<'all' | 'kanji' | 'kana' | 'latin' | 'current'>('all');
+  const [scope, setScope] = useState<WeightScope>('all');
   const [showOriginalOverlay, setShowOriginalOverlay] = useState<boolean>(true);
   const [previewSampleText, setPreviewSampleText] = useState<string>('永青木あいうABC123');
   const [isExportingZip, setIsExportingZip] = useState<boolean>(false);
@@ -547,7 +551,11 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
                     ].map((s) => (
                       <button
                         key={s.id}
-                        onClick={() => setScope(s.id as any)}
+                        onClick={() => {
+                          if (isWeightScope(s.id)) {
+                            setScope(s.id);
+                          }
+                        }}
                         className={`px-2 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                           scope === s.id
                             ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'

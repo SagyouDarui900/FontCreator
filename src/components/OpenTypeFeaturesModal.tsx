@@ -31,6 +31,11 @@ interface OpenTypeFeaturesModalProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
 }
 
+type OpenTypeTab = 'vert' | 'liga' | 'gpos' | 'preview';
+
+const isOpenTypeTab = (value: string): value is OpenTypeTab =>
+  value === 'vert' || value === 'liga' || value === 'gpos' || value === 'preview';
+
 // Preset Japanese Vertical Substitutions (Standard GSUB 'vert' table)
 const DEFAULT_VERT_PRESETS = [
   { name: '句点', char: '。', sourceUnicode: 0x3002, vertUnicode: 0xFE12, vertChar: '︒' },
@@ -71,7 +76,7 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
   isLight,
   onShowToast,
 }) => {
-  const [activeTab, setActiveTab] = useState<'vert' | 'liga' | 'gpos' | 'preview'>('vert');
+  const [activeTab, setActiveTab] = useState<OpenTypeTab>('vert');
 
   // Config State initialized from project or defaults
   const config: OpenTypeFeaturesConfig = useMemo(() => {
@@ -186,10 +191,18 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
       return;
     }
 
-    const inputArr = newLigInputs.trim().split('');
-    const targetUni = parseInt(newLigTargetUnicode.trim().replace(/^U\+/i, '0x'), 16) || parseInt(newLigTargetUnicode.trim(), 10);
+    const inputArr = Array.from<string>(newLigInputs.trim());
+    const targetText = newLigTargetUnicode.trim();
+    const targetUni = /^U\+/i.test(targetText)
+      ? Number.parseInt(targetText.slice(2), 16)
+      : Number.parseInt(targetText, 10);
 
-    if (isNaN(targetUni)) {
+    if (inputArr.length < 2) {
+      onShowToast('合字の入力文字は2文字以上で指定してください', 'warning');
+      return;
+    }
+
+    if (!Number.isInteger(targetUni) || targetUni < 0 || targetUni > 0x10ffff) {
       onShowToast('変換先Unicodeの値が正しくありません (例: U+FB01 または 64257)', 'error');
       return;
     }
@@ -330,7 +343,11 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => {
+                  if (isOpenTypeTab(tab.id)) {
+                    setActiveTab(tab.id);
+                  }
+                }}
                 className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl flex items-center space-x-1.5 sm:space-x-2 transition-all whitespace-nowrap shrink-0 ${
                   isSelected
                     ? isLight
@@ -748,7 +765,7 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
                       <span>インタラクティブ縦書き＆合字レンダリング検証</span>
                     </h3>
                     <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-                      記述したテキストに対し、設定された OpenType GSUB (`vert`, `liga`) ルールがリアルタイム適用されます
+                      縦書きレイアウトと入力テキストを確認できます。GSUB (`vert`, `liga`) の最終的な適用は、書き出したフォント側で行われます
                     </p>
                   </div>
 
@@ -808,7 +825,7 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
                 <div className="flex items-center space-x-2 text-[11px] text-stone-500 dark:text-stone-400">
                   <Info className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                   <span>
-                    「句読点」「鍵括弧」「長音記号」は縦書きモード（`vertical-rl`）時に自動で縦向き字形へシフトします。
+                    この画面はブラウザの縦書きレイアウトを確認するプレビューです。設定した縦向き字形と合字は、書き出したフォントを対応アプリで検証してください。
                   </span>
                 </div>
               </div>

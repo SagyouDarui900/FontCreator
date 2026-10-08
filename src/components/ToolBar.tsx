@@ -42,7 +42,14 @@ import {
  Plus,
  Download,
 } from 'lucide-react';
-import { ToolMode, GridSettings, BrushStyle, UserPenPreset } from '../types';
+import {
+ ToolMode,
+ GridSettings,
+ BrushStyle,
+ UserPenPreset,
+ JapaneseGuidePattern,
+ VerticalGuidePattern,
+} from '../types';
 import { ThemeMode, isLightTheme, getThemeClasses } from '../utils/theme';
 import { PEN_PRESETS } from '../utils/pathUtils';
 
@@ -119,6 +126,30 @@ const SHAPE_TOOLS: { id: ToolMode; label: string; icon: React.FC<{ className?: s
  { id: 'starburst', label: '8芒星 (Starburst)', icon: Sparkles },
  { id: 'heart', label: 'ハート (Heart)', icon: Heart },
  { id: 'crescent', label: '三日月 (Crescent)', icon: Moon },
+];
+
+const PRESSURE_MODES: { id: 'high' | 'normal' | 'low' | 'off'; label: string; desc: string }[] = [
+ { id: 'high', label: '高感度', desc: '軽快な強弱' },
+ { id: 'normal', label: '標準', desc: '自然な筆圧' },
+ { id: 'low', label: '弱め', desc: 'しっかりめ' },
+ { id: 'off', label: 'OFF', desc: '太さ均一' },
+];
+
+const VERTICAL_GUIDES: { id: VerticalGuidePattern; label: string }[] = [
+ { id: 'none', label: 'なし' },
+ { id: 'center', label: '中心' },
+ { id: 'thirds', label: '3分割' },
+ { id: 'quarters', label: '4分割' },
+ { id: 'eighths', label: '8分割' },
+];
+
+const JAPANESE_GUIDES: { id: JapaneseGuidePattern; label: string }[] = [
+ { id: 'none', label: 'なし' },
+ { id: 'cross', label: '十字格' },
+ { id: 'tian', label: '田字格' },
+ { id: 'jiugong', label: '九宮 (3x3)' },
+ { id: 'sixteen', label: '十六宮 (4x4)' },
+ { id: 'mi', label: '米字格' },
 ];
 
 export const ToolBar: React.FC<ToolBarProps> = React.memo(({
@@ -242,7 +273,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
  return (
  <div
- className={`flex sm:flex-col items-center justify-around sm:justify-start gap-1 sm:gap-1.5 px-1 sm:px-1.5 py-1.5 sm:py-2 border-t sm:border-t-0 sm:border-r shrink-0 z-20 select-none transition-colors w-full sm:w-14 sm:max-h-full sm:h-full pb-[max(env(safe-area-inset-bottom,0px),8px)] sm:pb-2 ${themeClasses.toolbarBg}`}
+ className={`flex sm:flex-col items-center justify-start gap-1 px-1 sm:px-1 py-1 sm:py-1 border-t sm:border-t-0 sm:border-r shrink-0 sm:shrink z-20 select-none transition-colors w-full sm:w-11 md:w-12 h-auto sm:h-full sm:min-h-0 overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto no-scrollbar pb-[max(env(safe-area-inset-bottom,0px),8px)] sm:pb-1 ${themeClasses.toolbarBg}`}
  >
  {/* Mobile Backdrop for Popups */}
  {(showBrushMenu || showShapeMenu || showGridMenu) && !isSmScreen && (
@@ -257,47 +288,47 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  )}
 
  {/* Primary Tools */}
- <div className="flex sm:flex-col items-center justify-around sm:justify-start gap-1 sm:gap-1.5 shrink-0 w-full sm:w-auto">
+ <div className="flex sm:flex-col items-center justify-start gap-1 shrink-0 w-max min-w-full sm:w-auto sm:min-w-0">
  {/* Select Tool (Object & Contour Transform) */}
  <button
  onClick={() => setToolMode('select')}
- className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`group w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  toolMode === 'select'
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="選択・全体移動・変形 (V)"
  >
- <MousePointer className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
- <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">V</span>
+ <MousePointer className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+ <span className="hidden sm:block absolute bottom-0.5 right-0.5 text-[6.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">V</span>
  </button>
 
  {/* Node / Direct Selection Tool (Path vertex & handle editor) */}
  <button
  onClick={() => setToolMode('node')}
- className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`group w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  toolMode === 'node'
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="パス・頂点編集ツール (A) - アンカーポイントとベジェ曲線の直接編集"
  >
- <Crosshair className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
- <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">A</span>
+ <Crosshair className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+ <span className="hidden sm:block absolute bottom-0.5 right-0.5 text-[6.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">A</span>
  </button>
 
  {/* Pen Tool (Bezier) */}
  <button
  onClick={() => setToolMode('pen')}
- className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`group w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  toolMode === 'pen'
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="ベジェ曲線ペン・パス作成 (P)"
  >
- <PenTool className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
- <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">P</span>
+ <PenTool className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+ <span className="hidden sm:block absolute bottom-0.5 right-0.5 text-[6.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">P</span>
  </button>
 
  {/* Brush Multi-Tool with Full Pen Types Palette */}
@@ -315,14 +346,14 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  setShowBrushMenu(true);
  }
  }}
- className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`group w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  toolMode === 'brush' || showBrushMenu
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title={`手書きペン (${currentPenPreset.name})${isCustomPen ? ' [カスタムペン]' : ''} (B) - クリックでペンの種類を変更`}
  >
- <CurrentPenIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+ <CurrentPenIcon className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  {isCustomPen && (
  <span className="absolute -top-1 -right-1 px-1 py-0.2 bg-emerald-500 text-stone-950 font-bold text-[8px] rounded-full shadow-xs leading-none">
  自
@@ -504,7 +535,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  setShowBrushMenu(false);
  onOpenPixelStudio();
  }}
- className="w-full mt-1.5 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-stone-900 hover:bg-black text-emerald-300 dark:bg-[#1a2b20] dark:hover:bg-[#203628] dark:text-emerald-300 border border-emerald-500/30 flex items-center justify-center space-x-1.5 transition-all active:scale-95"
+ className="w-full mt-1.5 py-2 px-2.5 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 dark:bg-[#18261e] dark:hover:bg-[#22352a] text-stone-800 dark:text-emerald-200 border border-stone-200 dark:border-[#25362b] flex items-center justify-center space-x-1.5 transition-all active:scale-95 cursor-pointer"
  title="グリッド上でドットを配置し、ピクセルフォントを作字します"
  >
  <Grid className="w-3.5 h-3.5 text-emerald-300" />
@@ -519,10 +550,10 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  setShowBrushMenu(false);
  onOpenPenPresetsModal();
  }}
- className="w-full mt-2 py-1.5 px-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center space-x-1.5 transition-all active:scale-95"
+ className="w-full mt-2 py-2 px-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white dark:text-stone-950 flex items-center justify-center space-x-1.5 transition-all active:scale-95 cursor-pointer"
  >
  <Plus className="w-3.5 h-3.5" />
- <span>＋ カスタムブラシを新規追加・編集</span>
+ <span>カスタムブラシを作成・編集</span>
  </button>
  )}
 
@@ -543,15 +574,10 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  </span>
  </div>
  <div className="grid grid-cols-4 gap-1">
- {[
- { id: 'high', label: '高感度', desc: '軽快な強弱' },
- { id: 'normal', label: '標準', desc: '自然な筆圧' },
- { id: 'low', label: '弱め', desc: 'しっかりめ' },
- { id: 'off', label: 'OFF', desc: '太さ均一' },
- ].map((mode) => (
+ {PRESSURE_MODES.map((mode) => (
  <button
  key={mode.id}
- onClick={() => onChangePressureSensitivity?.(mode.id as any)}
+ onClick={() => onChangePressureSensitivity?.(mode.id)}
  className={`py-1 px-1 rounded-lg text-center transition-all ${
  (pressureSensitivity || 'normal') === mode.id
  ? isLight
@@ -568,7 +594,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  ))}
  </div>
  <p className="text-[9.5px] opacity-70 mt-1.5 leading-relaxed">
- iPad + Apple Pencilの筆圧・速度・止め払いにリアルタイム連動します。
+ スタイラスペンの筆圧・速度の入力に対応しています。
  </p>
  </div>
 
@@ -661,14 +687,14 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  setShowGridMenu(false);
  setShowShapeMenu(true);
  }}
- className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`group w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  isCurrentToolShape || showShapeMenu
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title={`幾何学図形ツール (${currentShapeTool.label}) (U) - クリックで全20種類の図形パレットを開閉 (右クリックでも開閉可能)`}
  >
- <CurrentShapeIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+ <CurrentShapeIcon className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  <span className="absolute bottom-0.5 right-0.5 text-[7px] font-mono opacity-70 leading-none pointer-events-none">▾</span>
  </button>
 
@@ -683,7 +709,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  }
  : undefined
  }
- className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-72 z-50 p-2.5 pb-8 rounded-2xl border shadow-2xl animate-in fade-in duration-150 overflow-y-auto ${themeClasses.cardBg}`}
+ className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-13 md:left-14 sm:w-72 z-50 p-2.5 pb-8 rounded-2xl border shadow-2xl animate-in fade-in duration-150 overflow-y-auto ${themeClasses.cardBg}`}
  >
  <div className="px-1 py-0.5 text-[11px] font-bold border-b mb-2 flex items-center justify-between border-stone-200 dark:border-[#223025]">
  <span className={isLight ? 'text-emerald-800' : 'text-emerald-400'}>図形を選択</span>
@@ -814,44 +840,44 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  {/* Eraser Tool */}
  <button
  onClick={() => setToolMode('eraser')}
- className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`group w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  toolMode === 'eraser'
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="消しゴム (E)"
  >
- <Eraser className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
- <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">E</span>
+ <Eraser className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+ <span className="hidden sm:block absolute bottom-0.5 right-0.5 text-[6.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">E</span>
  </button>
 
  {/* Ruler / Dimension & Measure Tool */}
  <button
  id="btn-toolbar-ruler"
  onClick={() => setToolMode('ruler')}
- className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`group w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  toolMode === 'ruler'
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="定規・寸法計測ツール (R) - ドラッグして距離・字幅・角度を計測 (Shiftで水平/垂直固定)"
  >
- <Ruler className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
- <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">R</span>
+ <Ruler className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+ <span className="hidden sm:block absolute bottom-0.5 right-0.5 text-[6.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">R</span>
  </button>
 
  {/* Hand Tool (Desktop only in main toolbar) */}
  <button
  onClick={() => setToolMode('hand')}
- className={`hidden sm:flex group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 items-center justify-center relative shrink-0 ${
+ className={`hidden sm:flex group w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 items-center justify-center relative shrink-0 ${
  toolMode === 'hand'
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="手のひら・画面移動 (H) / Spaceドラッグでも移動可能"
  >
- <Hand className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
- <span className="hidden sm:block absolute bottom-0.5 right-1 text-[7.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">H</span>
+ <Hand className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+ <span className="hidden sm:block absolute bottom-0.5 right-0.5 text-[6.5px] font-mono font-bold opacity-60 leading-none pointer-events-none">H</span>
  </button>
 
  {/* Mobile Unified Grid & Guides Bottom Sheet Trigger */}
@@ -878,13 +904,13 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  </div>
 
  <div
- className={`hidden sm:block w-7 sm:w-8 h-[1px] my-1 sm:my-1.5 mx-auto opacity-70 ${
+ className={`hidden sm:block w-6 sm:w-7 h-[1px] my-0.5 mx-auto opacity-70 ${
  isLight ? 'bg-stone-200' : 'bg-[#222e25]'
  }`}
  />
 
  {/* Desktop-only View / Guide Toggles */}
- <div className="hidden sm:flex sm:flex-col items-center gap-1 sm:gap-1.5 shrink-0 w-full">
+ <div className="hidden sm:flex sm:flex-col items-center gap-1 shrink-0 w-full">
  {/* Grid Toggle & Settings Menu */}
  <div className="relative shrink-0 flex flex-col items-center" ref={gridMenuRef}>
  <button
@@ -899,14 +925,14 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  setGridAnchorTop(Math.max(60, rect.top - 80));
  setShowGridMenu((prev) => !prev);
  }}
- className={`group w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`group w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  gridSettings.showGrid || showGridMenu
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title={`方眼グリッド表示 (クリックで切替 / 右クリックまたは▼で設定開閉: 現在${gridSettings.gridSize || 50}px)`}
  >
- <Grid className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+ <Grid className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  <span
  onClick={(e) => {
  e.stopPropagation();
@@ -934,7 +960,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  }
  : undefined
  }
- className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-14 md:left-16 sm:w-72 z-50 p-3 pb-6 rounded-2xl border shadow-2xl animate-in fade-in duration-150 overflow-y-auto ${themeClasses.cardBg}`}
+ className={`fixed inset-x-3 max-w-xs mx-auto sm:inset-x-auto sm:bottom-auto sm:fixed sm:left-13 md:left-14 sm:w-72 z-50 p-3 pb-6 rounded-2xl border shadow-2xl animate-in fade-in duration-150 overflow-y-auto ${themeClasses.cardBg}`}
  >
  <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-stone-200 dark:border-[#223025]">
  <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-700 dark:text-emerald-400">
@@ -1146,20 +1172,14 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  <span className="text-[9px] text-purple-700 dark:text-purple-400 font-medium">偏・旁・ステム</span>
  </div>
  <div className="grid grid-cols-5 gap-1">
- {[
- { id: 'none', label: 'なし' },
- { id: 'center', label: '中心' },
- { id: 'thirds', label: '3分割' },
- { id: 'quarters', label: '4分割' },
- { id: 'eighths', label: '8分割' },
- ].map((vg) => (
+ {VERTICAL_GUIDES.map((vg) => (
  <button
  key={vg.id}
  type="button"
  onClick={() =>
  setGridSettings((prev) => ({
  ...prev,
- verticalGuide: vg.id as any,
+ verticalGuide: vg.id,
  }))
  }
  className={`py-1 rounded text-[10px] font-bold border transition-colors ${
@@ -1183,21 +1203,14 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  </span>
  </div>
  <div className="grid grid-cols-3 gap-1">
- {[
- { id: 'none', label: 'なし' },
- { id: 'cross', label: '十字格' },
- { id: 'tian', label: '田字格' },
- { id: 'jiugong', label: '九宮 (3x3)' },
- { id: 'sixteen', label: '十六宮 (4x4)' },
- { id: 'mi', label: '米字格' },
- ].map((g) => (
+ {JAPANESE_GUIDES.map((g) => (
  <button
  key={g.id}
  type="button"
  onClick={() =>
  setGridSettings((prev) => ({
  ...prev,
- japaneseGuide: g.id as any,
+ japaneseGuide: g.id,
  }))
  }
  className={`py-1 rounded text-[10px] font-bold border transition-colors ${
@@ -1266,68 +1279,68 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  {/* Snap to Grid */}
  <button
  onClick={() => setGridSettings((s) => ({ ...s, snapToGrid: !s.snapToGrid }))}
- className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
+ className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-all flex items-center justify-center relative shrink-0 ${
  gridSettings.snapToGrid
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="グリッドにスナップ（幾何学・デザインフォント作図用）"
  >
- <Magnet className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+ <Magnet className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  </button>
 
  {/* Metrics Lines Toggle */}
  <button
  onClick={() => setGridSettings((s) => ({ ...s, showMetrics: !s.showMetrics }))}
- className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  gridSettings.showMetrics
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="メトリクスガイド線（ベースライン等）"
  >
- <Eye className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+ <Eye className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  </button>
 
  {/* Ruler Bars Toggle (Top/Left Rulers) */}
  <button
  onClick={() => setGridSettings((s) => ({ ...s, showRulers: !s.showRulers }))}
- className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  gridSettings.showRulers !== false
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="外枠の目盛定規・ルーラー表示/非表示 (ルーラーからガイド線を引き出せます)"
  >
- <Ruler className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+ <Ruler className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  </button>
 
  {/* Cursor Crosshair Reticle Toggle */}
  <button
  onClick={() => setGridSettings((s) => ({ ...s, showCursorCrosshair: !s.showCursorCrosshair }))}
- className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  gridSettings.showCursorCrosshair
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
  title="十字ポインターガイド線"
  >
- <Crosshair className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+ <Crosshair className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  </button>
  </div>
 
  {/* Quick Actions (Desktop only) */}
- <div className="hidden sm:flex sm:flex-col items-center gap-1 sm:gap-1.5 mt-auto shrink-0 pb-1">
+ <div className="hidden sm:flex sm:flex-col items-center gap-1 mt-1 shrink-0 pb-1">
  {/* Quick Save Current Glyph */}
  {onQuickSaveGlyph && (
  <button
  onClick={onQuickSaveGlyph}
- className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 active:scale-95 ${
+ className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 active:scale-95 ${
  themeClasses.activeToolHover
  }`}
  title="現在の文字を保存 (即時永続化 & 単体JSONバックアップ書き出し)"
  >
- <Save className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+ <Save className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  </button>
  )}
 
@@ -1335,12 +1348,12 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  {onOpenTraceModal && (
  <button
  onClick={onOpenTraceModal}
- className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
+ className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  themeClasses.activeToolHover
  }`}
  title="下絵・看板写真トレース設定"
  >
- <Layers className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+ <Layers className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  </button>
  )}
  </div>
@@ -1959,20 +1972,14 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  <span className="text-[10px] text-purple-700 dark:text-purple-400 font-medium">偏・旁・ステム</span>
  </div>
  <div className="grid grid-cols-5 gap-1">
- {[
- { id: 'none', label: 'なし' },
- { id: 'center', label: '中心' },
- { id: 'thirds', label: '3分割' },
- { id: 'quarters', label: '4分割' },
- { id: 'eighths', label: '8分割' },
- ].map((vg) => (
+ {VERTICAL_GUIDES.map((vg) => (
  <button
  key={vg.id}
  type="button"
  onClick={() =>
  setGridSettings((prev) => ({
  ...prev,
- verticalGuide: vg.id as any,
+ verticalGuide: vg.id,
  }))
  }
  className={`py-1 rounded text-[11px] font-bold border transition-colors ${
@@ -1997,21 +2004,14 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  </span>
  </div>
  <div className="grid grid-cols-3 gap-1">
- {[
- { id: 'none', label: 'なし' },
- { id: 'cross', label: '十字格' },
- { id: 'tian', label: '田字格' },
- { id: 'jiugong', label: '九宮 (3x3)' },
- { id: 'sixteen', label: '十六宮 (4x4)' },
- { id: 'mi', label: '米字格' },
- ].map((g) => (
+ {JAPANESE_GUIDES.map((g) => (
  <button
  key={g.id}
  type="button"
  onClick={() =>
  setGridSettings((prev) => ({
  ...prev,
- japaneseGuide: g.id as any,
+ japaneseGuide: g.id,
  }))
  }
  className={`py-1 rounded text-[11px] font-bold border transition-colors ${

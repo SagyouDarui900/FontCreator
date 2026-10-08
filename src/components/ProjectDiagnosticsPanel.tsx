@@ -31,6 +31,24 @@ import {
   CategoryDiagnosticStat,
 } from '../utils/projectDiagnostics';
 
+type DiagnosticFilter = 'all_attention' | 'all' | 'empty' | 'critically_low' | 'draft' | 'complete';
+type DiagnosticSort = 'complexity_asc' | 'complexity_desc' | 'nodes_asc' | 'unicode' | 'severity';
+
+const isDiagnosticFilter = (value: string): value is DiagnosticFilter =>
+  value === 'all_attention' ||
+  value === 'all' ||
+  value === 'empty' ||
+  value === 'critically_low' ||
+  value === 'draft' ||
+  value === 'complete';
+
+const isDiagnosticSort = (value: string): value is DiagnosticSort =>
+  value === 'complexity_asc' ||
+  value === 'complexity_desc' ||
+  value === 'nodes_asc' ||
+  value === 'unicode' ||
+  value === 'severity';
+
 export interface ProjectDiagnosticsPanelProps {
   project: FontProject;
   setProject: React.Dispatch<React.SetStateAction<FontProject>>;
@@ -38,12 +56,12 @@ export interface ProjectDiagnosticsPanelProps {
   diagReport: ProjectDiagnosticsReport | null;
   diagScope: DiagnosticScope;
   setDiagScope: (scope: DiagnosticScope) => void;
-  diagFilter: 'all_attention' | 'all' | 'empty' | 'critically_low' | 'draft' | 'complete';
-  setDiagFilter: (filter: 'all_attention' | 'all' | 'empty' | 'critically_low' | 'draft' | 'complete') => void;
+  diagFilter: DiagnosticFilter;
+  setDiagFilter: (filter: DiagnosticFilter) => void;
   diagCategoryFilter: string;
   setDiagCategoryFilter: (cat: string) => void;
-  diagSortBy: 'complexity_asc' | 'complexity_desc' | 'nodes_asc' | 'unicode' | 'severity';
-  setDiagSortBy: (sort: 'complexity_asc' | 'complexity_desc' | 'nodes_asc' | 'unicode' | 'severity') => void;
+  diagSortBy: DiagnosticSort;
+  setDiagSortBy: (sort: DiagnosticSort) => void;
   diagSearchQuery: string;
   setDiagSearchQuery: (query: string) => void;
   isDiagScanning: boolean;
@@ -640,7 +658,11 @@ export const ProjectDiagnosticsPanel: React.FC<ProjectDiagnosticsPanelProps> = (
             ].map((f) => (
               <button
                 key={f.id}
-                onClick={() => setDiagFilter(f.id as any)}
+                onClick={() => {
+                  if (isDiagnosticFilter(f.id)) {
+                    setDiagFilter(f.id);
+                  }
+                }}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center space-x-1 border ${
                   diagFilter === f.id
                     ? isLight
@@ -668,7 +690,11 @@ export const ProjectDiagnosticsPanel: React.FC<ProjectDiagnosticsPanelProps> = (
           </div>
           <select
             value={diagSortBy}
-            onChange={(e) => setDiagSortBy(e.target.value as any)}
+            onChange={(e) => {
+              if (isDiagnosticSort(e.target.value)) {
+                setDiagSortBy(e.target.value);
+              }
+            }}
             className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium outline-hidden transition-colors ${
               isLight
                 ? 'bg-white border-stone-200 text-stone-800'
