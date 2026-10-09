@@ -7857,12 +7857,19 @@ export function interpolateContours(
   if (clampedT === 0 || !masterB || masterB.length === 0) return masterA;
   if (clampedT === 1 || !masterA || masterA.length === 0) return masterB;
 
-  const count = Math.max(masterA.length, masterB.length);
+  // Contour order cannot safely be inferred when the masters have different
+  // contour counts (for example, a counter exists in only one master).
+  // Returning the nearer master avoids creating a hybrid with dropped contours.
+  if (masterA.length !== masterB.length) {
+    return clampedT < 0.5 ? masterA : masterB;
+  }
+
+  const count = Math.min(masterA.length, masterB.length);
   const result: PathContour[] = [];
 
   for (let cIdx = 0; cIdx < count; cIdx++) {
-    const cA = masterA[cIdx % masterA.length];
-    const cB = masterB[cIdx % masterB.length];
+    const cA = masterA[cIdx];
+    const cB = masterB[cIdx];
 
     if (!cA || !cB) continue;
 

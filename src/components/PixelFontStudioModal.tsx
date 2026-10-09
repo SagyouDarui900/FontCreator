@@ -58,13 +58,13 @@ import {
  Gamepad2,
  LayoutGrid,
 } from 'lucide-react';
-import { FontProject, GlyphData, PathContour, BezierNode, Point, PixelGlyphData } from '../types';
+import { FontProject, GlyphData, PathContour, BezierNode, Point, PixelGlyphData, PixelDotShape } from '../types';
 import { UNICODE_CATEGORIES, getCategoryCharList } from '../data/unicodeTables';
 import { shareOrDownloadFont } from '../utils/fontCompiler';
 
 export type PixelGridPreset = '4x4' | '5x7' | '8x8' | '12x12' | '16x16' | '24x24' | '32x32' | '64x64' | '128x128' | 'custom';
 export type PixelDrawTool = 'pencil' | 'eraser' | 'bucket' | 'line' | 'rect' | 'rect_filled' | 'circle' | 'circle_filled';
-export type PixelDotShape = 'square' | 'round' | 'squircle' | 'diamond';
+export type { PixelDotShape };
 export type BrushStampShape = 'square' | 'round';
 
 interface PixelFontStudioModalProps {
@@ -105,407 +105,16 @@ const PIXEL_STUDIO_CATEGORIES = [
  { id: 'jis_1', label: 'JIS第1' },
 ];
 
-/**
- * Bresenham Line Drawing Algorithm
- */
-function getBresenhamLine(x0: number, y0: number, x1: number, y1: number): Point[] {
- const points: Point[] = [];
- const dx = Math.abs(x1 - x0);
- const dy = Math.abs(y1 - y0);
- const sx = x0 < x1 ? 1 : -1;
- const sy = y0 < y1 ? 1 : -1;
- let err = dx - dy;
+import {
+  resamplePixelGrid,
+  getBresenhamLine,
+  getMidpointCircle,
+  floodFill,
+  pixelGridToContours,
+  rasterizeGlyphToPixelGrid,
+} from '../utils/pixelFontUtils';
 
- let currX = x0;
- let currY = y0;
-
- while (true) {
- points.push({ x: currX, y: currY });
- if (currX === x1 && currY === y1) break;
- const e2 = 2 * err;
- if (e2 > -dy) {
- err -= dy;
- currX += sx;
- }
- if (e2 < dx) {
- err += dx;
- currY += sy;
- }
- }
-
- return points;
-}
-
-/**
- * Midpoint Circle Drawing Algorithm
- */
-function getMidpointCircle(cx: number, cy: number, radius: number, filled: boolean): Point[] {
- const points: Point[] = [];
- const set = new Set<string>();
-
- const addPoint = (x: number, y: number) => {
- const key = `${x},${y}`;
- if (!set.has(key)) {
- set.add(key);
- points.push({ x, y });
- }
- };
-
- if (filled) {
- for (let dy = -radius; dy <= radius; dy++) {
- for (let dx = -radius; dx <= radius; dx++) {
- if (dx * dx + dy * dy <= radius * radius) {
- addPoint(cx + dx, cy + dy);
- }
- }
- }
- return points;
- }
-
- let x = radius;
- let y = 0;
- let err = 0;
-
- while (x >= y) {
- addPoint(cx + x, cy + y);
- addPoint(cx + y, cy + x);
- addPoint(cx - y, cy + x);
- addPoint(cx - x, cy + y);
- addPoint(cx - x, cy - y);
- addPoint(cx - y, cy - x);
- addPoint(cx + y, cy - x);
- addPoint(cx + x, cy - y);
-
- if (err <= 0) {
- y += 1;
- err += 2 * y + 1;
- }
- if (err > 0) {
- x -= 1;
- err -= 2 * x + 1;
- }
- }
-
- return points;
-}
-
-/**
- * 2D Flood Fill Algorithm
- */
-function floodFill(grid: Uint8Array, width: number, height: number, startX: number, startY: number, targetVal: number, fillVal: number) {
- if (targetVal === fillVal) return;
- if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
-
- const startIndex = startY * width + startX;
- if (grid[startIndex] !== targetVal) return;
-
- const queue: [number, number][] = [[startX, startY]];
- grid[startIndex] = fillVal;
-
- while (queue.length > 0) {
- const [cx, cy] = queue.pop()!;
- const neighbors: [number, number][] = [
- [cx + 1, cy],
- [cx - 1, cy],
- [cx, cy + 1],
- [cx, cy - 1],
- ];
-
- for (const [nx, ny] of neighbors) {
- if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
- const nIndex = ny * width + nx;
- if (grid[nIndex] === targetVal) {
- grid[nIndex] = fillVal;
- queue.push([nx, ny]);
- }
- }
- }
- }
-}
-
-/**
- * Convert 2D Pixel Grid into Vector Path Contours
- * Uses contour loop marching / segment chaining to merge adjacent pixels into optimal polygons.
- */
-export function pixelGridToContours(
- grid: Uint8Array,
- width: number,
- height: number,
- unitsPerEm: number = 1000,
- ascender: number = 800,
- descender: number = -200,
- advanceWidth: number = 1000,
- shape: PixelDotShape = 'square',
- mergeOptimized: boolean = true,
- marginPercent: number = 0.08
-): PathContour[] {
- const contours: PathContour[] = [];
-
- const effectiveEm = ascender - descender;
- const marginY = effectiveEm * marginPercent;
- const marginX = advanceWidth * marginPercent;
-
- const usableWidth = advanceWidth - 2 * marginX;
- const usableHeight = effectiveEm - 2 * marginY;
-
- const cellW = usableWidth / width;
- const cellH = usableHeight / height;
-
- const originX = marginX;
- const topY = ascender - marginY;
-
- const getCellBounds = (gx: number, gy: number) => {
- const x0 = originX + gx * cellW;
- const x1 = x0 + cellW;
- const y1 = topY - gy * cellH;
- const y0 = y1 - cellH;
- return { x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
- };
-
- if (shape === 'round' || shape === 'squircle' || shape === 'diamond' || !mergeOptimized) {
- let contourId = 0;
- for (let gy = 0; gy < height; gy++) {
- for (let gx = 0; gx < width; gx++) {
- if (grid[gy * width + gx] === 1) {
- const { x0, y0, x1, y1, cx, cy } = getCellBounds(gx, gy);
- const rw = (x1 - x0) / 2;
- const rh = (y1 - y0) / 2;
-
- if (shape === 'round') {
- const r = Math.min(rw, rh) * 0.96;
- const k = r * 0.5522847498;
- const nodes: BezierNode[] = [
- { id: `c_${contourId}_0`, x: cx, y: cy + r, handleIn: { x: cx - k, y: cy + r }, handleOut: { x: cx + k, y: cy + r }, type: 'smooth' },
- { id: `c_${contourId}_1`, x: cx + r, y: cy, handleIn: { x: cx + r, y: cy + k }, handleOut: { x: cx + r, y: cy - k }, type: 'smooth' },
- { id: `c_${contourId}_2`, x: cx, y: cy - r, handleIn: { x: cx + k, y: cy - r }, handleOut: { x: cx - k, y: cy - r }, type: 'smooth' },
- { id: `c_${contourId}_3`, x: cx - r, y: cy, handleIn: { x: cx - r, y: cy - k }, handleOut: { x: cx - r, y: cy + k }, type: 'smooth' },
- ];
- contours.push({ id: `contour_round_${contourId++}`, nodes, closed: true });
- } else if (shape === 'squircle') {
- const cr = Math.min(rw, rh) * 0.4;
- const nodes: BezierNode[] = [
- { id: `s_${contourId}_0`, x: x0 + cr, y: y1 },
- { id: `s_${contourId}_1`, x: x1 - cr, y: y1 },
- { id: `s_${contourId}_2`, x: x1, y: y1 - cr },
- { id: `s_${contourId}_3`, x: x1, y: y0 + cr },
- { id: `s_${contourId}_4`, x: x1 - cr, y: y0 },
- { id: `s_${contourId}_5`, x: x0 + cr, y: y0 },
- { id: `s_${contourId}_6`, x: x0, y: y0 + cr },
- { id: `s_${contourId}_7`, x: x0, y: y1 - cr },
- ];
- contours.push({ id: `contour_squircle_${contourId++}`, nodes, closed: true });
- } else if (shape === 'diamond') {
- const nodes: BezierNode[] = [
- { id: `d_${contourId}_0`, x: cx, y: y1 },
- { id: `d_${contourId}_1`, x: x1, y: cy },
- { id: `d_${contourId}_2`, x: cx, y: y0 },
- { id: `d_${contourId}_3`, x: x0, y: cy },
- ];
- contours.push({ id: `contour_diamond_${contourId++}`, nodes, closed: true });
- } else {
- const nodes: BezierNode[] = [
- { id: `sq_${contourId}_0`, x: x0, y: y1 },
- { id: `sq_${contourId}_1`, x: x1, y: y1 },
- { id: `sq_${contourId}_2`, x: x1, y: y0 },
- { id: `sq_${contourId}_3`, x: x0, y: y0 },
- ];
- contours.push({ id: `contour_sq_${contourId++}`, nodes, closed: true });
- }
- }
- }
- }
- return contours;
- }
-
- // Optimized Merged Square Mode
- interface Edge {
- p1: Point;
- p2: Point;
- used: boolean;
- }
-
- const edges: Edge[] = [];
-
- const getPixel = (gx: number, gy: number) => {
- if (gx < 0 || gx >= width || gy < 0 || gy >= height) return 0;
- return grid[gy * width + gx];
- };
-
- for (let gy = 0; gy < height; gy++) {
- for (let gx = 0; gx < width; gx++) {
- if (getPixel(gx, gy) === 1) {
- const { x0, y0, x1, y1 } = getCellBounds(gx, gy);
-
- if (getPixel(gx, gy - 1) === 0) {
- edges.push({ p1: { x: x0, y: y1 }, p2: { x: x1, y: y1 }, used: false });
- }
- if (getPixel(gx + 1, gy) === 0) {
- edges.push({ p1: { x: x1, y: y1 }, p2: { x: x1, y: y0 }, used: false });
- }
- if (getPixel(gx, gy + 1) === 0) {
- edges.push({ p1: { x: x1, y: y0 }, p2: { x: x0, y: y0 }, used: false });
- }
- if (getPixel(gx - 1, gy) === 0) {
- edges.push({ p1: { x: x0, y: y0 }, p2: { x: x0, y: y1 }, used: false });
- }
- }
- }
- }
-
- let contourId = 0;
- for (let i = 0; i < edges.length; i++) {
- if (edges[i].used) continue;
-
- const startEdge = edges[i];
- startEdge.used = true;
-
- const rawPoints: Point[] = [startEdge.p1, startEdge.p2];
- let currentPoint = startEdge.p2;
-
- let loopFound = false;
- let iterations = 0;
- const maxIterations = edges.length * 2;
-
- while (!loopFound && iterations++ < maxIterations) {
- let nextEdge: Edge | null = null;
- for (const e of edges) {
- if (!e.used && Math.abs(e.p1.x - currentPoint.x) < 0.01 && Math.abs(e.p1.y - currentPoint.y) < 0.01) {
- nextEdge = e;
- break;
- }
- }
-
- if (nextEdge) {
- nextEdge.used = true;
- currentPoint = nextEdge.p2;
-
- if (Math.abs(currentPoint.x - rawPoints[0].x) < 0.01 && Math.abs(currentPoint.y - rawPoints[0].y) < 0.01) {
- loopFound = true;
- } else {
- rawPoints.push(currentPoint);
- }
- } else {
- break;
- }
- }
-
- if (rawPoints.length >= 3) {
- const simplified: Point[] = [];
- const numPts = rawPoints.length;
-
- for (let j = 0; j < numPts; j++) {
- const prev = rawPoints[(j - 1 + numPts) % numPts];
- const curr = rawPoints[j];
- const next = rawPoints[(j + 1) % numPts];
-
- const isHorizontal = Math.abs(prev.y - curr.y) < 0.01 && Math.abs(curr.y - next.y) < 0.01;
- const isVertical = Math.abs(prev.x - curr.x) < 0.01 && Math.abs(curr.x - next.x) < 0.01;
-
- if (!isHorizontal && !isVertical) {
- simplified.push({ x: Math.round(curr.x), y: Math.round(curr.y) });
- }
- }
-
- if (simplified.length >= 3) {
- const nodes: BezierNode[] = simplified.map((p, idx) => ({
- id: `node_px_${contourId}_${idx}`,
- x: p.x,
- y: p.y,
- type: 'corner',
- }));
- contours.push({
- id: `contour_px_${contourId++}`,
- nodes,
- closed: true,
- });
- }
- }
- }
-
- return contours;
-}
-
-/**
- * Rasterize Vector Contours onto a Binary Grid
- */
-export function rasterizeGlyphToPixelGrid(
- glyph: GlyphData,
- width: number,
- height: number,
- unitsPerEm: number = 1000,
- ascender: number = 800,
- descender: number = -200,
- marginPercent: number = 0.08
-): Uint8Array {
- const grid = new Uint8Array(width * height);
- if (!glyph.contours || glyph.contours.length === 0) return grid;
-
- const canvas = document.createElement('canvas');
- canvas.width = width;
- canvas.height = height;
- const ctx = canvas.getContext('2d');
- if (!ctx) return grid;
-
- ctx.clearRect(0, 0, width, height);
-
- const effectiveEm = ascender - descender;
- const marginY = effectiveEm * marginPercent;
- const marginX = (glyph.advanceWidth || unitsPerEm) * marginPercent;
-
- const usableWidth = (glyph.advanceWidth || unitsPerEm) - 2 * marginX;
- const usableHeight = effectiveEm - 2 * marginY;
-
- const originX = marginX;
- const topY = ascender - marginY;
-
- ctx.fillStyle = '#000000';
- ctx.beginPath();
-
- for (const contour of glyph.contours) {
- if (!contour.nodes || contour.nodes.length === 0) continue;
-
- const toCanvasPt = (x: number, y: number): Point => {
- const cx = ((x - originX) / usableWidth) * width;
- const cy = ((topY - y) / usableHeight) * height;
- return { x: cx, y: cy };
- };
-
- const first = toCanvasPt(contour.nodes[0].x, contour.nodes[0].y);
- ctx.moveTo(first.x, first.y);
-
- for (let i = 0; i < contour.nodes.length; i++) {
- const curr = contour.nodes[i];
- const next = contour.nodes[(i + 1) % contour.nodes.length];
-
- if (i === contour.nodes.length - 1 && !contour.closed) break;
-
- const pCurr = toCanvasPt(curr.x, curr.y);
- const pNext = toCanvasPt(next.x, next.y);
-
- if (curr.handleOut || next.handleIn) {
- const cp1 = curr.handleOut ? toCanvasPt(curr.handleOut.x, curr.handleOut.y) : pCurr;
- const cp2 = next.handleIn ? toCanvasPt(next.handleIn.x, next.handleIn.y) : pNext;
- ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, pNext.x, pNext.y);
- } else {
- ctx.lineTo(pNext.x, pNext.y);
- }
- }
-
- if (contour.closed) {
- ctx.closePath();
- }
- }
-
- ctx.fill('nonzero');
-
- const imgData = ctx.getImageData(0, 0, width, height);
- for (let i = 0; i < width * height; i++) {
- const alpha = imgData.data[i * 4 + 3];
- grid[i] = alpha >= 96 ? 1 : 0;
- }
-
- return grid;
-}
+export { pixelGridToContours, rasterizeGlyphToPixelGrid };
 
 export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
  project,
@@ -554,6 +163,10 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
  const [mergeContours, setMergeContours] = useState<boolean>(project.pixelFontSettings?.mergeContours ?? true);
  const [showGridLines, setShowGridLines] = useState<boolean>(true);
  const [showSubdivisions, setShowSubdivisions] = useState<boolean>(true);
+  const [showMetricsGuides, setShowMetricsGuides] = useState<boolean>(true);
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  const isErasingStrokeRef = useRef<boolean>(false);
  const [symmetryH, setSymmetryH] = useState<boolean>(false);
  const [symmetryV, setSymmetryV] = useState<boolean>(false);
  const [showOnionSkin, setShowOnionSkin] = useState<boolean>(false);
@@ -577,6 +190,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
  const [isDrawing, setIsDrawing] = useState<boolean>(false);
  const [drawStartPos, setDrawStartPos] = useState<Point | null>(null);
  const lastDrawPosRef = useRef<Point | null>(null);
+ const drawingStartGridRef = useRef<Uint8Array | null>(null);
  const [previewGrid, setPreviewGrid] = useState<Uint8Array | null>(null);
  const [hoverPos, setHoverPos] = useState<Point | null>(null);
 
@@ -620,106 +234,107 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
  }
  }, [selectedUnicode]);
 
- // Load native pixel grid from glyph or rasterize vector fallback
- const loadGlyphPixelGrid = useCallback(
- (uCode: number, w: number, h: number) => {
- const g = project.glyphs[uCode];
- let loadedGrid = new Uint8Array(w * h);
+  // Auto-save native pixel data & vector contours back to project
+  const autoSaveGlyph = useCallback(
+    (targetGrid: Uint8Array, uCode: number = currentUnicode, customW?: number, customH?: number) => {
+      const proj = projectRef.current;
+      const w = customW ?? gridWidth;
+      const h = customH ?? gridHeight;
+      const g = proj.glyphs[uCode] || currentGlyph;
+      const contours = pixelGridToContours(
+        targetGrid,
+        w,
+        h,
+        proj.metadata.unitsPerEm || 1000,
+        proj.metadata.ascender || 800,
+        proj.metadata.descender || -200,
+        g.advanceWidth || 1000,
+        dotShape,
+        mergeContours
+      );
 
- if (g && g.pixelData && g.pixelData.data && g.pixelData.data.length === w * h) {
- // 1. Native Pixel Data is directly available!
- loadedGrid = new Uint8Array(g.pixelData.data);
- } else if (g && g.contours && g.contours.length > 0) {
- // 2. Existing vector contours available -> rasterize to this resolution
- loadedGrid = new Uint8Array(
- rasterizeGlyphToPixelGrid(
- g,
- w,
- h,
- project.metadata.unitsPerEm || 1000,
- project.metadata.ascender || 800,
- project.metadata.descender || -200
- )
- );
- }
+      const vectorContoursBackup =
+        g.vectorContoursBackup || (g.pixelData ? undefined : (g.contours && g.contours.length > 0 ? g.contours : undefined));
 
- currentGridRef.current = loadedGrid;
-		setGrid(loadedGrid);
-		setHistory([new Uint8Array(loadedGrid)]);
- setHistoryIdx(0);
- },
- [project.glyphs, project.metadata]
- );
+      const pixelData: PixelGlyphData = {
+        width: w,
+        height: h,
+        data: Array.from(targetGrid),
+        shape: dotShape,
+      };
 
- // When current unicode changes or resolution changes
- useEffect(() => {
- if (isOpen) {
- loadGlyphPixelGrid(currentUnicode, gridWidth, gridHeight);
- }
- }, [isOpen, currentUnicode, gridWidth, gridHeight, loadGlyphPixelGrid]);
+      setProject((prev) => ({
+        ...prev,
+        pixelFontSettings: {
+          isPixelFontProject: true,
+          defaultWidth: w,
+          defaultHeight: h,
+          dotShape,
+          mergeContours,
+        },
+        glyphs: {
+          ...prev.glyphs,
+          [uCode]: {
+            ...g,
+            unicode: uCode,
+            char: g.char || String.fromCodePoint(uCode),
+            contours,
+            vectorContoursBackup,
+            pixelData,
+            modified: true,
+          },
+        },
+        updatedAt: Date.now(),
+      }));
+    },
+    [currentUnicode, currentGlyph, gridWidth, gridHeight, dotShape, mergeContours, setProject]
+  );
 
- // Auto-save native pixel data & vector contours back to project
- const autoSaveGlyph = useCallback(
- (targetGrid: Uint8Array, uCode: number = currentUnicode) => {
- const g = project.glyphs[uCode] || currentGlyph;
- const contours = pixelGridToContours(
- targetGrid,
- gridWidth,
- gridHeight,
- project.metadata.unitsPerEm || 1000,
- project.metadata.ascender || 800,
- project.metadata.descender || -200,
- g.advanceWidth || 1000,
- dotShape,
- mergeContours
- );
+  // Load native pixel grid from glyph, resample existing pixel data, or rasterize vector fallback
+  // Stable callback avoids resetting history / breaking undo on every stroke
+  const loadGlyphPixelGrid = useCallback(
+    (uCode: number, w: number, h: number) => {
+      const proj = projectRef.current;
+      const g = proj.glyphs[uCode];
+      let loadedGrid = new Uint8Array(w * h);
 
- const vectorContoursBackup =
- g.vectorContoursBackup || (g.pixelData ? undefined : (g.contours && g.contours.length > 0 ? g.contours : undefined));
+      if (g && g.pixelData && g.pixelData.data && g.pixelData.data.length > 0) {
+        if (g.pixelData.data.length === w * h) {
+          // 1. Native Pixel Data is directly available at exact resolution!
+          loadedGrid = new Uint8Array(g.pixelData.data);
+        } else if (g.pixelData.width && g.pixelData.height && g.pixelData.data.length === g.pixelData.width * g.pixelData.height) {
+          // 2. Pixel data exists at different resolution -> resample smoothly!
+          loadedGrid = new Uint8Array(resamplePixelGrid(g.pixelData.data, g.pixelData.width, g.pixelData.height, w, h));
+          autoSaveGlyph(loadedGrid, uCode, w, h);
+        }
+      } else if (g && g.contours && g.contours.length > 0) {
+        // 3. Existing vector contours available -> rasterize to this resolution
+        loadedGrid = new Uint8Array(
+          rasterizeGlyphToPixelGrid(
+            g,
+            w,
+            h,
+            proj.metadata.unitsPerEm || 1000,
+            proj.metadata.ascender || 800,
+            proj.metadata.descender || -200
+          )
+        );
+      }
 
- const pixelData: PixelGlyphData = {
- width: gridWidth,
- height: gridHeight,
- data: Array.from(targetGrid),
- shape: dotShape,
- };
+      currentGridRef.current = loadedGrid;
+      setGrid(loadedGrid);
+      setHistory([new Uint8Array(loadedGrid)]);
+      setHistoryIdx(0);
+    },
+    [autoSaveGlyph]
+  );
 
- setProject((prev) => ({
- ...prev,
- pixelFontSettings: {
- isPixelFontProject: true,
- defaultWidth: gridWidth,
- defaultHeight: gridHeight,
- dotShape,
- mergeContours,
- },
- glyphs: {
- ...prev.glyphs,
- [uCode]: {
- ...g,
- unicode: uCode,
- char: g.char || String.fromCodePoint(uCode),
- contours,
- vectorContoursBackup,
- pixelData,
- modified: true,
- },
- },
- updatedAt: Date.now(),
- }));
- },
- [
- currentUnicode,
- currentGlyph,
- gridWidth,
- gridHeight,
- dotShape,
- mergeContours,
- project.metadata,
- project.glyphs,
- setProject,
- ]
- );
+  // When current unicode changes or resolution changes
+  useEffect(() => {
+    if (isOpen) {
+      loadGlyphPixelGrid(currentUnicode, gridWidth, gridHeight);
+    }
+  }, [isOpen, currentUnicode, gridWidth, gridHeight, loadGlyphPixelGrid]);
 
  // Push history snapshot and trigger auto-save
  const pushHistory = useCallback(
@@ -1146,8 +761,11 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
  setIsDrawing(true);
  setDrawStartPos(pt);
  lastDrawPosRef.current = pt;
+ drawingStartGridRef.current = new Uint8Array(currentGridRef.current);
 
- const currentVal = tool === 'eraser' ? 0 : 1;
+    const isRightClick = e.button === 2;
+    const currentVal = (tool === 'eraser' || isRightClick) ? 0 : 1;
+    isErasingStrokeRef.current = (tool === 'eraser' || isRightClick);
 
  if (tool === 'pencil' || tool === 'eraser') {
 			const next = new Uint8Array(currentGridRef.current);
@@ -1161,8 +779,12 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
 			currentGridRef.current = next;
 			pushHistory(next);
 			setIsDrawing(false);
-		}
- };
+		} else if (tool === 'line' || tool === 'rect' || tool === 'rect_filled' || tool === 'circle' || tool === 'circle_filled') {
+      const pGrid = new Uint8Array(currentGridRef.current);
+      applyBrushAt(pGrid, pt.x, pt.y, currentVal);
+      setPreviewGrid(pGrid);
+    }
+	};
 
  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
  e.stopPropagation();
@@ -1171,7 +793,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
 
  if (!isDrawing || !pt) return;
 
- const currentVal = tool === 'eraser' ? 0 : 1;
+    const currentVal = isErasingStrokeRef.current ? 0 : 1;
 
  if (tool === 'pencil' || tool === 'eraser') {
  const lastPt = lastDrawPosRef.current || pt;
@@ -1184,7 +806,8 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
 			currentGridRef.current = next;
 			setGrid(next);
  } else if (drawStartPos && (tool === 'line' || tool === 'rect' || tool === 'rect_filled' || tool === 'circle' || tool === 'circle_filled')) {
- const pGrid = new Uint8Array(currentGridRef.current);
+ const baseGrid = drawingStartGridRef.current || currentGridRef.current;
+      const pGrid = new Uint8Array(baseGrid);
 
  if (tool === 'line') {
  const linePts = getBresenhamLine(drawStartPos.x, drawStartPos.y, pt.x, pt.y);
@@ -1229,16 +852,43 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
  }
  if (!isDrawing) return;
  setIsDrawing(false);
+    isErasingStrokeRef.current = false;
  lastDrawPosRef.current = null;
 
  if (previewGrid) {
 			currentGridRef.current = previewGrid;
+			setGrid(previewGrid);
 			pushHistory(previewGrid);
 			setPreviewGrid(null);
 		} else {
 			pushHistory(currentGridRef.current);
 		}
  setDrawStartPos(null);
+ drawingStartGridRef.current = null;
+ };
+
+ const handlePointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
+   e.stopPropagation();
+   try {
+     if ((e.currentTarget as HTMLCanvasElement).hasPointerCapture(e.pointerId)) {
+       (e.currentTarget as HTMLCanvasElement).releasePointerCapture(e.pointerId);
+     }
+   } catch {
+     // The pointer may already have been released by the browser.
+   }
+   if (!isDrawing) return;
+
+   const initialGrid = drawingStartGridRef.current;
+   if (initialGrid) {
+     const restored = new Uint8Array(initialGrid);
+     currentGridRef.current = restored;
+     setGrid(restored);
+   }
+   setIsDrawing(false);
+   setDrawStartPos(null);
+   setPreviewGrid(null);
+   lastDrawPosRef.current = null;
+   drawingStartGridRef.current = null;
  };
 
  // Render Pixel Canvas to HTML5 2D Context
@@ -1374,6 +1024,34 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
 
  ctx.stroke();
  }
+
+    // 5.1 Baseline & Typography Metrics Guidelines
+    if (showMetricsGuides) {
+      const asc = project.metadata.ascender || 800;
+      const desc = project.metadata.descender || -200;
+      const totalH = asc - desc;
+      const marginY = totalH * 0.08;
+      const usableHeight = totalH - 2 * marginY;
+      const cellHMath = usableHeight / gridHeight;
+      const topY = asc - marginY;
+      const baselineGy = Math.round(topY / cellHMath);
+      const baselineY = Math.min(height - 1, Math.max(0, baselineGy * cellH));
+
+      // Draw Baseline
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.75)' : 'rgba(96, 165, 250, 0.75)';
+      ctx.setLineDash([4, 2]);
+      ctx.beginPath();
+      ctx.moveTo(0, baselineY + 0.5);
+      ctx.lineTo(width, baselineY + 0.5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Baseline Label Badge
+      ctx.fillStyle = isLight ? 'rgba(37, 99, 235, 0.85)' : 'rgba(96, 165, 250, 0.85)';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText('Baseline (基準線)', 4, Math.max(10, baselineY - 3));
+    }
 
  // 6. Hover Brush Cursor Footprint
  if (hoverPos && !isDrawing) {
@@ -1749,6 +1427,7 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
  }, [projectGlyphUnicodes, project.glyphs, activeCategory, glyphSearchQuery]);
 
  const handleSelectGlyphItem = (unicode: number) => {
+    autoSaveGlyph(currentGridRef.current, currentUnicode, gridWidth, gridHeight);
  setCurrentUnicode(unicode);
  onSelectGlyph?.(unicode);
  loadGlyphPixelGrid(unicode, gridWidth, gridHeight);
@@ -2594,19 +2273,17 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
  aspectRatio: `${gridWidth} / ${gridHeight}`,
  }}
  >
- <canvas
+            <canvas
+              onContextMenu={(e) => e.preventDefault()}
  ref={canvasRef}
  width={gridWidth * (gridWidth <= 16 ? 32 : gridWidth <= 32 ? 16 : 8)}
  height={gridHeight * (gridHeight <= 16 ? 32 : gridHeight <= 32 ? 16 : 8)}
  onPointerDown={handlePointerDown}
  onPointerMove={handlePointerMove}
  onPointerUp={handlePointerUp}
+ onPointerCancel={handlePointerCancel}
  onPointerLeave={() => {
  setHoverPos(null);
- if (isDrawing) {
- setIsDrawing(false);
- pushHistory(grid);
- }
  }}
  className="w-full h-full block cursor-crosshair touch-none"
  style={{ imageRendering: 'pixelated' }}
@@ -2750,6 +2427,16 @@ export const PixelFontStudioModal: React.FC<PixelFontStudioModalProps> = ({
  />
  <span>中心線</span>
  </label>
+                <span className="opacity-40">|</span>
+                <label className="flex items-center space-x-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showMetricsGuides}
+                    onChange={(e) => setShowMetricsGuides(e.target.checked)}
+                    className="accent-emerald-600"
+                  />
+                  <span>基準線 (Baseline)</span>
+                </label>
  <span className="opacity-40">|</span>
  <label className="flex items-center space-x-1 cursor-pointer">
  <input

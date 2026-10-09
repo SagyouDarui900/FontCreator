@@ -19,6 +19,7 @@ import {
   Info,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Columns,
   Rows,
   PanelLeftClose,
@@ -688,6 +689,10 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
               className={`inline-flex items-center justify-center relative border border-dashed transition-all cursor-pointer select-none ${
                 isSelected
                   ? 'ring-2 ring-emerald-500 bg-emerald-500/25 border-emerald-500 text-emerald-950 dark:text-emerald-100 z-10'
+                  : !metric
+                  ? isLight
+                    ? 'border-stone-400/50 bg-stone-100/40 text-stone-500 hover:border-emerald-500/60 hover:bg-emerald-50/20'
+                    : 'border-stone-600/50 bg-stone-900/40 text-stone-400 hover:border-emerald-400/60 hover:bg-emerald-950/20'
                   : metric && Math.abs(metric.diff) > 25 && !autoBalanceMargins
                   ? 'border-amber-500 bg-amber-500/10 hover:bg-amber-500/25'
                   : isLight
@@ -695,8 +700,10 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                   : 'border-emerald-400/40 bg-emerald-950/25 hover:bg-emerald-900/60 hover:border-emerald-400'
               }`}
               style={{
-                width: writingMode === 'vertical' ? undefined : '1em',
+                width: '1em',
+                minWidth: '1em',
                 height: '1em',
+                minHeight: '1em',
                 lineHeight: '1em',
                 textAlign: 'center',
                 boxSizing: 'border-box',
@@ -706,13 +713,17 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                 transformOrigin: 'center center',
               }}
               title={
-                metric
-                  ? `「${ch}」 クリックで簡易変形・メイン編集へジャンプ / 送り幅:${metric.adv} 左余白:${metric.lsb} 右余白:${metric.rsb}`
+                !metric
+                  ? `「${ch}」 (未作成・システムフォールバック / クリックで作字エディタへジャンプ)`
+                  : metric
+                  ? `「${ch}」 (自作グリフ / 送り幅:${metric.adv} 左余白:${metric.lsb} 右余白:${metric.rsb} 差:${metric.diff > 0 ? '+' : ''}${metric.diff})`
                   : `「${ch}」 (クリックで簡易移動・変形 / メイン編集へジャンプ)`
               }
             >
               {/* Center vertical crosshair */}
-              <span className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-emerald-500/30 pointer-events-none" />
+              <span className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-emerald-500/25 pointer-events-none" />
+              {/* Center horizontal crosshair */}
+              <span className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-px bg-emerald-500/25 pointer-events-none" />
               {ch}
             </span>
           );
@@ -745,6 +756,8 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
               className={`inline-block relative transition-all cursor-pointer select-none rounded px-0.5 ${
                 isSelected
                   ? 'ring-2 ring-emerald-500 bg-emerald-500/20 text-emerald-950 dark:text-emerald-100 z-10'
+                  : !metric
+                  ? 'hover:bg-stone-500/15 hover:ring-1 hover:ring-stone-400/60 opacity-90'
                   : 'hover:bg-emerald-500/15 hover:ring-1 hover:ring-emerald-400/80'
               }`}
               style={{
@@ -753,7 +766,11 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                   : undefined,
                 transformOrigin: 'center center',
               }}
-              title={`「${ch}」 (クリックで位置・縦横比変形ツールバー表示 / メイン編集へジャンプ)`}
+              title={
+                !metric
+                  ? `「${ch}」 (未作成・システムフォールバック / クリックで作字へジャンプ)`
+                  : `「${ch}」 (自作グリフ / クリックで位置・変形ツール表示)`
+              }
             >
               {ch}
             </span>
@@ -843,7 +860,18 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
 
             <div className="flex items-center space-x-2 flex-1 min-w-0">
               {selectedCharInfo ? (
-                <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600 text-white font-bold text-base shrink-0">
+                <span
+                  className={`flex items-center justify-center w-8 h-8 rounded-lg font-bold text-base shrink-0 ${
+                    activeGlyph && activeGlyph.contours && activeGlyph.contours.length > 0
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-amber-600 text-white'
+                  }`}
+                  title={
+                    activeGlyph && activeGlyph.contours && activeGlyph.contours.length > 0
+                      ? '自作グリフ'
+                      : '未作成グリフ（システム代替フォント表示中）'
+                  }
+                >
                   {selectedCharInfo.char}
                 </span>
               ) : (
@@ -911,6 +939,33 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
             <p className="text-[11px] opacity-80 leading-relaxed">
               位置（X/Y）や拡大縮小・縦横比をリアルタイムに微調整し、グリフデータへ永続保存できます
             </p>
+          </div>
+        ) : !activeGlyph || !activeGlyph.contours || activeGlyph.contours.length === 0 ? (
+          <div className="p-4 my-auto space-y-4">
+            <div className={`p-4 rounded-xl border text-center space-y-3 ${
+              isLight ? 'bg-amber-50/80 border-amber-300 text-amber-950' : 'bg-amber-950/40 border-amber-800 text-amber-200'
+            }`}>
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs">未作成グリフ（システム代替表示中）</h4>
+                <p className="text-[11px] opacity-85 mt-1 leading-relaxed">
+                  「{selectedCharInfo.char}」は現在のフォントにまだ輪郭データがありません。<br />
+                  この文字を作字すると、プレビューに自作フォントが反映されます。
+                </p>
+              </div>
+              {onSelectGlyphForEdit && (
+                <button
+                  type="button"
+                  onClick={handleJumpToMainEditor}
+                  className="w-full py-2.5 px-3 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm cursor-pointer"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>「{selectedCharInfo.char}」をエディタで作字する</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <>
@@ -1791,9 +1846,21 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                       <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                       <span>テスト文章</span>
                     </label>
-                    <span className={`text-[10px] font-mono ${isLight ? 'text-stone-500' : 'text-emerald-500'}`}>
-                      {testText.length} 文字
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-[10px] font-mono ${isLight ? 'text-stone-500' : 'text-emerald-500'}`}>
+                        {testText.length} 文字
+                      </span>
+                      {testText && (
+                        <button
+                          type="button"
+                          onClick={() => setTestText('')}
+                          className="text-[10px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 underline cursor-pointer"
+                          title="テスト文章をすべて消去"
+                        >
+                          消去
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Preset Quick Horizontal Chips */}
@@ -1802,11 +1869,12 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                       <button
                         key={idx}
                         type="button"
+                        title={preset.name}
                         onClick={() => {
                           setTestText(preset.text);
                           setWritingMode(preset.mode);
                         }}
-                        className={`px-2 py-1 rounded text-[10.5px] font-medium shrink-0 border transition-all whitespace-nowrap ${
+                        className={`px-2 py-1 rounded text-[10.5px] font-medium shrink-0 border transition-all whitespace-nowrap cursor-pointer ${
                           testText === preset.text
                             ? isLight
                               ? 'bg-emerald-700 text-white border-emerald-800 font-bold'
@@ -2106,7 +2174,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setFontScaleMultiplier(fontScaleMultiplier === 1.35 ? 1.0 : 1.35)}
-                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between cursor-pointer ${
                         fontScaleMultiplier === 1.35
                           ? isLight
                             ? 'bg-emerald-100/90 text-emerald-950 border-emerald-400 font-bold'
@@ -2115,6 +2183,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           ? 'bg-white border-[#d8e6df] text-stone-600 hover:bg-emerald-50'
                           : 'bg-[#18231c] border-[#25362b] text-emerald-400 hover:bg-[#202d24]'
                       }`}
+                      title="和文（漢字・仮名）を標準的な135%に拡大表示、または100%原寸キャンバス比率で表示"
                     >
                       <span className="text-[11px] truncate">和文サイズ最適化</span>
                       <span className="text-[10px] font-mono mt-0.5 opacity-80">
@@ -2126,7 +2195,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setAutoBalanceMargins(!autoBalanceMargins)}
-                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between cursor-pointer ${
                         autoBalanceMargins
                           ? isLight
                             ? 'bg-amber-100 text-amber-950 border-amber-400 font-bold'
@@ -2135,6 +2204,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           ? 'bg-emerald-50 text-emerald-900 border-emerald-300 font-medium'
                           : 'bg-emerald-950/70 text-emerald-300 border-emerald-800 font-medium'
                       }`}
+                      title="配置補正: ガイド位置優先（手書きした通りの自然な位置）または左右センタリング補正"
                     >
                       <span className="text-[11px] truncate">配置補正</span>
                       <span className="text-[10px] truncate mt-0.5 opacity-80">
@@ -2142,11 +2212,30 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                       </span>
                     </button>
 
+                    {/* 和文詰め組 (OpenType palt/pkna) */}
+                    <button
+                      type="button"
+                      onClick={() => setUseTsume(!useTsume)}
+                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                        useTsume
+                          ? isLight
+                            ? 'bg-emerald-800 text-white border-emerald-900 font-bold'
+                            : 'bg-emerald-500 text-stone-950 font-bold border-emerald-400'
+                          : isLight
+                          ? 'bg-white border-[#d8e6df] text-stone-600 hover:bg-emerald-50'
+                          : 'bg-[#18231c] border-[#25362b] text-emerald-400 hover:bg-[#202d24]'
+                      }`}
+                      title="OpenType palt/pkna 機能によるプロポーショナル詰め組み（約物や仮名の字幅に応じた字詰め）をシミュレート"
+                    >
+                      <span className="text-[11px] truncate">和文詰め組 (palt)</span>
+                      <span className="text-[10px] font-mono mt-0.5 opacity-80">{useTsume ? 'ON (詰め組)' : 'OFF (ベタ組)'}</span>
+                    </button>
+
                     {/* 仮想ボディ枠 */}
                     <button
                       type="button"
                       onClick={() => setShowCharBoxes(!showCharBoxes)}
-                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between cursor-pointer ${
                         showCharBoxes
                           ? isLight
                             ? 'bg-emerald-800 text-white border-emerald-900 font-bold'
@@ -2155,6 +2244,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           ? 'bg-white border-[#d8e6df] text-stone-600 hover:bg-emerald-50'
                           : 'bg-[#18231c] border-[#25362b] text-emerald-400 hover:bg-[#202d24]'
                       }`}
+                      title="各文字の1em仮想ボディ外枠と中心十字線を表示し、クリックで個別変形調整"
                     >
                       <span className="text-[11px] truncate">仮想ボディ枠</span>
                       <span className="text-[10px] font-mono mt-0.5 opacity-80">{showCharBoxes ? 'ON (1em枠)' : 'OFF'}</span>
@@ -2164,7 +2254,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowNotebookGuides(!showNotebookGuides)}
-                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between cursor-pointer ${
                         showNotebookGuides
                           ? isLight
                             ? 'bg-emerald-800 text-white border-emerald-900 font-bold'
@@ -2173,16 +2263,17 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           ? 'bg-white border-[#d8e6df] text-stone-600 hover:bg-emerald-50'
                           : 'bg-[#18231c] border-[#25362b] text-emerald-400 hover:bg-[#202d24]'
                       }`}
+                      title="ノート風のベースライン・中心軸・キャップライン・ディセンダーガイド罫線を表示"
                     >
                       <span className="text-[11px] truncate">ノートガイド線</span>
-                      <span className="text-[10px] font-mono mt-0.5 opacity-80">{showNotebookGuides ? 'ON (ベース線)' : 'OFF'}</span>
+                      <span className="text-[10px] font-mono mt-0.5 opacity-80">{showNotebookGuides ? 'ON (罫線)' : 'OFF'}</span>
                     </button>
 
                     {/* 原稿用紙 */}
                     <button
                       type="button"
                       onClick={() => setShowGenkoGrid(!showGenkoGrid)}
-                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between cursor-pointer ${
                         showGenkoGrid
                           ? isLight
                             ? 'bg-emerald-800 text-white border-emerald-900 font-bold'
@@ -2191,6 +2282,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           ? 'bg-white border-[#d8e6df] text-stone-600 hover:bg-emerald-50'
                           : 'bg-[#18231c] border-[#25362b] text-emerald-400 hover:bg-[#202d24]'
                       }`}
+                      title="原稿用紙・方眼ドット背景を表示"
                     >
                       <span className="text-[11px] truncate">原稿用紙・方眼</span>
                       <span className="text-[10px] font-mono mt-0.5 opacity-80">{showGenkoGrid ? 'ON' : 'OFF'}</span>
@@ -2200,7 +2292,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowSpaceMarkers(!showSpaceMarkers)}
-                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between cursor-pointer ${
                         showSpaceMarkers
                           ? isLight
                             ? 'bg-amber-100 border-amber-400 text-amber-900 font-bold'
@@ -2209,6 +2301,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           ? 'bg-white border-[#d8e6df] text-stone-600 hover:bg-emerald-50'
                           : 'bg-[#18231c] border-[#25362b] text-emerald-400 hover:bg-[#202d24]'
                       }`}
+                      title="全角空白(□)と半角空白(␣)を可視化ハイライト"
                     >
                       <span className="text-[11px] truncate">空白マーク</span>
                       <span className="text-[10px] font-mono mt-0.5 opacity-80">{showSpaceMarkers ? 'ON (全角/半角)' : 'OFF'}</span>
@@ -2218,7 +2311,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsWaterfall(!isWaterfall)}
-                      className={`col-span-2 p-2 h-12 rounded-lg border text-left transition-all flex items-center justify-between ${
+                      className={`p-2 h-14 rounded-lg border text-left transition-all flex flex-col justify-between cursor-pointer ${
                         isWaterfall
                           ? isLight
                             ? 'bg-emerald-800 text-white border-emerald-900 font-bold'
@@ -2227,9 +2320,10 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           ? 'bg-white border-[#d8e6df] text-stone-600 hover:bg-emerald-50'
                           : 'bg-[#18231c] border-[#25362b] text-emerald-400 hover:bg-[#202d24]'
                       }`}
+                      title="16pxから80pxまでの段階サイズ（ウォーターフォール）で可読性を一覧比較"
                     >
-                      <span className="text-[11px] truncate">段階サイズ (ウォーターフォール表示)</span>
-                      <span className="text-[10px] font-mono opacity-80">{isWaterfall ? 'ON' : 'OFF'}</span>
+                      <span className="text-[11px] truncate">段階サイズ</span>
+                      <span className="text-[10px] font-mono mt-0.5 opacity-80">{isWaterfall ? 'ON (段別表示)' : 'OFF'}</span>
                     </button>
                   </div>
 
@@ -2298,8 +2392,10 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           letterSpacing: `${letterSpacing}em`,
                           textAlign: textAlign,
                           writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                          textOrientation: writingMode === 'vertical' ? 'mixed' : undefined,
+                          fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
                         }}
-                        className={`whitespace-pre-wrap break-words ${isLight ? 'text-stone-900' : 'text-emerald-100'}`}
+                        className={`whitespace-pre-wrap ${writingMode === 'vertical' ? 'min-h-[140px] w-max break-normal overflow-x-auto py-1' : 'break-words'} ${isLight ? 'text-stone-900' : 'text-emerald-100'}`}
                       >
                         {renderedText}
                       </div>
@@ -2323,40 +2419,40 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                   >
                     {/* Notebook Guide Legend Badge */}
                     {showNotebookGuides && (
-                      <div className="mb-3 px-2 py-1 rounded bg-stone-100/90 dark:bg-stone-900/90 border border-stone-200/80 dark:border-stone-800 text-[10px] flex flex-wrap items-center gap-3 shrink-0 select-none pointer-events-none opacity-80">
-                        <span className="font-bold text-stone-600 dark:text-stone-300">ノートガイド凡例:</span>
+                      <div className="mb-3 px-2.5 py-1 rounded bg-stone-100/90 dark:bg-stone-900/90 border border-stone-200/80 dark:border-stone-800 text-[10px] flex flex-wrap items-center gap-3 shrink-0 select-none pointer-events-none opacity-90">
+                        <span className="font-bold text-stone-700 dark:text-stone-300">ノートガイド凡例:</span>
                         {writingMode === 'horizontal' ? (
                           <>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-indigo-500 rounded-full"></span>
-                              <span>ベースライン (主罫線)</span>
+                              <span className="w-3.5 h-0.5 bg-indigo-500 rounded-full"></span>
+                              <span>ベースライン (主罫線・実線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-emerald-500 border-b border-dashed border-emerald-500"></span>
-                              <span>中心軸線</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dashed border-emerald-500"></span>
+                              <span>中心軸線 (破線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-sky-400 border-b border-dotted border-sky-400"></span>
-                              <span>上限線 (Cap)</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dotted border-sky-400"></span>
+                              <span>上限線 Cap (点線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-rose-400 border-b border-dotted border-rose-400"></span>
-                              <span>下限線 (Base)</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dashed border-rose-500"></span>
+                              <span>下限線 Base (一点鎖線)</span>
                             </span>
                           </>
                         ) : (
                           <>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-emerald-500 border-b border-dashed border-emerald-500"></span>
-                              <span>縦中心軸線</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dashed border-emerald-500"></span>
+                              <span>縦中心軸線 (破線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-sky-400 border-b border-dotted border-sky-400"></span>
-                              <span>右境界線</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dotted border-sky-400"></span>
+                              <span>右境界線 (点線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-rose-400 border-b border-dotted border-rose-400"></span>
-                              <span>左境界線</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dashed border-rose-500"></span>
+                              <span>左境界線 (一点鎖線)</span>
                             </span>
                           </>
                         )}
@@ -2384,7 +2480,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.1}
                                   x2="100%"
                                   y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.1}
-                                  stroke={isLight ? '#38bdf8' : '#0284c7'}
+                                  stroke={isLight ? '#0284c7' : '#38bdf8'}
                                   strokeDasharray="3 3"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
@@ -2395,8 +2491,8 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1={(fontSize * lineHeight) / 2}
                                   x2="100%"
                                   y2={(fontSize * lineHeight) / 2}
-                                  stroke={isLight ? '#10b981' : '#059669'}
-                                  strokeDasharray="5 4"
+                                  stroke={isLight ? '#059669' : '#10b981'}
+                                  strokeDasharray="6 4"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
                                 />
@@ -2406,18 +2502,18 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.8}
                                   x2="100%"
                                   y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.8}
-                                  stroke={isLight ? '#6366f1' : '#818cf8'}
+                                  stroke={isLight ? '#4f46e5' : '#818cf8'}
                                   strokeWidth="1.5"
                                   strokeOpacity="0.85"
                                 />
-                                {/* Bottom Descender Line */}
+                                {/* Bottom Descender Line - Colorblind Safe: distinct dash-dot pattern */}
                                 <line
                                   x1="0"
                                   y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
                                   x2="100%"
                                   y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
-                                  stroke={isLight ? '#f43f5e' : '#e11d48'}
-                                  strokeDasharray="3 3"
+                                  stroke={isLight ? '#e11d48' : '#fb7185'}
+                                  strokeDasharray="8 3 2 3"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
                                 />
@@ -2437,14 +2533,14 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                 height="100%"
                                 patternUnits="userSpaceOnUse"
                               >
-                                {/* Left Boundary */}
+                                {/* Left Boundary - Colorblind Safe: distinct dash-dot pattern */}
                                 <line
                                   x1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.05}
                                   y1="0"
                                   x2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.05}
                                   y2="100%"
-                                  stroke={isLight ? '#f43f5e' : '#e11d48'}
-                                  strokeDasharray="3 3"
+                                  stroke={isLight ? '#e11d48' : '#fb7185'}
+                                  strokeDasharray="8 3 2 3"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
                                 />
@@ -2454,8 +2550,8 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1="0"
                                   x2={(fontSize * lineHeight) / 2}
                                   y2="100%"
-                                  stroke={isLight ? '#10b981' : '#059669'}
-                                  strokeDasharray="5 4"
+                                  stroke={isLight ? '#059669' : '#10b981'}
+                                  strokeDasharray="6 4"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
                                 />
@@ -2465,7 +2561,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1="0"
                                   x2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
                                   y2="100%"
-                                  stroke={isLight ? '#38bdf8' : '#0284c7'}
+                                  stroke={isLight ? '#0284c7' : '#38bdf8'}
                                   strokeDasharray="3 3"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
@@ -2485,6 +2581,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           letterSpacing: `${letterSpacing}em`,
                           textAlign: textAlign,
                           writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                          textOrientation: writingMode === 'vertical' ? 'mixed' : undefined,
                           fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
                         }}
                         className={`relative z-10 whitespace-pre-wrap select-text min-h-[300px] ${
@@ -2714,40 +2811,68 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                   </div>
 
                   {/* Toggles */}
-                  <div className="flex items-center space-x-1">
+                  <div className="flex flex-wrap items-center gap-1">
                     <button
+                      type="button"
                       onClick={() => setFontScaleMultiplier(fontScaleMultiplier === 1.35 ? 1.0 : 1.35)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${fontScaleMultiplier === 1.35 ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${fontScaleMultiplier === 1.35 ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      title="和文サイズ最適化 (135% / 100%)"
                     >
                       最適化 {fontScaleMultiplier === 1.35 ? '135%' : '100%'}
                     </button>
                     <button
+                      type="button"
                       onClick={() => setAutoBalanceMargins(!autoBalanceMargins)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${autoBalanceMargins ? 'bg-amber-600 text-white' : (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950')}`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${autoBalanceMargins ? 'bg-amber-600 text-white' : (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950')}`}
+                      title="配置補正: 左右センタリング / ガイド位置優先"
                     >
                       {autoBalanceMargins ? 'センタリング' : '位置優先'}
                     </button>
                     <button
+                      type="button"
+                      onClick={() => setUseTsume(!useTsume)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${useTsume ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      title="OpenType palt/pkna 機能による和文詰め組み（プロポーショナル字詰め）切替"
+                    >
+                      {useTsume ? '詰め組み' : 'ベタ組'}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setShowCharBoxes(!showCharBoxes)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${showCharBoxes ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-colors cursor-pointer ${showCharBoxes ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      title="1em仮想ボディ外枠・中心十字線"
                     >
                       仮想枠
                     </button>
                     <button
+                      type="button"
                       onClick={() => setShowNotebookGuides(!showNotebookGuides)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${showNotebookGuides ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-colors cursor-pointer ${showNotebookGuides ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      title="ノート風ガイド罫線（ベースライン・中心軸・キャップ・ディセンダー）"
                     >
                       ノートガイド
                     </button>
                     <button
+                      type="button"
                       onClick={() => setShowGenkoGrid(!showGenkoGrid)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${showGenkoGrid ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-colors cursor-pointer ${showGenkoGrid ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      title="原稿用紙マス目・方眼"
                     >
                       原稿用紙
                     </button>
                     <button
+                      type="button"
+                      onClick={() => setShowSpaceMarkers(!showSpaceMarkers)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-colors cursor-pointer ${showSpaceMarkers ? 'bg-amber-600 text-white' : 'bg-white text-stone-600'}`}
+                      title="空白記号ハイライト (全角/半角)"
+                    >
+                      空白
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setIsWaterfall(!isWaterfall)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${isWaterfall ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-colors cursor-pointer ${isWaterfall ? (isLight ? 'bg-emerald-800 text-white' : 'bg-emerald-500 text-stone-950') : 'bg-white text-stone-600'}`}
+                      title="段階サイズ比較 (16px〜80px)"
                     >
                       段階
                     </button>
@@ -2816,8 +2941,10 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           letterSpacing: `${letterSpacing}em`,
                           textAlign: textAlign,
                           writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                          textOrientation: writingMode === 'vertical' ? 'mixed' : undefined,
+                          fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
                         }}
-                        className={`whitespace-pre-wrap break-words ${isLight ? 'text-stone-900' : 'text-emerald-100'}`}
+                        className={`whitespace-pre-wrap ${writingMode === 'vertical' ? 'min-h-[140px] w-max break-normal overflow-x-auto py-1' : 'break-words'} ${isLight ? 'text-stone-900' : 'text-emerald-100'}`}
                       >
                         {renderedText}
                       </div>
@@ -2847,40 +2974,40 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                   >
                     {/* Notebook Guide Legend Badge */}
                     {showNotebookGuides && (
-                      <div className="mb-3 px-2 py-1 rounded bg-stone-100/90 dark:bg-stone-900/90 border border-stone-200/80 dark:border-stone-800 text-[10px] flex flex-wrap items-center gap-3 shrink-0 select-none pointer-events-none opacity-80">
-                        <span className="font-bold text-stone-600 dark:text-stone-300">ノートガイド凡例:</span>
+                      <div className="mb-3 px-2.5 py-1 rounded bg-stone-100/90 dark:bg-stone-900/90 border border-stone-200/80 dark:border-stone-800 text-[10px] flex flex-wrap items-center gap-3 shrink-0 select-none pointer-events-none opacity-90">
+                        <span className="font-bold text-stone-700 dark:text-stone-300">ノートガイド凡例:</span>
                         {writingMode === 'horizontal' ? (
                           <>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-indigo-500 rounded-full"></span>
-                              <span>ベースライン (主罫線)</span>
+                              <span className="w-3.5 h-0.5 bg-indigo-500 rounded-full"></span>
+                              <span>ベースライン (主罫線・実線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-emerald-500 border-b border-dashed border-emerald-500"></span>
-                              <span>中心軸線</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dashed border-emerald-500"></span>
+                              <span>中心軸線 (破線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-sky-400 border-b border-dotted border-sky-400"></span>
-                              <span>上限線 (Cap)</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dotted border-sky-400"></span>
+                              <span>上限線 Cap (点線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-rose-400 border-b border-dotted border-rose-400"></span>
-                              <span>下限線 (Base)</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dashed border-rose-500"></span>
+                              <span>下限線 Base (一点鎖線)</span>
                             </span>
                           </>
                         ) : (
                           <>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-emerald-500 border-b border-dashed border-emerald-500"></span>
-                              <span>縦中心軸線</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dashed border-emerald-500"></span>
+                              <span>縦中心軸線 (破線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-sky-400 border-b border-dotted border-sky-400"></span>
-                              <span>右境界線</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dotted border-sky-400"></span>
+                              <span>右境界線 (点線)</span>
                             </span>
                             <span className="flex items-center space-x-1">
-                              <span className="w-3 h-0.5 bg-rose-400 border-b border-dotted border-rose-400"></span>
-                              <span>左境界線</span>
+                              <span className="w-3.5 h-0.5 border-b-2 border-dashed border-rose-500"></span>
+                              <span>左境界線 (一点鎖線)</span>
                             </span>
                           </>
                         )}
@@ -2908,7 +3035,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.1}
                                   x2="100%"
                                   y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.1}
-                                  stroke={isLight ? '#38bdf8' : '#0284c7'}
+                                  stroke={isLight ? '#0284c7' : '#38bdf8'}
                                   strokeDasharray="3 3"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
@@ -2919,8 +3046,8 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1={(fontSize * lineHeight) / 2}
                                   x2="100%"
                                   y2={(fontSize * lineHeight) / 2}
-                                  stroke={isLight ? '#10b981' : '#059669'}
-                                  strokeDasharray="5 4"
+                                  stroke={isLight ? '#059669' : '#10b981'}
+                                  strokeDasharray="6 4"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
                                 />
@@ -2930,18 +3057,18 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.8}
                                   x2="100%"
                                   y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.8}
-                                  stroke={isLight ? '#6366f1' : '#818cf8'}
+                                  stroke={isLight ? '#4f46e5' : '#818cf8'}
                                   strokeWidth="1.5"
                                   strokeOpacity="0.85"
                                 />
-                                {/* Bottom Descender Line */}
+                                {/* Bottom Descender Line - Colorblind Safe: distinct dash-dot pattern */}
                                 <line
                                   x1="0"
                                   y1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
                                   x2="100%"
                                   y2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
-                                  stroke={isLight ? '#f43f5e' : '#e11d48'}
-                                  strokeDasharray="3 3"
+                                  stroke={isLight ? '#e11d48' : '#fb7185'}
+                                  strokeDasharray="8 3 2 3"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
                                 />
@@ -2961,14 +3088,14 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                 height="100%"
                                 patternUnits="userSpaceOnUse"
                               >
-                                {/* Left Boundary */}
+                                {/* Left Boundary - Colorblind Safe: distinct dash-dot pattern */}
                                 <line
                                   x1={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.05}
                                   y1="0"
                                   x2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.05}
                                   y2="100%"
-                                  stroke={isLight ? '#f43f5e' : '#e11d48'}
-                                  strokeDasharray="3 3"
+                                  stroke={isLight ? '#e11d48' : '#fb7185'}
+                                  strokeDasharray="8 3 2 3"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
                                 />
@@ -2978,8 +3105,8 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1="0"
                                   x2={(fontSize * lineHeight) / 2}
                                   y2="100%"
-                                  stroke={isLight ? '#10b981' : '#059669'}
-                                  strokeDasharray="5 4"
+                                  stroke={isLight ? '#059669' : '#10b981'}
+                                  strokeDasharray="6 4"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
                                 />
@@ -2989,7 +3116,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                                   y1="0"
                                   x2={((lineHeight - 1) * fontSize) / 2 + fontSize * 0.95}
                                   y2="100%"
-                                  stroke={isLight ? '#38bdf8' : '#0284c7'}
+                                  stroke={isLight ? '#0284c7' : '#38bdf8'}
                                   strokeDasharray="3 3"
                                   strokeWidth="1"
                                   strokeOpacity="0.8"
@@ -3009,6 +3136,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                           letterSpacing: `${letterSpacing}em`,
                           textAlign: textAlign,
                           writingMode: writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                          textOrientation: writingMode === 'vertical' ? 'mixed' : undefined,
                           fontFeatureSettings: useTsume ? '"palt" 1, "pkna" 1' : 'normal',
                         }}
                         className={`relative z-10 whitespace-pre-wrap select-text min-h-[220px] ${
@@ -3060,17 +3188,39 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                 <span className="hidden sm:inline">左: {hoveredGlyphInfo.lsb}px</span>
                 <span className="hidden sm:inline">右: {hoveredGlyphInfo.rsb}px</span>
                 <span
-                  className={`px-1 py-0.2 rounded text-[10px] font-bold ${
+                  className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold border inline-flex items-center gap-1 ${
                     Math.abs(hoveredGlyphInfo.diff) <= 20
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                      ? isLight
+                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                        : 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                      : isLight
+                      ? 'bg-amber-100 text-amber-950 border-amber-300'
+                      : 'bg-amber-950 text-amber-300 border-amber-800'
                   }`}
+                  title={
+                    Math.abs(hoveredGlyphInfo.diff) <= 20
+                      ? '左右の余白バランスが均等に整っています'
+                      : hoveredGlyphInfo.diff < 0
+                      ? `左余白が狭く左側に偏っています (差: ${hoveredGlyphInfo.diff}px)`
+                      : `右余白が狭く右側に偏っています (差: +${hoveredGlyphInfo.diff}px)`
+                  }
                 >
-                  {Math.abs(hoveredGlyphInfo.diff) <= 20
-                    ? '均等'
-                    : hoveredGlyphInfo.diff < 0
-                    ? `左寄 (${Math.abs(Math.round(hoveredGlyphInfo.diff / 2))})`
-                    : `右寄 (${Math.round(hoveredGlyphInfo.diff / 2)})`}
+                  {Math.abs(hoveredGlyphInfo.diff) <= 20 ? (
+                    <>
+                      <span className="text-emerald-700 dark:text-emerald-400">✓</span>
+                      <span>均等</span>
+                    </>
+                  ) : hoveredGlyphInfo.diff < 0 ? (
+                    <>
+                      <span className="text-amber-700 dark:text-amber-400">◀</span>
+                      <span>左寄 ({Math.abs(Math.round(hoveredGlyphInfo.diff / 2))}px)</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-amber-700 dark:text-amber-400">▶</span>
+                      <span>右寄 ({Math.round(hoveredGlyphInfo.diff / 2)}px)</span>
+                    </>
+                  )}
                 </span>
               </div>
             ) : (

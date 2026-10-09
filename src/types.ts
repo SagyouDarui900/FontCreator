@@ -137,11 +137,13 @@ export interface PathContour {
   closed: boolean;
 }
 
+export type PixelDotShape = 'square' | 'round' | 'squircle' | 'diamond';
+
 export interface PixelGlyphData {
   width: number;
   height: number;
   data: number[]; // 0 or 1 binary array of length width * height
-  shape?: 'square' | 'round' | 'squircle' | 'diamond';
+  shape?: PixelDotShape;
   advanceWidthCells?: number;
 }
 
@@ -161,8 +163,13 @@ export interface GlyphData {
 
 export interface CustomGuideline {
   id: string;
-  type: 'h' | 'v';
+  type: 'h' | 'v' | 'diagonal';
   position: number;
+  p1?: { x: number; y: number };
+  p2?: { x: number; y: number };
+  angle?: number;
+  label?: string;
+  color?: string;
 }
 
 export interface FontMetadata {
@@ -290,13 +297,16 @@ export interface TraceSettings {
 
 export interface SnapGuideLine {
   id: string;
-  type: 'h' | 'v';
+  type: 'h' | 'v' | 'diagonal';
   position: number;
   targetName: string;
   targetType: 'baseline' | 'lsb' | 'rsb' | 'metric' | 'contour' | 'center' | 'custom' | 'grid';
   color?: string;
   snapPoint?: Point;
   matchedSource?: string;
+  p1?: Point;
+  p2?: Point;
+  angle?: number;
 }
 
 export type JapaneseGuidePattern = 'none' | 'cross' | 'tian' | 'jiugong' | 'mi' | 'sixteen';

@@ -5,7 +5,7 @@ interface RulerMeasurementLayerProps {
   rulerMeasurement: { start: Point; end: Point; active?: boolean } | null;
   zoom: number;
   onDrawLine?: () => void;
-  onConvertToGuide?: () => void;
+  onConvertToGuide?: (type?: 'auto' | 'diagonal' | 'h' | 'v') => void;
   onClear?: () => void;
 }
 
@@ -19,6 +19,8 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
     const dist = Math.hypot(dx, dy);
     if (dist < 2) return null;
     const angleDeg = Math.round((Math.atan2(-dy, dx) * 180) / Math.PI);
+    const positiveAngle = (angleDeg % 360 + 360) % 360;
+    const isOrthogonal = Math.abs(dx) < 2 || Math.abs(dy) < 2;
     const midX = (start.x + end.x) / 2;
     const midY = (start.y + end.y) / 2;
 
@@ -106,19 +108,19 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
         {/* Measurement HUD Pill Box */}
         <g transform={`translate(${midX}, ${midY})`}>
           <rect
-            x={-68 / zoom}
-            y={-14 / zoom}
-            width={136 / zoom}
-            height={28 / zoom}
-            rx={14 / zoom}
+            x={-78 / zoom}
+            y={-15 / zoom}
+            width={156 / zoom}
+            height={30 / zoom}
+            rx={15 / zoom}
             fill="#0369a1"
-            fillOpacity={0.92}
+            fillOpacity={0.94}
             stroke="#ffffff"
             strokeWidth={1 / zoom}
             className="pointer-events-none"
           />
           <text
-            x={-8 / zoom}
+            x={-16 / zoom}
             y={-1 / zoom}
             fill="#ffffff"
             fontSize={10 / zoom}
@@ -131,18 +133,18 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
             {Math.round(dist)}px
           </text>
           <text
-            x={-8 / zoom}
-            y={9 / zoom}
+            x={-16 / zoom}
+            y={9.5 / zoom}
             fill="#bae6fd"
             fontSize={7.5 / zoom}
             fontFamily="monospace"
             textAnchor="middle"
             className="pointer-events-none"
           >
-            {angleDeg}°
+            {positiveAngle}° {isOrthogonal ? '(直交)' : ''}
           </text>
 
-          {/* Quick Clear 'X' icon button on the pill */}
+          {/* Quick Clear / Delete Button on the pill */}
           {onClear && (
             <g
               onClick={(e) => {
@@ -150,9 +152,10 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
                 onClear();
               }}
               className="cursor-pointer hover:opacity-80 active:scale-95 transition-transform pointer-events-auto"
-              transform={`translate(${52 / zoom}, 0)`}
+              transform={`translate(${58 / zoom}, 0)`}
+              title="定規を消去 (Esc/Delete)"
             >
-              <circle cx={0} cy={0} r={8 / zoom} fill="#0284c7" stroke="#ffffff" strokeWidth={0.8 / zoom} />
+              <circle cx={0} cy={0} r={8.5 / zoom} fill="#ef4444" stroke="#ffffff" strokeWidth={0.8 / zoom} />
               <text
                 x={0}
                 y={3.5 / zoom}
@@ -168,7 +171,7 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
 
           {/* Interactive Action Buttons when measurement is completed */}
           {!active && dist >= 8 && (
-            <g transform={`translate(0, ${22 / zoom})`} className="pointer-events-auto cursor-pointer">
+            <g transform={`translate(0, ${24 / zoom})`} className="pointer-events-auto cursor-pointer">
               {/* Draw Line Button */}
               {onDrawLine && (
                 <g
@@ -179,9 +182,9 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
                   className="hover:opacity-90 active:scale-95 transition-transform"
                 >
                   <rect
-                    x={-62 / zoom}
+                    x={-74 / zoom}
                     y={0}
-                    width={58 / zoom}
+                    width={46 / zoom}
                     height={18 / zoom}
                     rx={9 / zoom}
                     fill="#10b981"
@@ -189,10 +192,10 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
                     strokeWidth={0.8 / zoom}
                   />
                   <text
-                    x={-33 / zoom}
+                    x={-51 / zoom}
                     y={11.5 / zoom}
                     fill="#ffffff"
-                    fontSize={8.5 / zoom}
+                    fontSize={8 / zoom}
                     fontWeight="bold"
                     textAnchor="middle"
                   >
@@ -201,19 +204,53 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
                 </g>
               )}
 
-              {/* Guide Line Button */}
+              {/* Diagonal Guide Button (if not purely orthogonal) */}
+              {onConvertToGuide && !isOrthogonal && (
+                <g
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConvertToGuide('diagonal');
+                  }}
+                  className="hover:opacity-90 active:scale-95 transition-transform"
+                  transform={`translate(${-24 / zoom}, 0)`}
+                >
+                  <rect
+                    x={0}
+                    y={0}
+                    width={56 / zoom}
+                    height={18 / zoom}
+                    rx={9 / zoom}
+                    fill="#06b6d4"
+                    stroke="#ffffff"
+                    strokeWidth={0.8 / zoom}
+                  />
+                  <text
+                    x={28 / zoom}
+                    y={11.5 / zoom}
+                    fill="#ffffff"
+                    fontSize={8 / zoom}
+                    fontWeight="bold"
+                    textAnchor="middle"
+                  >
+                    斜めガイド
+                  </text>
+                </g>
+              )}
+
+              {/* Orthogonal Guide Button */}
               {onConvertToGuide && (
                 <g
                   onClick={(e) => {
                     e.stopPropagation();
-                    onConvertToGuide();
+                    onConvertToGuide(isOrthogonal ? 'auto' : 'h');
                   }}
                   className="hover:opacity-90 active:scale-95 transition-transform"
+                  transform={`translate(${isOrthogonal ? (-20 / zoom) : (36 / zoom)}, 0)`}
                 >
                   <rect
-                    x={4 / zoom}
+                    x={0}
                     y={0}
-                    width={58 / zoom}
+                    width={(isOrthogonal ? 64 : 44) / zoom}
                     height={18 / zoom}
                     rx={9 / zoom}
                     fill="#0284c7"
@@ -221,14 +258,14 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
                     strokeWidth={0.8 / zoom}
                   />
                   <text
-                    x={33 / zoom}
+                    x={(isOrthogonal ? 32 : 22) / zoom}
                     y={11.5 / zoom}
                     fill="#ffffff"
-                    fontSize={8.5 / zoom}
+                    fontSize={8 / zoom}
                     fontWeight="bold"
                     textAnchor="middle"
                   >
-                    ガイド化
+                    {isOrthogonal ? 'ガイド化' : '水平化'}
                   </text>
                 </g>
               )}
@@ -239,3 +276,4 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
     );
   }
 );
+RulerMeasurementLayer.displayName = 'RulerMeasurementLayer';

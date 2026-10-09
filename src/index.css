@@ -63,30 +63,51 @@ body {
   white-space: nowrap;
 }
 
-/* Controls should stay compact without forcing descriptive labels to overflow. */
+/* Controls should stay compact without forcing descriptive labels to wrap or break layout. */
 button, kbd {
   text-wrap: nowrap;
+  white-space: nowrap;
 }
 
 button {
   box-sizing: border-box;
   min-width: 0;
-  max-width: 100%;
   line-height: 1.25;
 }
 
-/* Preserve icon size while allowing Japanese labels to shrink or ellipsize. */
-button > span {
+/* Allow explicit label text to ellipsize gracefully without breaking child icons */
+.truncate-label {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Form labels and helper text may wrap at natural Japanese boundaries. */
 label {
   min-width: 0;
   overflow-wrap: break-word;
+}
+
+/* Typography utilities for natural Japanese wrap and balanced headlines */
+.text-balance {
+  text-wrap: balance;
+}
+
+.text-pretty {
+  text-wrap: pretty;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.jp-wrap {
+  line-break: strict;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 /* Custom subtle, clean scrollbars for all scrollable containers */

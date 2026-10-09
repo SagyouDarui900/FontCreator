@@ -257,9 +257,23 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
           </g>
         )}
 
-        {/* 3. 十字格・漢字字面枠 (85%) */}
+        {/* 3. 十字格・漢字字面枠 (85%) - Colorblind Safe: Long dash + Dot pattern & text tag */}
         {showBodyFrame && (
-          <g opacity={0.65}>
+          <g opacity={0.8}>
+            {/* Contrast underlay halo line */}
+            <rect
+              x={bodyInset}
+              y={bodyInset}
+              width={bodySize}
+              height={bodySize}
+              fill="none"
+              stroke={isLight ? '#ffffff' : '#000000'}
+              strokeWidth={3}
+              strokeDasharray="12 4 2 4"
+              strokeOpacity={0.6}
+              rx={4}
+            />
+            {/* Primary colored dashed frame */}
             <rect
               x={bodyInset}
               y={bodyInset}
@@ -267,16 +281,41 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               height={bodySize}
               fill="none"
               stroke={kanjiFrameColor}
-              strokeWidth={1.4}
-              strokeDasharray="8 4"
+              strokeWidth={1.5}
+              strokeDasharray="12 4 2 4"
               rx={4}
             />
+            {/* Tag badge for immediate identification without relying on color */}
+            <text
+              x={bodyInset + 6}
+              y={bodyInset + 14}
+              fill={kanjiFrameColor}
+              fontSize={10}
+              fontWeight="bold"
+              style={{ textShadow: isLight ? '0 0 3px #ffffff, 0 0 3px #ffffff' : '0 0 3px #000000, 0 0 3px #000000' }}
+            >
+              漢字枠 (85%) ─・
+            </text>
           </g>
         )}
 
-        {/* 4. 仮名字面枠 (78%) */}
+        {/* 4. 仮名字面枠 (78%) - Colorblind Safe: Dense dot pattern & text tag */}
         {showKanaFrame && (
-          <g opacity={0.65}>
+          <g opacity={0.8}>
+            {/* Contrast underlay halo line */}
+            <rect
+              x={kanaInset}
+              y={kanaInset}
+              width={kanaSize}
+              height={kanaSize}
+              fill="none"
+              stroke={isLight ? '#ffffff' : '#000000'}
+              strokeWidth={3}
+              strokeDasharray="3 3"
+              strokeOpacity={0.6}
+              rx={4}
+            />
+            {/* Primary colored dotted frame */}
             <rect
               x={kanaInset}
               y={kanaInset}
@@ -284,10 +323,21 @@ export const JapaneseGuidesLayer: React.FC<JapaneseGuidesLayerProps> = React.mem
               height={kanaSize}
               fill="none"
               stroke={kanaFrameColor}
-              strokeWidth={1.4}
-              strokeDasharray="4 4"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
               rx={4}
             />
+            {/* Tag badge for immediate identification without relying on color */}
+            <text
+              x={kanaInset + 6}
+              y={kanaInset + 14}
+              fill={kanaFrameColor}
+              fontSize={10}
+              fontWeight="bold"
+              style={{ textShadow: isLight ? '0 0 3px #ffffff, 0 0 3px #ffffff' : '0 0 3px #000000, 0 0 3px #000000' }}
+            >
+              かな枠 (78%) ・・・
+            </text>
           </g>
         )}
       </g>

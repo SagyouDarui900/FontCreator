@@ -44,88 +44,197 @@ export const MetricsGuidesLayer: React.FC<MetricsGuidesLayerProps> = React.memo(
 
     return (
       <g className="metrics-guides-layer select-none font-mono text-[11px] pointer-events-none">
-        {/* Ascender */}
+        {/* Ascender - Distinct long-dash pattern (10 4) */}
         <g opacity={latinMetricsOpacity}>
           <line
             x1={0}
             y1={ascenderY}
             x2={Math.max(upm, advanceWidth)}
             y2={ascenderY}
-            stroke="#3b82f6"
-            strokeWidth={1.2}
-            strokeDasharray="6 3"
+            stroke={isLight ? '#ffffff' : '#000000'}
+            strokeWidth={2.8}
+            strokeDasharray="10 4"
+            strokeOpacity={0.6}
           />
-          <text x={12} y={ascenderY - 8} fill="#3b82f6" fontWeight="bold" opacity={0.85}>Ascender</text>
+          <line
+            x1={0}
+            y1={ascenderY}
+            x2={Math.max(upm, advanceWidth)}
+            y2={ascenderY}
+            stroke="#3b82f6"
+            strokeWidth={1.3}
+            strokeDasharray="10 4"
+          />
+          <text
+            x={12}
+            y={ascenderY - 8}
+            fill="#3b82f6"
+            fontWeight="bold"
+            opacity={0.9}
+            style={{ textShadow: isLight ? '0 0 3px #fff, 0 0 3px #fff' : '0 0 3px #000, 0 0 3px #000' }}
+          >
+            Ascender ──
+          </text>
         </g>
 
-        {/* Cap Height */}
+        {/* Cap Height - Fine dash pattern (4 2) */}
         <g opacity={latinMetricsOpacity}>
           <line
             x1={0}
             y1={capHeightY}
             x2={Math.max(upm, advanceWidth)}
             y2={capHeightY}
-            stroke="#0ea5e9"
-            strokeWidth={1}
-            strokeDasharray="3 3"
+            stroke={isLight ? '#ffffff' : '#000000'}
+            strokeWidth={2.5}
+            strokeDasharray="4 2"
+            strokeOpacity={0.5}
           />
-          <text x={12} y={capHeightY - 8} fill="#0ea5e9" fontWeight="bold" opacity={0.85}>Cap Height</text>
+          <line
+            x1={0}
+            y1={capHeightY}
+            x2={Math.max(upm, advanceWidth)}
+            y2={capHeightY}
+            stroke="#0ea5e9"
+            strokeWidth={1.1}
+            strokeDasharray="4 2"
+          />
+          <text
+            x={12}
+            y={capHeightY - 8}
+            fill="#0ea5e9"
+            fontWeight="bold"
+            opacity={0.9}
+            style={{ textShadow: isLight ? '0 0 3px #fff, 0 0 3px #fff' : '0 0 3px #000, 0 0 3px #000' }}
+          >
+            Cap Height ┄┄
+          </text>
         </g>
 
-        {/* X-Height */}
+        {/* X-Height - Fine dot pattern (2 2) */}
         <g opacity={latinMetricsOpacity}>
           <line
             x1={0}
             y1={xHeightY}
             x2={Math.max(upm, advanceWidth)}
             y2={xHeightY}
-            stroke="#0ea5e9"
-            strokeWidth={1}
-            strokeDasharray="3 3"
+            stroke={isLight ? '#ffffff' : '#000000'}
+            strokeWidth={2.5}
+            strokeDasharray="2 2"
+            strokeOpacity={0.5}
           />
-          <text x={12} y={xHeightY - 8} fill="#0ea5e9" fontWeight="bold" opacity={0.85}>X-Height</text>
+          <line
+            x1={0}
+            y1={xHeightY}
+            x2={Math.max(upm, advanceWidth)}
+            y2={xHeightY}
+            stroke="#0284c7"
+            strokeWidth={1.1}
+            strokeDasharray="2 2"
+          />
+          <text
+            x={12}
+            y={xHeightY - 8}
+            fill="#0284c7"
+            fontWeight="bold"
+            opacity={0.9}
+            style={{ textShadow: isLight ? '0 0 3px #fff, 0 0 3px #fff' : '0 0 3px #000, 0 0 3px #000' }}
+          >
+            x-Height ┈┈
+          </text>
         </g>
 
-        {/* Baseline */}
-        <g opacity={(isJapanese ? 0.35 : 0.75) * opacityScale}>
+        {/* Baseline - Solid line with Distinct Arrow Marker & High-Contrast Halo */}
+        <g opacity={(isJapanese ? 0.45 : 0.85) * opacityScale}>
+          <line
+            x1={0}
+            y1={baselineY}
+            x2={Math.max(upm, advanceWidth)}
+            y2={baselineY}
+            stroke={isLight ? '#ffffff' : '#000000'}
+            strokeWidth={3.2}
+            strokeOpacity={0.7}
+          />
           <line
             x1={0}
             y1={baselineY}
             x2={Math.max(upm, advanceWidth)}
             y2={baselineY}
             stroke="#ef4444"
-            strokeWidth={isJapanese ? 1.2 : 1.5}
+            strokeWidth={isJapanese ? 1.4 : 1.8}
             strokeDasharray={isJapanese ? '8 4' : undefined}
           />
-          <text x={12} y={baselineY - 8} fill="#ef4444" fontWeight="bold" opacity={0.9}>
-            Baseline {isJapanese ? '(欧文基準)' : ''}
+          {/* Distinct Shape Marker (Filled Triangle) at origin for color-blind identification */}
+          <polygon
+            points={`0,${baselineY - 5} 8,${baselineY} 0,${baselineY + 5}`}
+            fill="#ef4444"
+            stroke={isLight ? '#ffffff' : '#000000'}
+            strokeWidth={1}
+          />
+          <text
+            x={14}
+            y={baselineY - 7}
+            fill="#ef4444"
+            fontWeight="bold"
+            opacity={0.95}
+            style={{ textShadow: isLight ? '0 0 3px #fff, 0 0 3px #fff' : '0 0 3px #000, 0 0 3px #000' }}
+          >
+            ▶ Baseline {isJapanese ? '(欧文底線)' : '(底線)'}
           </text>
         </g>
 
-        {/* Descender */}
+        {/* Descender - Dash-dot-dot pattern (6 2 2 2) */}
         <g opacity={latinMetricsOpacity}>
           <line
             x1={0}
             y1={descenderY}
             x2={Math.max(upm, advanceWidth)}
             y2={descenderY}
-            stroke="#f97316"
-            strokeWidth={1.2}
-            strokeDasharray="6 3"
+            stroke={isLight ? '#ffffff' : '#000000'}
+            strokeWidth={2.8}
+            strokeDasharray="6 2 2 2"
+            strokeOpacity={0.6}
           />
-          <text x={12} y={descenderY - 8} fill="#f97316" fontWeight="bold" opacity={0.85}>Descender</text>
+          <line
+            x1={0}
+            y1={descenderY}
+            x2={Math.max(upm, advanceWidth)}
+            y2={descenderY}
+            stroke="#f97316"
+            strokeWidth={1.3}
+            strokeDasharray="6 2 2 2"
+          />
+          <text
+            x={12}
+            y={descenderY - 8}
+            fill="#f97316"
+            fontWeight="bold"
+            opacity={0.9}
+            style={{ textShadow: isLight ? '0 0 3px #fff, 0 0 3px #fff' : '0 0 3px #000, 0 0 3px #000' }}
+          >
+            Descender ─・
+          </text>
         </g>
 
         {/* Vertical Center Axis */}
         {showVerticalCenter && (
-          <g opacity={0.6 * opacityScale}>
+          <g opacity={0.7 * opacityScale}>
+            <line
+              x1={centerX}
+              y1={0}
+              x2={centerX}
+              y2={upm}
+              stroke={isLight ? '#ffffff' : '#000000'}
+              strokeWidth={2.8}
+              strokeDasharray="6 4"
+              strokeOpacity={0.6}
+            />
             <line
               x1={centerX}
               y1={0}
               x2={centerX}
               y2={upm}
               stroke="#8b5cf6"
-              strokeWidth={1.2}
+              strokeWidth={1.3}
               strokeDasharray="6 4"
             />
             <text
@@ -133,9 +242,10 @@ export const MetricsGuidesLayer: React.FC<MetricsGuidesLayerProps> = React.memo(
               y={24}
               fill="#8b5cf6"
               fontWeight="bold"
-              opacity={0.85}
+              opacity={0.95}
+              style={{ textShadow: isLight ? '0 0 3px #fff, 0 0 3px #fff' : '0 0 3px #000, 0 0 3px #000' }}
             >
-              Center ({centerX})
+              | Center ({centerX})
             </text>
           </g>
         )}

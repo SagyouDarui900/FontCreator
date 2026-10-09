@@ -530,10 +530,10 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
  }`}
  >
  <div className="flex flex-wrap items-center gap-1.5 min-w-0 pr-1">
- <span className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-emerald-950' : 'text-emerald-300'}`}>
+ <span className={`text-xs font-bold uppercase tracking-wider whitespace-nowrap ${isLight ? 'text-emerald-950' : 'text-emerald-300'}`}>
  メトリクス数値指定
  </span>
- <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 ${
+ <span className={`text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${
  isLight ? 'bg-emerald-100 text-emerald-900' : 'bg-emerald-950 text-emerald-300'
  }`}>
  幅:{advanceWidth ?? 1000} / LSB:{lsb ?? 50}
@@ -553,10 +553,10 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
  }`}
  >
  <div className="flex items-center justify-between">
- <label className={`text-xs font-bold ${isLight ? 'text-stone-800' : 'text-emerald-300'}`}>
+ <label className={`text-xs font-bold whitespace-nowrap ${isLight ? 'text-stone-800' : 'text-emerald-300'}`}>
  送り幅 (Advance Width)
  </label>
- <span className="text-[10px] font-mono text-stone-500">標準: {upm} (全角)</span>
+ <span className="text-[10px] font-mono tabular-nums text-stone-500 whitespace-nowrap">標準: {upm} (全角)</span>
  </div>
 
  {/* Input Row with Large +/- buttons */}
@@ -580,7 +580,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
  onChangeAdvanceWidth(Number.isFinite(value) ? Math.max(0, Math.round(value)) : upm);
  }}
  onBlur={onCommitHistory}
- className={`w-full border rounded-lg px-2.5 py-1.5 pr-7 text-sm font-mono font-bold text-center focus:outline-hidden ${
+ className={`w-full border rounded-lg px-2.5 py-1.5 pr-7 text-sm font-mono tabular-nums font-bold text-center focus:outline-hidden ${
  isLight
  ? 'bg-white border-stone-300 text-stone-900 focus:border-emerald-700'
  : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 focus:border-emerald-500'
@@ -610,7 +610,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
  key={step}
  type="button"
  onClick={() => handleStepAdvance(step)}
- className={`py-1 rounded-md border text-[11px] font-mono font-bold text-center transition-all active:scale-95 cursor-pointer ${
+ className={`py-1 rounded-md border text-[11px] font-mono tabular-nums font-bold text-center transition-all active:scale-95 cursor-pointer ${
  isLight
  ? 'bg-white border-stone-200 text-stone-700 hover:bg-emerald-50 hover:border-emerald-300'
  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#1a261f]'
@@ -657,10 +657,10 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
  }`}
  >
  <div className="flex items-center justify-between">
- <label className={`text-xs font-bold ${isLight ? 'text-stone-800' : 'text-emerald-300'}`}>
+ <label className={`text-xs font-bold whitespace-nowrap ${isLight ? 'text-stone-800' : 'text-emerald-300'}`}>
  左余白 (Left Sidebearing / LSB)
  </label>
- <span className="text-[10px] font-mono text-stone-500">標準: 50px</span>
+ <span className="text-[10px] font-mono tabular-nums text-stone-500 whitespace-nowrap">標準: 50px</span>
  </div>
 
  {/* Input Row with Large +/- buttons */}
@@ -683,7 +683,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
  onChangeLsb(Number(e.target.value) || 0);
  }}
  onBlur={onCommitHistory}
- className={`w-full border rounded-lg px-2.5 py-1.5 pr-7 text-sm font-mono font-bold text-center focus:outline-hidden ${
+ className={`w-full border rounded-lg px-2.5 py-1.5 pr-7 text-sm font-mono tabular-nums font-bold text-center focus:outline-hidden ${
  isLight
  ? 'bg-white border-stone-300 text-stone-900 focus:border-emerald-700'
  : 'bg-[#0f1712] border-[#2d4034] text-emerald-200 focus:border-emerald-500'
@@ -713,7 +713,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = React.memo(({
  key={step}
  type="button"
  onClick={() => handleStepLsb(step)}
- className={`py-1 rounded-md border text-[11px] font-mono font-bold text-center transition-all active:scale-95 cursor-pointer ${
+ className={`py-1 rounded-md border text-[11px] font-mono tabular-nums font-bold text-center transition-all active:scale-95 cursor-pointer ${
  isLight
  ? 'bg-white border-stone-200 text-stone-700 hover:bg-emerald-50 hover:border-emerald-300'
  : 'bg-[#101813] border-[#25362b] text-emerald-300 hover:bg-[#1a261f]'

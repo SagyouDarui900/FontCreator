@@ -16,6 +16,7 @@ import {
   FlipVertical,
   Copy,
   Trash2,
+  Eraser,
   Plus,
   Minus,
   Ruler,
@@ -355,6 +356,35 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  erasedAnyInSessionRef.current = false;
  }
  }, [contours]);
+
+ // Switching glyphs must never carry an in-progress gesture into the next page.
+ useEffect(() => {
+   brushStrokePointsRef.current = [];
+   pendingBrushEventsRef.current = [];
+   eraserStrokePointsRef.current = [];
+   isErasingRef.current = false;
+   erasedAnyInSessionRef.current = false;
+   lastErasePosRef.current = null;
+   setActivePenContour(null);
+   setShapeStartPoint(null);
+   setShapeCurrentPoint(null);
+   setMarqueeSelection(null);
+   setTransformSession(null);
+   setSelectedContourIds([]);
+   setSelectedNodeId(null);
+   setSelectedHandleType(null);
+   setDraggingMetric(null);
+   setDraggingGuidelineId(null);
+   if (activeBrushPathRef.current) {
+     activeBrushPathRef.current.setAttribute('d', '');
+   }
+   if (activeEraserPathRef.current) {
+     activeEraserPathRef.current.setAttribute('d', '');
+   }
+   pendingTransformContoursRef.current = null;
+   activeBrushSvgDRef.current = '';
+   activeEraserSvgDRef.current = '';
+ }, [selectedUnicode]);
 
  const isLight = isLightTheme(theme);
  const themeClasses = getThemeClasses(theme);
@@ -1046,16 +1076,63 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  showCanvasToast('定規のラインから直線ストロークを作成しました', `長さ: ${Math.round(dist)}px / 太さ: ${brushWidth}px`);
  }, [rulerMeasurement, brushWidth, contours, onChangeContours, onCommitHistory, showCanvasToast]);
 
- // Convert ruler line to horizontal or vertical canvas guideline
- const handleConvertRulerToGuideline = useCallback(() => {
+ // Guideline Eraser Mode State
+ const [isGuideEraserActive, setIsGuideEraserActive] = useState<boolean>(false);
+
+ // Delete an individual guideline
+ const handleDeleteGuideline = useCallback((guideId: string) => {
+ setCustomGuidelines((prev) => prev.filter((g) => g.id !== guideId));
+ showCanvasToast('ガイド線を削除しました');
+ }, [setCustomGuidelines, showCanvasToast]);
+
+ // Clear all custom guidelines
+ const handleClearAllGuidelines = useCallback(() => {
+ if (customGuidelines.length === 0) return;
+ setCustomGuidelines([]);
+ showCanvasToast('すべてのカスタムガイド線を消去しました');
+ }, [customGuidelines.length, setCustomGuidelines, showCanvasToast]);
+
+ // Convert ruler line to horizontal, vertical, or diagonal canvas guideline
+ const handleConvertRulerToGuideline = useCallback((guideType: 'auto' | 'diagonal' | 'h' | 'v' = 'auto') => {
  if (!rulerMeasurement) return;
  const { start, end } = rulerMeasurement;
- const dx = Math.abs(end.x - start.x);
- const dy = Math.abs(end.y - start.y);
- const isHorizontal = dx >= dy;
- const newGuide = {
+ const dx = end.x - start.x;
+ const dy = end.y - start.y;
+ const absDx = Math.abs(dx);
+ const absDy = Math.abs(dy);
+
+ let finalType: 'h' | 'v' | 'diagonal' = 'diagonal';
+ if (guideType === 'auto') {
+ if (absDy < 2) {
+ finalType = 'h';
+ } else if (absDx < 2) {
+ finalType = 'v';
+ } else {
+ finalType = 'diagonal';
+ }
+ } else {
+ finalType = guideType;
+ }
+
+ if (finalType === 'diagonal') {
+ const angle = Math.round((Math.atan2(dy, dx) * 180 / Math.PI) * 10) / 10;
+ const newGuide: CustomGuideline = {
  id: generateId(),
- type: (isHorizontal ? 'h' : 'v') as 'h' | 'v',
+ type: 'diagonal',
+ position: 0,
+ p1: { x: Math.round(start.x), y: Math.round(start.y) },
+ p2: { x: Math.round(end.x), y: Math.round(end.y) },
+ angle: angle,
+ label: `斜め (${angle}°)`,
+ };
+ setCustomGuidelines((prev) => [...prev, newGuide]);
+ setRulerMeasurement(null);
+ showCanvasToast('斜めガイド線を作成しました', `角度: ${angle}° / 長さ: ${Math.round(Math.hypot(dx, dy))}px`);
+ } else {
+ const isHorizontal = finalType === 'h';
+ const newGuide: CustomGuideline = {
+ id: generateId(),
+ type: isHorizontal ? 'h' : 'v',
  position: isHorizontal ? Math.round((start.y + end.y) / 2) : Math.round((start.x + end.x) / 2),
  };
  setCustomGuidelines((prev) => [...prev, newGuide]);
@@ -1064,6 +1141,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  isHorizontal ? '水平ガイド線を作成しました' : '垂直ガイド線を作成しました',
  `位置: ${newGuide.position}px`
  );
+ }
  }, [rulerMeasurement, setCustomGuidelines, showCanvasToast]);
 
  // Mobile UI View Modes & Bottom Action Sheets
@@ -2437,11 +2515,12 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  }
 
  if (e.shiftKey) {
- // Snap to orthogonal (horizontal / vertical) or 45 degrees
+ // Snap to 15-degree increments (0°, 15°, 30°, 45°, 60°, 75°, 90°, etc.) when Shift is held
  const dx = endX - rulerMeasurement.start.x;
  const dy = endY - rulerMeasurement.start.y;
  const angle = Math.atan2(dy, dx);
- const snapAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+ const snapStep = (15 * Math.PI) / 180; // 15 degrees = Math.PI / 12
+ const snapAngle = Math.round(angle / snapStep) * snapStep;
  const dist = Math.hypot(dx, dy);
  endX = Math.round(rulerMeasurement.start.x + Math.cos(snapAngle) * dist);
  endY = Math.round(rulerMeasurement.start.y + Math.sin(snapAngle) * dist);
@@ -3709,15 +3788,10 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  setPan(panRef.current);
  }
 
- // If drawing brush stroke and pointer was cancelled by iPad bezel touch (not a two-finger pinch gesture),
- // salvage and finalize the stroke instead of throwing it away!
- if (toolMode === 'brush' && brushStrokePointsRef.current.length >= 3 && !isTwoFingerGestureRef.current) {
- handlePointerUp(e);
- return;
- }
-
- // Cancel any in-progress stroke or drag cleanly
+ // Cancel any in-progress stroke or drag cleanly. Pointer cancellation must
+ // never create a contour or history entry.
  brushStrokePointsRef.current = [];
+ pendingBrushEventsRef.current = [];
  if (activeBrushPathRef.current) {
  activeBrushPathRef.current.setAttribute('d', '');
  }
@@ -3728,23 +3802,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  if (activeEraserPathRef.current) {
  activeEraserPathRef.current.setAttribute('d', '');
  }
- if (eraserMode === 'cut' && eraserStrokePointsRef.current.length > 0) {
- const eraseRadius = Math.max(2, eraserSize / 2);
- const rawPts = eraserStrokePointsRef.current;
- eraserStrokePointsRef.current = [];
- const pts = rawPts.length === 1
- ? [rawPts[0], { x: rawPts[0].x + 0.1, y: rawPts[0].y + 0.1 }]
- : rawPts;
- const currentContours = contoursRef.current || [];
- const updated = subtractEraserStrokeFromContours(currentContours, pts, eraseRadius);
- if (updated !== currentContours) {
- onCommitHistory();
- contoursRef.current = updated;
- onChangeContours(updated);
- }
- } else if (erasedAnyInSessionRef.current) {
  erasedAnyInSessionRef.current = false;
- }
  eraserStrokePointsRef.current = [];
  }
  setShapeStartPoint(null);
@@ -3755,6 +3813,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  setIsDraggingTrace(false);
  setIsResizingTrace(false);
  setIsPanning(false);
+ pendingTransformContoursRef.current = null;
+ setTransformSession(null);
+ setSelectedHandleType(null);
  setActiveSnapGuides([]);
  containerRectRef.current = null;
  };
@@ -5281,7 +5342,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
  {/* Ruler / Dimension Measurement Options in Header */}
  {toolMode === 'ruler' && (
- <div className="flex items-center space-x-2 ml-1 pl-1.5 border-l border-stone-200 dark:border-stone-700">
+ <div className="flex items-center space-x-2 ml-1 pl-1.5 border-l border-stone-200 dark:border-stone-700 flex-wrap gap-y-1">
  <div className="flex items-center space-x-1.5 text-xs">
  <div className="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-200 font-medium text-[11px]">
  <Ruler className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
@@ -5294,15 +5355,25 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  {Math.round(Math.hypot(rulerMeasurement.end.x - rulerMeasurement.start.x, rulerMeasurement.end.y - rulerMeasurement.start.y))}px
  </span>
  <span className="font-mono text-[10px] text-stone-500 dark:text-stone-400 hidden sm:inline">
- (ΔX: {Math.round(Math.abs(rulerMeasurement.end.x - rulerMeasurement.start.x))} / ΔY: {Math.round(Math.abs(rulerMeasurement.end.y - rulerMeasurement.start.y))})
+ ({Math.round(((Math.atan2(-(rulerMeasurement.end.y - rulerMeasurement.start.y), rulerMeasurement.end.x - rulerMeasurement.start.x) * 180 / Math.PI) % 360 + 360) % 360)}°)
  </span>
 
+ {/* Diagonal Guide Button */}
  <button
- onClick={handleConvertRulerToGuideline}
- className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-600 hover:bg-sky-700 text-white transition-colors flex items-center space-x-1 cursor-pointer shadow-xs"
- title="計測位置にガイド線を作成"
+ onClick={() => handleConvertRulerToGuideline('diagonal')}
+ className="px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-600 hover:bg-cyan-700 text-white transition-colors flex items-center space-x-1 cursor-pointer shadow-xs"
+ title="定規の角度のまま斜めガイド線を作成"
  >
- <span>ガイド線化</span>
+ <span>斜めガイド化</span>
+ </button>
+
+ {/* Orthogonal Guide Button */}
+ <button
+ onClick={() => handleConvertRulerToGuideline('auto')}
+ className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-600 hover:bg-sky-700 text-white transition-colors flex items-center space-x-1 cursor-pointer shadow-xs"
+ title="水平または垂直ガイド線を作成"
+ >
+ <span>直交ガイド化</span>
  </button>
 
  <button
@@ -5316,17 +5387,44 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
  <button
  onClick={() => setRulerMeasurement(null)}
- className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 border border-stone-300 dark:border-stone-700 transition-colors cursor-pointer"
- title="計測表示を消去 (Esc)"
+ className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-800 transition-colors cursor-pointer flex items-center gap-1"
+ title="選んだ定規の計測表示を消去 (Esc/Delete)"
  >
- <X className="w-3 h-3" />
+ <Trash2 className="w-3 h-3" />
+ <span className="hidden sm:inline">定規消去</span>
  </button>
  </div>
  ) : (
  <span className="text-[11px] text-stone-500 dark:text-stone-400 hidden sm:inline">
- キャンバス上の任意の2点をドラッグして距離・字幅を計測 (Shiftで水平/垂直固定)
+ 2点をドラッグして計測 (Shiftで15°刻みスナップ)
  </span>
  )}
+
+ {/* Guide Eraser Tool Mode Toggle & Clear All */}
+ <div className="flex items-center space-x-1 pl-1.5 border-l border-stone-200 dark:border-stone-700">
+ <button
+ onClick={() => setIsGuideEraserActive((prev) => !prev)}
+ className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center space-x-1 cursor-pointer transition-colors shadow-xs ${
+ isGuideEraserActive
+ ? 'bg-rose-600 text-white ring-2 ring-rose-400 animate-pulse'
+ : 'bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 border border-stone-300 dark:border-stone-600'
+ }`}
+ title="ガイド線消去モード: ガイド線をクリックで即削除"
+ >
+ <Eraser className="w-3 h-3" />
+ <span>{isGuideEraserActive ? '消去モード作動中' : 'ガイド消去モード'}</span>
+ </button>
+
+ {customGuidelines.length > 0 && (
+ <button
+ onClick={handleClearAllGuidelines}
+ className="px-1.5 py-0.5 rounded text-[10px] text-stone-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+ title={`すべてのガイド線を消去 (現在: ${customGuidelines.length}本)`}
+ >
+ 全消去 ({customGuidelines.length})
+ </button>
+ )}
+ </div>
  </div>
  </div>
  )}
@@ -6070,32 +6168,40 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  )}
  </div>
 
- {/* Line Legend */}
+ {/* Line Legend with Dual Cues (Shape, Dash Pattern, & Color) */}
  <div className="space-y-2 text-xs sm:text-[13px] text-left">
  <div className="flex items-center justify-between">
  <span className="flex items-center space-x-2">
- <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
- <span className="font-medium">仮名字面枠 (78%)</span>
+ <span className="w-3.5 h-3.5 border-2 border-dotted border-amber-500 bg-amber-500/20 rounded-xs flex items-center justify-center shrink-0">
+ <span className="w-1 h-1 bg-amber-600 rounded-full" />
+ </span>
+ <span className="font-medium">仮名字面枠 (78%・点線)</span>
  </span>
  <span className="text-stone-500 dark:text-stone-400 text-xs">かな用</span>
  </div>
  <div className="flex items-center justify-between">
  <span className="flex items-center space-x-2">
- <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
- <span className="font-medium">漢字字面枠 (85%)</span>
+ <span className="w-3.5 h-3.5 border-2 border-dashed border-emerald-600 bg-emerald-500/20 rounded-xs flex items-center justify-center shrink-0">
+ <span className="w-1.5 h-0.5 bg-emerald-600" />
+ </span>
+ <span className="font-medium">漢字字面枠 (85%・破線)</span>
  </span>
  <span className="text-stone-500 dark:text-stone-400 text-xs">漢字推奨</span>
  </div>
  <div className="flex items-center justify-between">
  <span className="flex items-center space-x-2">
- <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
- <span className="font-medium">Baseline (赤底線)</span>
+ <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0 text-red-500 font-bold text-[11px] leading-none">
+ ▶─
+ </span>
+ <span className="font-medium">Baseline (欧文底線・実線)</span>
  </span>
  <span className="text-stone-500 dark:text-stone-400 text-xs">欧文(A-Z)整列</span>
  </div>
  <div className="flex items-center justify-between">
  <span className="flex items-center space-x-2">
- <span className="w-2.5 h-2.5 rounded-full bg-teal-500 shrink-0" />
+ <span className="w-3.5 h-3.5 border border-teal-500 bg-teal-500/10 rounded-xs flex items-center justify-center shrink-0 text-[10px] text-teal-600 font-bold leading-none">
+ ┼
+ </span>
  <span className="font-medium">中心十字格 (田字格)</span>
  </span>
  <span className="text-stone-500 dark:text-stone-400 text-xs">重心バランス</span>
@@ -6483,15 +6589,17 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  zoom={zoom}
  unitsPerEm={upm}
  locked={
- lockGuidelines ||
+ (!isGuideEraserActive && lockGuidelines) ||
  toolMode === 'brush' ||
  toolMode === 'pen' ||
  toolMode === 'eraser' ||
  isShapeTool
  }
- interactive={!lockGuidelines && (toolMode === 'select' || toolMode === 'ruler')}
+ interactive={isGuideEraserActive || (!lockGuidelines && (toolMode === 'select' || toolMode === 'ruler'))}
+ isGuideEraserActive={isGuideEraserActive}
  onPointerDownGuide={handlePointerDownGuide}
  onDoubleClickGuide={handleDoubleClickGuide}
+ onDeleteGuide={handleDeleteGuideline}
  />
 
  {/* 8. Interactive Measurement Tool Overlay */}
@@ -7269,22 +7377,36 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  }}
  />
 
- {/* Anchor Node Point Visual: Sleek rounded dot with clear selection ring */}
+ {/* Anchor Node Point Visual: Sleek rounded dot with clear selection ring & geometric differentiation */}
  {isClean ? (
  <g className="pointer-events-none">
- {/* Outer highlight ring for selected node */}
+ {/* Outer high-contrast highlight ring for selected node (retains shape) */}
  {isSelected && (
+ isSmooth ? (
  <circle
  cx={node.x}
  cy={node.y}
- r={anchorRadius + 2.5 / zoom}
+ r={anchorRadius + 3 / zoom}
  fill="none"
  stroke="#ef4444"
- strokeWidth={1.5 / zoom}
- strokeOpacity={0.8}
+ strokeWidth={1.8 / zoom}
+ strokeDasharray={`${3 / zoom} ${2 / zoom}`}
  />
+ ) : (
+ <rect
+ x={node.x - anchorRadius - 2.5 / zoom}
+ y={node.y - anchorRadius - 2.5 / zoom}
+ width={(anchorRadius + 2.5 / zoom) * 2}
+ height={(anchorRadius + 2.5 / zoom) * 2}
+ rx={1.5 / zoom}
+ fill="none"
+ stroke="#ef4444"
+ strokeWidth={1.8 / zoom}
+ strokeDasharray={`${3 / zoom} ${2 / zoom}`}
+ />
+ )
  )}
- {/* Clean Anchor Dot (Smooth = Circle, Corner = Diamond/Square) */}
+ {/* Clean Anchor Dot (Smooth = Circle, Corner = Square) */}
  {isSmooth ? (
  <circle
  cx={node.x}
@@ -7292,7 +7414,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  r={anchorRadius}
  fill={isSelected ? '#ef4444' : '#0284c7'}
  stroke="#ffffff"
- strokeWidth={1.2 / zoom}
+ strokeWidth={1.4 / zoom}
  />
  ) : (
  <rect
@@ -7301,25 +7423,61 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  width={anchorRadius * 2}
  height={anchorRadius * 2}
  rx={0.8 / zoom}
- fill={isSelected ? '#ef4444' : '#f59e0b'}
+ fill={isSelected ? '#ef4444' : '#d97706'}
  stroke="#ffffff"
- strokeWidth={1.2 / zoom}
+ strokeWidth={1.4 / zoom}
  />
  )}
  </g>
  ) : (
  <g className="pointer-events-none">
- {/* Classic/Full Box representation */}
+ {/* Classic/Full representation with strict geometric shape distinction (Smooth = Circle, Corner = Square) */}
+ {isSelected && (
+ isSmooth ? (
+ <circle
+ cx={node.x}
+ cy={node.y}
+ r={7.5 / zoom}
+ fill="none"
+ stroke="#ef4444"
+ strokeWidth={1.8 / zoom}
+ strokeDasharray={`${3 / zoom} ${2 / zoom}`}
+ />
+ ) : (
+ <rect
+ x={node.x - 7.5 / zoom}
+ y={node.y - 7.5 / zoom}
+ width={15 / zoom}
+ height={15 / zoom}
+ rx={1.5 / zoom}
+ fill="none"
+ stroke="#ef4444"
+ strokeWidth={1.8 / zoom}
+ strokeDasharray={`${3 / zoom} ${2 / zoom}`}
+ />
+ )
+ )}
+ {isSmooth ? (
+ <circle
+ cx={node.x}
+ cy={node.y}
+ r={5 / zoom}
+ fill={isSelected ? '#ef4444' : '#38bdf8'}
+ stroke={isLight ? '#0f172a' : '#ffffff'}
+ strokeWidth={1.5 / zoom}
+ />
+ ) : (
  <rect
  x={node.x - 5 / zoom}
  y={node.y - 5 / zoom}
  width={10 / zoom}
  height={10 / zoom}
  rx={1 / zoom}
- fill={isSelected ? '#ef4444' : isSmooth ? '#38bdf8' : '#f59e0b'}
- stroke="#0f172a"
+ fill={isSelected ? '#ef4444' : '#d97706'}
+ stroke={isLight ? '#0f172a' : '#ffffff'}
  strokeWidth={1.5 / zoom}
  />
+ )}
  </g>
  )}
  </g>
@@ -7999,7 +8157,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  {/* Contextual Operation Hints */}
  <div className="text-[11px] text-stone-500 dark:text-emerald-400/80 hidden md:block truncate max-w-[280px]">
  {toolMode === 'ruler' &&
- 'ドラッグして寸法・距離・角度を計測 (Shiftで水平/垂直固定、Enterで直線化)'}
+ 'ドラッグして寸法・角度を計測 (Shiftで15°刻みスナップ、斜め/直交ガイド化、Enterで直線化)'}
  {toolMode === 'select' && '輪郭をクリックして移動・8方向変形・回転'}
  {toolMode === 'node' && 'ノードやハンドルをクリック・ドラッグして編集'}
  {toolMode === 'pen' && 'クリックで頂点追加 / 始点クリックでパスを閉じる'}
@@ -8052,7 +8210,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  )}
 
  {/* Right: Floating Canvas Controls (Compactable) */}
- <div className="flex items-center space-x-1.5 pointer-events-auto self-end sm:self-auto flex-wrap gap-y-1 ml-auto">
+ <div className="flex items-center space-x-1.5 pointer-events-auto self-end sm:self-auto flex-nowrap gap-y-1 ml-auto max-w-full overflow-x-auto no-scrollbar">
  {/* Collapsed Compact Mini Bar */}
  {isBottomBarCollapsed ? (
  <div
@@ -8606,57 +8764,12 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  )}
  </div>
 
- {/* Mobile Minimal Floating Zoom & Fit Pill */}
- <div
- className={`sm:hidden ml-auto flex items-center p-0.5 rounded-full border shadow-md pointer-events-auto text-xs ${
- isLight
- ? 'bg-white border-[#c8ded3] text-stone-700'
- : 'bg-[#142018] border-[#25382c] text-emerald-200'
- }`}
- >
- <button
- onClick={() => handleZoomStep(1 / 1.25)}
- className="p-1 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800"
- title="縮小"
- >
- <ZoomOut className="w-3.5 h-3.5" />
- </button>
- <button
- onClick={() => resetView('fit')}
- className="text-[10px] font-mono px-1.5 font-bold"
- title="フィット"
- >
- {Math.round(zoom * 100)}%
- </button>
- <button
- onClick={() => handleZoomStep(1.25)}
- className="p-1 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800"
- title="拡大"
- >
- <ZoomIn className="w-3.5 h-3.5" />
- </button>
- <div className="w-[1px] h-3 bg-stone-300 dark:bg-stone-700 mx-0.5" />
- <button
- onClick={() => resetView('width')}
- className="p-1 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 text-[10px] font-bold"
- title="幅いっぱいに拡大"
- >
- 幅
- </button>
- <button
- onClick={() => resetView('fit')}
- className="p-1 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800"
- title="全体表示"
- >
- <Maximize2 className="w-3.5 h-3.5" />
- </button>
- </div>
  </div>
 
  {/* Mobile Selected Contour Quick Action Bar (Only in Select or Node tool modes) */}
  {(toolMode === 'select' || toolMode === 'node') && selectedContourIds.length > 0 && (
  <div
- className={`sm:hidden absolute bottom-12 left-3 right-3 z-30 flex items-center justify-between px-3 py-1.5 rounded-full border shadow-xl ${
+ className={`sm:hidden absolute bottom-16 left-3 right-3 z-30 flex items-center justify-between px-3 py-1.5 rounded-full border shadow-xl ${
  isLight
  ? 'bg-white border-emerald-300/80 text-stone-800'
  : 'bg-[#121c15] border-emerald-700/60 text-emerald-100'
@@ -9631,3 +9744,4 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  if (prev.overlaySettings !== next.overlaySettings) return false;
  return true;
 });
+

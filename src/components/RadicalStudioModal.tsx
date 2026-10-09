@@ -527,8 +527,10 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  const partsSaveTimerRef = useRef<number | null>(null);
  const partsSaveInFlightRef = useRef(false);
  const pendingPartsSaveRef = useRef<CustomPart[] | null>(null);
+ const partsStorageHydratedRef = useRef(false);
 
  const flushPartsSave = useCallback(async () => {
+   if (!partsStorageHydratedRef.current) return;
    if (partsSaveInFlightRef.current || !pendingPartsSaveRef.current) return;
    partsSaveInFlightRef.current = true;
    const partsToSave = pendingPartsSaveRef.current;
@@ -553,6 +555,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
  // Reload custom parts from IndexedDB
  const reloadPartsFromStorage = useCallback(async () => {
+ partsStorageHydratedRef.current = false;
  try {
  const loaded = await loadCustomParts();
  const sanitized = sanitizeCustomParts(loaded);
@@ -563,10 +566,13 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  return sanitized[0]?.id || '';
  });
  }
- } catch {
- // ignore
+ } catch (error) {
+ console.error('部首パーツの読み込みに失敗しました:', error);
+ notify('部首パーツを読み込めませんでした。現在の内容を表示しています', 'warning');
+ } finally {
+ partsStorageHydratedRef.current = true;
  }
- }, []);
+ }, [notify]);
 
  const prevIsOpenRef = useRef(false);
 
@@ -586,6 +592,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  // part ID, so an ID-only fingerprint silently skipped contour changes.
  useEffect(() => {
  if (!isOpen || !parts) return;
+ if (!partsStorageHydratedRef.current) return;
  const jsonKey = JSON.stringify(parts);
  if (jsonKey === lastSavedPartsJsonRef.current) return;
  lastSavedPartsJsonRef.current = jsonKey;
@@ -1689,8 +1696,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  const cx = clientX - rect.left;
  const cy = clientY - rect.top;
  return {
- x: Math.round((cx - pan.x) / zoom),
- y: Math.round((cy - pan.y) / zoom),
+  x: (cx - pan.x) / zoom,
+  y: (cy - pan.y) / zoom,
  };
  };
 
@@ -2110,7 +2117,10 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  setActiveSnapLines({ x: null, y: null });
  }
 
- const pos = snapped.point;
+ // Freehand input must follow the pointer exactly. Snapping is reserved for
+ // discrete geometry and editing operations, otherwise a brush stroke can
+ // visibly jump toward guides.
+ const pos = toolMode === 'brush' || toolMode === 'eraser' ? rawPos : snapped.point;
 
  // Track eraser hover position for the high-visibility circular reticle
  if (toolMode === 'eraser') {
@@ -2204,8 +2214,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
    true,
    pressureSensitivity,
    undefined,
-   55,
-   { density: 'normal', subdivisionStep: 2.5, widthSmoothingPasses: 1 },
+   62,
+   { density: 'high', subdivisionStep: 1.5, widthSmoothingPasses: 1 },
  );
  if (contour && contour.nodes.length >= 3) {
  activeBrushPathRef.current.setAttribute('d', contoursToSvgPath([contour]));
@@ -2370,6 +2380,29 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
  } catch {}
 
+ // Pointer cancellation must discard the in-progress gesture instead of
+ // committing a shape, eraser stroke, or drag as if it completed normally.
+ if (e.type === 'pointercancel') {
+ setShapeStartPoint(null);
+ setShapeCurrentPoint(null);
+ setIsDrawingStroke(false);
+ brushStrokePointsRef.current = [];
+ eraserStrokePointsRef.current = [];
+ eraserInitialContoursRef.current = null;
+ eraserCurrentContoursRef.current = null;
+ isErasingRef.current = false;
+ dragStartContoursRef.current = null;
+ dragCurrentContoursRef.current = null;
+ activeEraserSvgDRef.current = '';
+ if (activeBrushPathRef.current) {
+ activeBrushPathRef.current.setAttribute('d', '');
+ }
+ if (activeEraserPathRef.current) {
+ activeEraserPathRef.current.setAttribute('d', '');
+ }
+ return;
+ }
+
  // Finalize Eraser Tool
  if (isErasingRef.current && toolMode === 'eraser') {
  try {
@@ -2452,7 +2485,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  brushStrokePointsRef.current[0],
  brushStrokePointsRef.current[brushStrokePointsRef.current.length - 1],
  ]
- : getBrushPreviewPoints(brushStrokePointsRef.current, 600);
+ : brushStrokePointsRef.current;
  const rawContour = strokePointsToOutline(
  finalPoints,
  brushWidth,
@@ -2460,8 +2493,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  true,
  pressureSensitivity,
  undefined,
- 65,
- { density: 'normal', subdivisionStep: 1.8, widthSmoothingPasses: 2 },
+ 62,
+ { density: 'high', subdivisionStep: 1.5, widthSmoothingPasses: 1 },
  );
  if (rawContour && rawContour.nodes.length >= 3) {
  let strokeContour = rawContour;
@@ -2564,7 +2597,61 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  }
  };
 
+ const handlePointerCancel = (e: React.PointerEvent<SVGSVGElement>) => {
+   try {
+     if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+       e.currentTarget.releasePointerCapture?.(e.pointerId);
+     }
+   } catch {
+     // The browser may have released the pointer already.
+   }
 
+   if (activePart && eraserInitialContoursRef.current) {
+     const initialContours = eraserInitialContoursRef.current;
+     setParts((prevParts) =>
+       prevParts.map((p) =>
+         p.id === activePart.id
+           ? { ...p, contours: initialContours, updatedAt: Date.now() }
+           : p
+       )
+     );
+   } else if (activePart && dragStartContoursRef.current) {
+     const initialContours = dragStartContoursRef.current;
+     setParts((prevParts) =>
+       prevParts.map((p) =>
+         p.id === activePart.id
+           ? { ...p, contours: initialContours, updatedAt: Date.now() }
+           : p
+       )
+     );
+   }
+
+   if (brushRafIdRef.current !== null) {
+     cancelAnimationFrame(brushRafIdRef.current);
+     brushRafIdRef.current = null;
+   }
+   setIsDrawingStroke(false);
+   brushStrokePointsRef.current = [];
+   eraserStrokePointsRef.current = [];
+   eraserInitialContoursRef.current = null;
+   eraserCurrentContoursRef.current = null;
+   isErasingRef.current = false;
+   dragStartContoursRef.current = null;
+   dragCurrentContoursRef.current = null;
+   setShapeStartPoint(null);
+   setShapeCurrentPoint(null);
+   setIsDraggingNode(false);
+   setIsDraggingContour(false);
+   setSelectedHandleType(null);
+   setActiveSnapLines({ x: null, y: null });
+   activeEraserSvgDRef.current = '';
+   if (activeBrushPathRef.current) {
+     activeBrushPathRef.current.setAttribute('d', '');
+   }
+   if (activeEraserPathRef.current) {
+     activeEraserPathRef.current.setAttribute('d', '');
+   }
+ };
 
  // Pen Tool actions in Radical Studio
  const handleUndoPartPenNode = () => {
@@ -2923,8 +3010,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  ? 'fixed inset-0 z-50 w-screen h-screen bg-[#f4f8f5] text-stone-800'
  : 'fixed inset-0 z-50 w-screen h-screen bg-[#121b15] text-emerald-100'
  : isLight
- ? 'w-full sm:w-[98vw] h-[100vh] sm:h-[96vh] max-w-[1720px] rounded-none sm:rounded-2xl border border-stone-200/60 shadow-2xl bg-[#f4f8f5] text-stone-800'
- : 'w-full sm:w-[98vw] h-[100vh] sm:h-[96vh] max-w-[1720px] rounded-none sm:rounded-2xl border border-stone-800/60 shadow-2xl bg-[#121b15] text-emerald-100'
+ ? 'w-full sm:w-[98vw] h-[100vh] sm:h-[94vh] max-w-[1720px] rounded-none sm:rounded-xl border border-stone-200/60 shadow-xl bg-[#f4f8f5] text-stone-800'
+ : 'w-full sm:w-[98vw] h-[100vh] sm:h-[94vh] max-w-[1720px] rounded-none sm:rounded-xl border border-stone-800/60 shadow-xl bg-[#121b15] text-emerald-100'
  }`}
  >
  {/* ================= MODAL TOP HEADER ================= */}
@@ -3107,7 +3194,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
           </div>
         ) : (
           <div
-            className={`hidden md:flex static inset-y-0 left-0 w-72 xl:w-88 border-r flex-col shrink-0 min-h-0 relative overflow-hidden transition-all ${
+            className={`hidden md:flex static inset-y-0 left-0 w-64 xl:w-72 border-r flex-col shrink-0 min-h-0 relative overflow-hidden transition-all ${
               isLight ? 'bg-white border-stone-200/60' : 'bg-[#162119] border-stone-800/60'
             }`}
           >
@@ -3132,8 +3219,8 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </div>
 
  {/* Main Triple-Tab Switcher: Presets vs Kanji Database vs My Custom Parts */}
- <div className="p-1.5 border-b bg-stone-50/50 dark:bg-[#111913] shrink-0 border-stone-200/60 dark:border-stone-800/60">
- <div className="grid grid-cols-3 gap-1 p-0.5 rounded-lg bg-stone-200/70 dark:bg-[#1b261f]">
+ <div className="p-1 border-b bg-stone-50/50 dark:bg-[#111913] shrink-0 border-stone-200/60 dark:border-stone-800/60">
+ <div className="grid grid-cols-3 gap-0.5 p-0.5 rounded-md bg-stone-200/70 dark:bg-[#1b261f]">
  <button
  type="button"
  onClick={() => setLeftSidebarTab('presets')}
@@ -3183,10 +3270,10 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </div>
 
  {/* Top Action Controls for current tab */}
- <div className="p-2.5 border-b space-y-2 shrink-0 border-inherit">
+ <div className="p-2 border-b space-y-1.5 shrink-0 border-inherit">
  {leftSidebarTab === 'custom' ? (
  <div className="space-y-1.5">
- <div className="grid grid-cols-2 gap-1.5">
+ <div className="grid grid-cols-2 gap-1">
  <button
  onClick={() => handleCreateNewPart(activeCategory)}
  className={`py-1.5 px-2 rounded-md font-bold text-xs flex items-center justify-center space-x-1 transition-all ${
@@ -3212,7 +3299,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </button>
  </div>
 
- <div className="grid grid-cols-2 gap-1.5">
+ <div className="grid grid-cols-2 gap-1">
  <button
  onClick={() => setShowExtractModal(true)}
  className={`py-1 px-2 rounded-md text-[11px] font-semibold flex items-center justify-center space-x-1 border transition-all ${
@@ -3341,7 +3428,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
  {/* Category Filter Pills */}
  <div
- className={`p-2 border-b flex space-x-1 overflow-x-auto custom-scrollbar touch-scroll-x min-w-0 text-[11px] shrink-0 ${
+ className={`p-1 border-b flex space-x-1 overflow-x-auto custom-scrollbar touch-scroll-x min-w-0 text-[11px] shrink-0 ${
  isLight ? 'bg-[#f4f8f5] border-[#d8e6df]' : 'bg-[#131d16] border-[#25362b]'
  }`}
  >
@@ -3403,7 +3490,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </div>
 
  {/* Main List Area */}
- <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 space-y-1.5">
+ <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 space-y-1">
  {leftSidebarTab === 'kanji_db' ? (
  /* ================= KANJI RADICAL DATABASE VIEW ================= */
  (() => {
@@ -3883,7 +3970,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               title={`現在編集中の文字「${selectedChar}」の描画輪郭を作字パーツとして取り込みます`}
             >
               <Scissors className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>「${selectedChar}」輪郭を取込</span>
+              <span>「{selectedChar}」輪郭を取込</span>
             </button>
           </div>
         </div>
@@ -3897,7 +3984,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
               }
             }
           }}
-          className={`px-2 sm:px-3 py-1.5 border-b flex items-center justify-between gap-1.5 sm:gap-2 shrink-0 overflow-x-auto touch-scroll-x custom-scrollbar scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-700 min-w-0 relative z-10 ${
+          className={`px-2 sm:px-2.5 py-1 border-b flex items-center justify-between gap-1 sm:gap-1.5 shrink-0 overflow-x-auto touch-scroll-x custom-scrollbar scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-700 min-w-0 relative z-10 ${
             isLight ? "bg-white border-stone-200/60" : "bg-[#141d16] border-stone-800/60"
           }`}
         >
@@ -5228,7 +5315,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  onPointerDown={handlePointerDown}
  onPointerMove={handlePointerMove}
  onPointerUp={handlePointerUp}
- onPointerCancel={handlePointerUp}
+ onPointerCancel={handlePointerCancel}
  onPointerLeave={() => {
  setEraserHoverPos(null);
  }}
@@ -5773,7 +5860,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  <div className="md:hidden absolute top-3 right-3 z-30 flex items-center space-x-1 bg-white/95 dark:bg-[#152019]/95 px-2 py-1 rounded-full border border-stone-200 dark:border-stone-700 shadow-lg text-xs">
  <button
  onClick={handleUndo}
- disabled={undoStack.length <= 1}
+ disabled={undoStack.length === 0}
  className="p-1 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-30 text-stone-700 dark:text-stone-300"
  title="元に戻す"
  >
@@ -5892,7 +5979,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  </div>
 
  {activePart ? (
- <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 space-y-4">
+ <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2.5 space-y-2.5">
  {/* TAB 1: TRANSFORM & SETTINGS */}
  {rightTab === 'transform' && (
  <>
@@ -5902,6 +5989,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  <span className="text-xs font-bold text-emerald-950 dark:text-emerald-300">
  パーツ基本情報
  </span>
+ <div className="flex items-center justify-end">
  <span className="text-[10px] text-stone-400 font-mono">
  ID: {activePart.id.slice(0, 8)}
  </span>
@@ -5974,6 +6062,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  : 'bg-[#101712] border-[#25362b] text-emerald-100'
  }`}
  />
+ </div>
  </div>
  </div>
 

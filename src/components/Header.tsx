@@ -387,16 +387,20 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  <div className="flex items-center gap-1.5 shrink min-w-0">
  <div className="flex flex-col min-w-0 justify-center">
  <span className="text-xs font-bold tracking-tight flex items-center gap-1.5 min-w-0 leading-tight">
- <span className="truncate max-w-[65px] xs:max-w-[95px] sm:max-w-[130px] md:max-w-[160px] lg:max-w-[200px]">
+ <span
+ className="truncate max-w-[65px] xs:max-w-[95px] sm:max-w-[130px] md:max-w-[160px] lg:max-w-[200px]"
+ title={project.metadata.familyName || 'FontCreator'}
+ >
  {project.metadata.familyName && project.metadata.familyName !== 'OTEdit-Style Font' && project.metadata.familyName !== '新規フォント'
  ? project.metadata.familyName
  : 'FontCreator'}
  </span>
  {project.metadata.styleName && project.metadata.styleName !== 'Regular' && (
  <span
- className={`text-[8.5px] px-1 py-0.2 rounded font-mono hidden md:inline-block leading-none ${
+ className={`text-[8.5px] px-1 py-0.2 rounded font-mono hidden md:inline-block leading-none shrink-0 ${
  isLight ? 'bg-stone-100 text-stone-700 border border-stone-200' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
  }`}
+ title={`スタイル: ${project.metadata.styleName}`}
  >
  {project.metadata.styleName}
  </span>
@@ -404,9 +408,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  </span>
  <div className="flex items-center gap-1.5 mt-0.5">
  <span
- className={`text-[9.5px] font-mono hidden lg:inline truncate leading-tight ${
+ className={`text-[9.5px] font-mono tabular-nums hidden lg:inline truncate leading-tight ${
  isLight ? 'text-stone-500' : 'text-emerald-400'
  }`}
+ title={`編集中: ${selectedChar || 'なし'} (U+${selectedUnicode.toString(16).toUpperCase().padStart(4, '0')}) · 全${glyphCount}字`}
  >
  編集中: <strong className={isLight ? 'text-emerald-700 font-sans' : 'text-amber-300 font-sans'}>{selectedChar || 'なし'}</strong>{' '}
  (U+{selectedUnicode.toString(16).toUpperCase().padStart(4, '0')}) · {glyphCount}字
@@ -415,7 +420,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  <button
  id="btn-header-lock-glyph"
  onClick={onToggleLockGlyph}
- className={`h-6 px-1.5 rounded-md sm:rounded-lg transition-all inline-flex items-center gap-1 border text-[10px] font-bold shrink-0 ${
+ className={`h-6 px-1.5 rounded-md sm:rounded-lg transition-all inline-flex items-center gap-1 border text-[10px] font-bold shrink-0 whitespace-nowrap ${
  isGlyphLocked
  ? isLight
  ? 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-400/30'
@@ -433,12 +438,12 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  {isGlyphLocked ? (
  <>
  <Lock className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400 shrink-0" />
- <span className="hidden sm:inline text-amber-800 dark:text-amber-300 leading-none">ロック中</span>
+ <span className="hidden sm:inline text-amber-800 dark:text-amber-300 leading-none whitespace-nowrap">ロック中</span>
  </>
  ) : (
  <>
  <Unlock className="w-2.5 h-2.5 text-stone-400 shrink-0" />
- <span className="hidden sm:inline leading-none">ロック</span>
+ <span className="hidden sm:inline leading-none whitespace-nowrap">ロック</span>
  </>
  )}
  </button>

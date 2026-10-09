@@ -257,11 +257,11 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
       const familyName = project.metadata.familyName || 'MyCustomFont';
 
       const exportPresets = [
-        { name: 'Light', delta: -25 },
+        { name: 'Light', delta: -22 },
         { name: 'Regular', delta: 0 },
-        { name: 'Medium', delta: 25 },
-        { name: 'Bold', delta: 65 },
-        { name: 'ExtraBold', delta: 105 },
+        { name: 'Medium', delta: 22 },
+        { name: 'Bold', delta: 70 },
+        { name: 'ExtraBold', delta: 100 },
       ];
 
       for (const p of exportPresets) {
@@ -313,9 +313,10 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
         `全5ウェイトのフォントファミリー（ZIP）を出力しました！`,
         'success'
       );
-    } catch (e: any) {
-      console.error('Batch export error:', e);
-      onShowToast?.(`ウェイト出力中にエラーが発生しました: ${e.message}`, 'error');
+    } catch (error) {
+      console.error('Batch export error:', error);
+      const message = error instanceof Error ? error.message : '不明なエラー';
+      onShowToast?.(`ウェイト出力中にエラーが発生しました: ${message}`, 'error');
     } finally {
       setIsExportingZip(false);
     }
@@ -332,7 +333,7 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
         [selectedUnicode]: {
           ...(prev.glyphs[selectedUnicode] || {
             unicode: selectedUnicode,
-            char: String.fromCharCode(selectedUnicode),
+            char: String.fromCodePoint(selectedUnicode),
             name: `uni${selectedUnicode.toString(16).toUpperCase()}`,
             advanceWidth: 1000,
             lsb: 50,

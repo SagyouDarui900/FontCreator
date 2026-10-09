@@ -81,9 +81,14 @@ const PixelFontStudioModal = lazy(() =>
 export default function App() {
   // Theme Mode ('light' | 'dark' | 'sepia' | 'warm' | 'nord' | 'monochrome')
   const [theme, setTheme] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(THEME_STORAGE_KEY);
+    } catch (error) {
+      console.warn('テーマ設定を読み込めませんでした:', error);
+    }
     const validThemes: ThemeMode[] = ['light', 'dark', 'sepia', 'warm', 'nord', 'monochrome'];
-    return validThemes.includes(saved) ? saved : 'light';
+    return saved && validThemes.includes(saved as ThemeMode) ? (saved as ThemeMode) : 'light';
   });
 
   const [isMobileThemeModalOpen, setIsMobileThemeModalOpen] = useState(false);
@@ -112,7 +117,11 @@ export default function App() {
 
   const changeTheme = useCallback((nextTheme: ThemeMode) => {
     setTheme(nextTheme);
-    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    } catch (error) {
+      console.warn('テーマ設定を保存できませんでした:', error);
+    }
   }, []);
 
   const toggleTheme = useCallback(() => {
@@ -120,7 +129,11 @@ export default function App() {
       const allThemes: ThemeMode[] = ['light', 'dark', 'sepia', 'warm', 'nord', 'monochrome'];
       const currentIndex = allThemes.indexOf(t);
       const next = allThemes[(currentIndex + 1) % allThemes.length];
-      localStorage.setItem(THEME_STORAGE_KEY, next);
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, next);
+      } catch (error) {
+        console.warn('テーマ設定を保存できませんでした:', error);
+      }
       return next;
     });
   }, []);

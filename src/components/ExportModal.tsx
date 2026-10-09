@@ -728,9 +728,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#18231c] border-[#233327]'
           }`}
         >
-          <div className="text-[11px] opacity-70 w-full sm:w-auto text-center sm:text-left">
-            収録文字: <strong className="font-sans text-emerald-700 dark:text-emerald-400">{glyphCount}</strong> 文字 / 倍率:{' '}
-            <strong className="font-sans text-emerald-700 dark:text-emerald-400">
+          <div className="text-[11px] opacity-70 w-full sm:w-auto text-center sm:text-left tabular-nums whitespace-nowrap">
+            収録文字: <strong className="font-mono tabular-nums text-emerald-700 dark:text-emerald-400 font-bold">{glyphCount}</strong> 文字 / 倍率:{' '}
+            <strong className="font-mono tabular-nums text-emerald-700 dark:text-emerald-400 font-bold">
               {Math.round(effectiveScale * 100)}%
             </strong>
           </div>
@@ -740,21 +740,21 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <button
                 type="button"
                 onClick={onRequestNewProject}
-                className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center space-x-1.5 transition-colors ${
+                className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center space-x-1.5 transition-colors whitespace-nowrap shrink-0 ${
                   isLight
                     ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
                     : 'bg-amber-950/60 hover:bg-amber-900/60 text-amber-200 border-amber-800'
                 }`}
                 title="現在のフォント作成を終了し、リセットして新プロジェクトを開きます"
               >
-                <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>完成！新規作成</span>
+                <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="whitespace-nowrap">完成！新規作成</span>
               </button>
             )}
 
             <button
               onClick={onClose}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors whitespace-nowrap shrink-0 ${
                 isLight
                   ? 'border-stone-300 hover:bg-stone-200 text-stone-700'
                   : 'border-[#2d4034] hover:bg-[#202d24] text-emerald-200'
@@ -768,19 +768,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <button
                 onClick={() => handleExport('share')}
                 disabled={isExporting}
-                className="px-4 py-2 rounded-xl text-xs font-extrabold flex items-center space-x-1.5 transition-all active:scale-95 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                className="px-4 py-2 rounded-xl text-xs font-extrabold flex items-center space-x-1.5 transition-all active:scale-95 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 whitespace-nowrap shrink-0"
               >
-                <Share2 className="w-4 h-4" />
-                <span>iPadの「ファイル」に保存・共有</span>
+                <Share2 className="w-4 h-4 shrink-0" />
+                <span className="whitespace-nowrap">iPadの「ファイル」に保存・共有</span>
               </button>
             ) : (
               <button
                 onClick={() => handleExport('download')}
                 disabled={isExporting}
-                className="px-4 py-2 rounded-xl text-xs font-extrabold flex items-center space-x-1.5 transition-all active:scale-95 bg-amber-400 hover:bg-amber-300 text-emerald-950 disabled:opacity-50"
+                className="px-4 py-2 rounded-xl text-xs font-extrabold flex items-center space-x-1.5 transition-all active:scale-95 bg-amber-400 hover:bg-amber-300 text-emerald-950 disabled:opacity-50 whitespace-nowrap shrink-0"
               >
-                <Download className="w-4 h-4" />
-                <span>.{format.toUpperCase()} をダウンロード</span>
+                <Download className="w-4 h-4 shrink-0" />
+                <span className="whitespace-nowrap">.{format.toUpperCase()} をダウンロード</span>
               </button>
             )}
           </div>

@@ -10,6 +10,7 @@ import {
   normalizeGlyphContoursWinding,
   unionContours,
 } from './pathUtils';
+import { pixelGridToContours } from './pixelFontUtils';
 
 export const SCREEN_BASELINE_Y = 800;
 export const DEFAULT_UPM = 1000;
@@ -360,6 +361,24 @@ export function compileFont(
         ? (g.advanceWidth ?? 1000)
         : (g.unicode > 255 ? (project.metadata.unitsPerEm || DEFAULT_UPM) : Math.round((project.metadata.unitsPerEm || DEFAULT_UPM) / 2))
     );
+
+    // Fallback: If contours are empty but pixelData exists with filled pixels, generate contours automatically
+    if (glyphContours.length === 0 && g.pixelData?.data && g.pixelData.width && g.pixelData.height) {
+      const pGrid = new Uint8Array(g.pixelData.data);
+      if (pGrid.some((val) => val === 1)) {
+        glyphContours = pixelGridToContours(
+          pGrid,
+          g.pixelData.width,
+          g.pixelData.height,
+          project.metadata.unitsPerEm || DEFAULT_UPM,
+          project.metadata.ascender || DEFAULT_ASCENDER,
+          project.metadata.descender || DEFAULT_DESCENDER,
+          advWidth,
+          g.pixelData.shape || project.pixelFontSettings?.dotShape || 'square',
+          project.pixelFontSettings?.mergeContours !== false
+        );
+      }
+    }
 
     const scaleFactor = options?.scaleFactor !== undefined ? options.scaleFactor : 1.35;
     const shouldBalance = options?.balanceSideBearings !== false;

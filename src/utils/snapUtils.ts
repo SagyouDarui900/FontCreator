@@ -13,8 +13,59 @@ export interface MetricsTargets {
 
 export interface CustomGuideTarget {
   id: string;
-  type: 'h' | 'v';
+  type: 'h' | 'v' | 'diagonal';
   position: number;
+  p1?: Point;
+  p2?: Point;
+  angle?: number;
+  label?: string;
+  color?: string;
+}
+
+/**
+ * Find closest point on infinite line passing through p1 along p2 or angle
+ */
+export function projectPointOntoLine(
+  point: Point,
+  p1: Point,
+  p2?: Point,
+  angleDeg?: number
+): { projected: Point; distance: number } {
+  let dx: number;
+  let dy: number;
+
+  if (p2 && (Math.abs(p2.x - p1.x) > 0.001 || Math.abs(p2.y - p1.y) > 0.001)) {
+    dx = p2.x - p1.x;
+    dy = p2.y - p1.y;
+  } else if (angleDeg !== undefined) {
+    const rad = (angleDeg * Math.PI) / 180;
+    dx = Math.cos(rad);
+    dy = Math.sin(rad);
+  } else {
+    return { projected: { ...p1 }, distance: Math.hypot(point.x - p1.x, point.y - p1.y) };
+  }
+
+  const length = Math.hypot(dx, dy);
+  if (length === 0) {
+    return { projected: { ...p1 }, distance: Math.hypot(point.x - p1.x, point.y - p1.y) };
+  }
+
+  const ux = dx / length;
+  const uy = dy / length;
+
+  const wx = point.x - p1.x;
+  const wy = point.y - p1.y;
+  const t = wx * ux + wy * uy;
+
+  const projectedX = p1.x + t * ux;
+  const projectedY = p1.y + t * uy;
+
+  const distance = Math.hypot(point.x - projectedX, point.y - projectedY);
+
+  return {
+    projected: { x: projectedX, y: projectedY },
+    distance,
+  };
 }
 
 export interface SnapOptions {
@@ -651,6 +702,45 @@ export function snapSinglePoint(
       color: bestTargetX.color,
       snapPoint: { x: bestTargetX.position, y: snappedY },
     });
+  }
+
+  // Diagonal Guidelines snap evaluation
+  if (allowGuideSnap) {
+    let bestDiagGuide: CustomGuideTarget | null = null;
+    let minDiagDist = threshold;
+    let bestDiagProj: Point | null = null;
+
+    for (const guide of customGuides) {
+      if (guide.type === 'diagonal' && guide.p1) {
+        const { projected, distance } = projectPointOntoLine(rawPos, guide.p1, guide.p2, guide.angle);
+        if (distance <= minDiagDist) {
+          minDiagDist = distance;
+          bestDiagGuide = guide;
+          bestDiagProj = projected;
+        }
+      }
+    }
+
+    if (bestDiagGuide && bestDiagProj) {
+      const hasBothHV = (bestTargetX !== null || (useGridX && gridSnapX !== null)) && 
+                        (bestTargetY !== null || (useGridY && gridSnapY !== null));
+      if (!hasBothHV || minDiagDist < Math.min(minDiffX, minDiffY)) {
+        snappedX = bestDiagProj.x;
+        snappedY = bestDiagProj.y;
+        activeGuides.push({
+          id: `snap-pt-diag-${bestDiagGuide.id}`,
+          type: 'diagonal',
+          position: 0,
+          targetName: bestDiagGuide.label || `斜めガイド (${Math.round(bestDiagGuide.angle ?? 0)}°)`,
+          targetType: 'custom',
+          color: bestDiagGuide.color || '#06b6d4',
+          snapPoint: { x: snappedX, y: snappedY },
+          p1: bestDiagGuide.p1,
+          p2: bestDiagGuide.p2,
+          angle: bestDiagGuide.angle,
+        });
+      }
+    }
   }
 
   return {
