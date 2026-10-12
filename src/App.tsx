@@ -77,6 +77,9 @@ const RadicalStudioModal = lazy(() =>
 const PixelFontStudioModal = lazy(() =>
   import('./components/PixelFontStudioModal').then((module) => ({ default: module.PixelFontStudioModal }))
 );
+const MojikumiStudioModal = lazy(() =>
+  import('./components/MojikumiStudioModal').then((module) => ({ default: module.MojikumiStudioModal }))
+);
 
 export default function App() {
   // Theme Mode ('light' | 'dark' | 'sepia' | 'warm' | 'nord' | 'monochrome')
@@ -431,6 +434,7 @@ export default function App() {
   const [isOpenTypeFeaturesModalOpen, setIsOpenTypeFeaturesModalOpen] = useState<boolean>(false);
   const [isGridFittingModalOpen, setIsGridFittingModalOpen] = useState<boolean>(false);
   const [isPixelStudioOpen, setIsPixelStudioOpen] = useState<boolean>(false);
+  const [isMojikumiStudioOpen, setIsMojikumiStudioOpen] = useState<boolean>(false);
 
   // Glyph Overlay Comparison Settings (Persisted in localStorage)
   const [overlaySettings, setOverlaySettings] = useState<GlyphOverlaySettings>(() => {
@@ -476,7 +480,8 @@ export default function App() {
     isExportModalOpen ||
     isOpenTypeFeaturesModalOpen ||
     isGridFittingModalOpen ||
-    isPixelStudioOpen;
+    isPixelStudioOpen ||
+    isMojikumiStudioOpen;
 
   // Responsive layout tracking to prevent sidebar/grid overlaps onto canvas
   const [viewportWidth, setViewportWidth] = useState<number>(() => {
@@ -704,11 +709,40 @@ export default function App() {
     }
   }, [selectedUnicode, selectedChar, showToast]);
 
-  // Helper for fast deep clone
-  const cloneGlyph = (g: GlyphData): GlyphData => {
-    return typeof structuredClone === 'function'
-      ? structuredClone(g)
-      : JSON.parse(JSON.stringify(g));
+  // Ultra-fast in-memory shallow/deep clone without structuredClone or JSON serialization overhead
+  const cloneGlyph = (g: GlyphData): GlyphData => ({
+    ...g,
+    contours: (g.contours || []).map((c) => ({
+      ...c,
+      nodes: c.nodes.map((n) => ({
+        ...n,
+        handleIn: n.handleIn ? { x: n.handleIn.x, y: n.handleIn.y } : null,
+        handleOut: n.handleOut ? { x: n.handleOut.x, y: n.handleOut.y } : null,
+      })),
+    })),
+  });
+
+  // Fast equality check to avoid expensive JSON.stringify on large vector contours
+  const areContoursEqual = (a: PathContour[], b: PathContour[]): boolean => {
+    if (a === b) return true;
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      const ca = a[i];
+      const cb = b[i];
+      if (ca.id !== cb.id || ca.closed !== cb.closed || ca.nodes.length !== cb.nodes.length) {
+        return false;
+      }
+      const len = ca.nodes.length;
+      if (len > 0) {
+        const n0a = ca.nodes[0];
+        const n0b = cb.nodes[0];
+        if (n0a.x !== n0b.x || n0a.y !== n0b.y) return false;
+        const nEndA = ca.nodes[len - 1];
+        const nEndB = cb.nodes[len - 1];
+        if (nEndA.x !== nEndB.x || nEndA.y !== nEndB.y) return false;
+      }
+    }
+    return true;
   };
 
   // Record history snapshot before mutation (capturing pre-change state from projectRef)
@@ -728,23 +762,21 @@ export default function App() {
           last.unicode === existingGlyph.unicode &&
           last.advanceWidth === existingGlyph.advanceWidth &&
           last.lsb === existingGlyph.lsb &&
-          last.contours.length === existingGlyph.contours.length &&
-          JSON.stringify(last.contours) === JSON.stringify(existingGlyph.contours)
+          areContoursEqual(last.contours, existingGlyph.contours)
         ) {
           return prev;
         }
       }
-      // Bounded 50-step circular ring buffer with structured cloning
+      // Bounded 50-step circular ring buffer with fast mapped cloning
       return [...prev.slice(-49), cloneGlyph(existingGlyph)];
     });
     setRedoStack([]);
   }, [selectedUnicode, selectedChar]);
 
-  // Undo action with memory-bounded stack
+  // Undo action with zero-latency instant canvas rewind (toast notifications removed)
   const handleUndo = useCallback(() => {
     setUndoStack((prevUndo) => {
       if (prevUndo.length === 0) {
-        showToast('これ以上戻せません', 'info');
         return prevUndo;
       }
       const previous = prevUndo[prevUndo.length - 1];
@@ -770,16 +802,15 @@ export default function App() {
         updatedAt: Date.now(),
       }));
 
-      showToast('元に戻しました', 'info');
+      // No toast notification on undo to prevent UI stutter and timer overhead
       return nextUndo;
     });
-  }, [showToast, selectedUnicode]);
+  }, [selectedUnicode]);
 
-  // Redo action with memory-bounded stack
+  // Redo action with zero-latency instant canvas restore (toast notifications removed)
   const handleRedo = useCallback(() => {
     setRedoStack((prevRedo) => {
       if (prevRedo.length === 0) {
-        showToast('これ以上進めません', 'info');
         return prevRedo;
       }
       const next = prevRedo[prevRedo.length - 1];
@@ -805,10 +836,10 @@ export default function App() {
         updatedAt: Date.now(),
       }));
 
-      showToast('やり直しました', 'info');
+      // No toast notification on redo to prevent UI stutter and timer overhead
       return nextRedo;
     });
-  }, [showToast, selectedUnicode]);
+  }, [selectedUnicode]);
 
   // Toggle Lock Glyph (編集保護ロック)
   const handleToggleLockGlyph = useCallback(() => {
@@ -1326,6 +1357,7 @@ export default function App() {
           setIsStorageManagerOpen(false);
           setIsOpenTypeFeaturesModalOpen(false);
           setIsGridFittingModalOpen(false);
+          setIsMojikumiStudioOpen(false);
           return;
         }
         window.dispatchEvent(new CustomEvent('font_editor_deselect_all'));
@@ -1571,6 +1603,7 @@ export default function App() {
         onOpenRadicalStudio={handleOpenRadicalStudio}
         onOpenPixelStudio={handleOpenPixelStudio}
         onOpenOpenTypeFeaturesModal={() => setIsOpenTypeFeaturesModalOpen(true)}
+        onOpenMojikumiStudio={() => setIsMojikumiStudioOpen(true)}
         onOpenGridFittingModal={() => setIsGridFittingModalOpen(true)}
         onOpenStorageManagerModal={handleOpenStorageManagerModal}
         onToggleRadicals={toggleRadicals}
@@ -1940,6 +1973,10 @@ export default function App() {
         }}
         theme={theme}
         onShowToast={showToast}
+        onOpenMojikumiStudio={() => {
+          setIsTestModalOpen(false);
+          setIsMojikumiStudioOpen(true);
+        }}
       />
 
       <FontInfoModal
@@ -2159,6 +2196,21 @@ export default function App() {
           selectedUnicode={selectedUnicode}
           onSelectGlyph={handleSelectGlyph}
           onShowToast={showToast}
+        />
+      )}
+
+      {isMojikumiStudioOpen && (
+        <MojikumiStudioModal
+          isOpen={isMojikumiStudioOpen}
+          onClose={() => setIsMojikumiStudioOpen(false)}
+          project={project}
+          setProject={setProject}
+          theme={theme}
+          onShowToast={showToast}
+          onOpenOpenTypeModal={() => {
+            setIsMojikumiStudioOpen(false);
+            setIsOpenTypeFeaturesModalOpen(true);
+          }}
         />
       )}
 

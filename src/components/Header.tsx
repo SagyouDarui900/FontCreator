@@ -83,6 +83,7 @@ interface HeaderProps {
  onOpenRadicalStudio: () => void;
  onOpenPixelStudio?: () => void;
  onOpenOpenTypeFeaturesModal?: () => void;
+ onOpenMojikumiStudio?: () => void;
  onOpenGridFittingModal?: () => void;
  onOpenStorageManagerModal?: () => void;
  onToggleRadicals: () => void;
@@ -126,6 +127,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  onOpenRadicalStudio,
  onOpenPixelStudio,
  onOpenOpenTypeFeaturesModal,
+ onOpenMojikumiStudio,
  onOpenGridFittingModal,
  onOpenStorageManagerModal,
  onToggleRadicals,
@@ -510,6 +512,22 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  <Play className="w-3.5 h-3.5 fill-current text-emerald-600 dark:text-emerald-400 shrink-0" />
  <span className="hidden sm:inline leading-none">試し打ち</span>
  </button>
+
+ {/* Mojikumi Studio Button */}
+ {onOpenMojikumiStudio && (
+ <button
+ onClick={onOpenMojikumiStudio}
+ className={`h-8 px-2 sm:px-2.5 rounded-lg text-xs font-bold inline-flex items-center gap-1 transition-all active:scale-95 border shrink-0 ${
+ isLight
+ ? 'bg-emerald-50/90 text-emerald-950 hover:bg-emerald-100 border-emerald-300'
+ : 'bg-[#1b2b20] text-emerald-300 hover:bg-[#23382a] border-[#2b4032]'
+ }`}
+ title="日本語組版・文字組みスタジオ（ベタ組み・ツメ組み・アケ組み比較・アキ量設定）"
+ >
+ <Type className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+ <span className="hidden sm:inline leading-none">文字組み</span>
+ </button>
+ )}
 
  {/* Manual & Tutorial & Shortcuts Guide Button */}
  {onOpenShortcutsModal && (
@@ -995,6 +1013,31 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  <div className="text-xs font-bold truncate">縦書き・合字</div>
  <div className="text-[10.5px] text-stone-500 dark:text-stone-400 leading-snug">
  縦書き用グリフと合字 (OpenType) 設定
+ </div>
+ </div>
+ </button>
+ )}
+
+ {/* Mojikumi Studio */}
+ {onOpenMojikumiStudio && (
+ <button
+ onClick={() => {
+ onOpenMojikumiStudio();
+ setShowToolsMenu(false);
+ }}
+ className={`text-left p-2 rounded-xl border transition-all flex items-start space-x-2 group cursor-pointer ${
+ isLight
+ ? 'bg-stone-50 hover:bg-emerald-50/60 border-stone-200 hover:border-emerald-300 text-stone-900'
+ : 'bg-[#18271e] hover:bg-[#203428] border-[#25362b] hover:border-emerald-700/60 text-emerald-100'
+ }`}
+ >
+ <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#1a2920] text-emerald-700 dark:text-emerald-300 border border-stone-200/80 dark:border-emerald-800/40 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+ <Type className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+ </div>
+ <div className="min-w-0 flex-1">
+ <div className="text-xs font-bold truncate">文字組み・組版</div>
+ <div className="text-[10.5px] text-stone-500 dark:text-stone-400 leading-snug">
+ ベタ/ツメ/アケ比較・アキ量・禁則
  </div>
  </div>
  </button>

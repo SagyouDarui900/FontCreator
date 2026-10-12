@@ -193,13 +193,38 @@ import { CustomGuidelinesLayer } from './canvas/CustomGuidelinesLayer';
 import { RulerMeasurementLayer } from './canvas/RulerMeasurementLayer';
 import { MainGlyphContoursLayer } from './canvas/MainGlyphContoursLayer';
 
+// High-contrast dual-ring + center dot precision reticle SVG cursor (32x32, hotspot 16 16)
+// Provides 100% visibility against white canvas, dark glyphs, and grid lines
+const HIGH_CONTRAST_RETICLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <circle cx="16" cy="16" r="7.5" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-opacity="0.95"/>
+  <circle cx="16" cy="16" r="7.5" fill="none" stroke="#047857" stroke-width="1.6"/>
+  <line x1="16" y1="1" x2="16" y2="6.5" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <line x1="16" y1="25.5" x2="16" y2="31" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <line x1="1" y1="16" x2="6.5" y2="16" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <line x1="25.5" y1="16" x2="31" y2="16" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <line x1="16" y1="1.5" x2="16" y2="6.5" stroke="#047857" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="16" y1="25.5" x2="16" y2="30.5" stroke="#047857" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="1.5" y1="16" x2="6.5" y2="16" stroke="#047857" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="25.5" y1="16" x2="30.5" y2="16" stroke="#047857" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="16" cy="16" r="2.8" fill="#ffffff"/>
+  <circle cx="16" cy="16" r="1.5" fill="#047857"/>
+</svg>`;
+
+const HIGH_CONTRAST_NODE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+  <path d="M4 2 L4 18 L8 14 L12 22 L14.5 21 L10.5 13 L16 13 Z" fill="#0f172a" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
+  <circle cx="18" cy="18" r="4.5" fill="none" stroke="#ffffff" stroke-width="2.5"/>
+  <circle cx="18" cy="18" r="4.5" fill="none" stroke="#059669" stroke-width="1.4"/>
+  <circle cx="18" cy="18" r="1.8" fill="#10b981"/>
+</svg>`;
+
 const HIGH_CONTRAST_GRAB_CURSOR = 'grab';
 const HIGH_CONTRAST_GRABBING_CURSOR = 'grabbing';
-const HIGH_CONTRAST_PEN_CURSOR = 'crosshair';
-const HIGH_CONTRAST_NODE_CURSOR = 'default';
-const HIGH_CONTRAST_ANCHOR_ERASER_CURSOR = 'crosshair';
-const HIGH_CONTRAST_ERASER_CURSOR = 'crosshair';
-const HIGH_CONTRAST_CROSSHAIR_CURSOR = 'crosshair';
+const HIGH_CONTRAST_PEN_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(HIGH_CONTRAST_RETICLE_SVG)}") 16 16, crosshair`;
+const HIGH_CONTRAST_NODE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(HIGH_CONTRAST_NODE_SVG)}") 4 2, default`;
+const HIGH_CONTRAST_ANCHOR_ERASER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(HIGH_CONTRAST_RETICLE_SVG)}") 16 16, crosshair`;
+const HIGH_CONTRAST_ERASER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(HIGH_CONTRAST_RETICLE_SVG)}") 16 16, crosshair`;
+const HIGH_CONTRAST_CROSSHAIR_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(HIGH_CONTRAST_RETICLE_SVG)}") 16 16, crosshair`;
+
 
 const getDecimatedPointsForLivePreview = (pts: StrokePoint[]): StrokePoint[] => {
   if (pts.length <= 4) return pts;
@@ -1006,9 +1031,18 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
  // Throttled RAF references for ultra-smooth 60fps node and handle dragging
  const eraserReticleRef = useRef<SVGGElement | null>(null);
+ const drawingReticleRef = useRef<SVGGElement | null>(null);
  const nodeDragRafRef = useRef<number | null>(null);
  const eraseRafRef = useRef<number | null>(null);
  const pendingContoursRef = useRef<PathContour[] | null>(null);
+ const nodeDragSessionRef = useRef<{
+  contourId: string;
+  nodeId: string;
+  handleType: 'node' | 'handleIn' | 'handleOut';
+  startPos: Point;
+  initialNode: BezierNode;
+  initialContour: PathContour;
+ } | null>(null);
 
  // Clean up RAF & timers on unmount to prevent memory leaks
  useEffect(() => {
@@ -1575,14 +1609,12 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
  // ---------------- PATH & BEZIER UNDO / RESET / FINISH ACTIONS ----------------
 
- // Undo the last placed node in the active pen path (やり直し)
+ // Undo the last placed node in the active pen path - zero latency
  const handleUndoPenNode = useCallback(() => {
  if (!activePenContour) return;
  if (activePenContour.nodes.length <= 1) {
- // If only 1 node was placed, cancel/reset the path
  setActivePenContour(null);
  setSelectedNodeId(null);
- showCanvasToast('パスの作図をキャンセルしました');
  } else {
  const remainingNodes = activePenContour.nodes.slice(0, -1);
  setActivePenContour({
@@ -1590,9 +1622,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  nodes: remainingNodes,
  });
  setSelectedNodeId(remainingNodes[remainingNodes.length - 1].id);
- showCanvasToast('直前の頂点を取り消しました', `残り ${remainingNodes.length} 点`);
  }
- }, [activePenContour, showCanvasToast]);
+ }, [activePenContour]);
 
  // Reset/Discard the entire in-progress pen path (リセット)
  const handleResetPenContour = useCallback(() => {
@@ -1816,27 +1847,61 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  [selectedContourIds, contours, screenToCanvas]
  );
 
- // Resolve dynamic high-contrast cursor
+ const startNodeOrHandleDrag = useCallback(
+  (
+   e: React.PointerEvent,
+   contour: PathContour,
+   node: BezierNode,
+   handleType: 'node' | 'handleIn' | 'handleOut'
+  ) => {
+   e.stopPropagation();
+   try {
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+   } catch {
+    // Ignored
+   }
+   const canvasPos = screenToCanvas(e.clientX, e.clientY);
+   setSelectedContourId(contour.id);
+   setSelectedContourIds([contour.id]);
+   setSelectedNodeId(node.id);
+   setSelectedHandleType(handleType);
+   nodeDragSessionRef.current = {
+    contourId: contour.id,
+    nodeId: node.id,
+    handleType,
+    startPos: canvasPos,
+    initialNode: { ...node },
+    initialContour: { ...contour },
+   };
+  },
+  [screenToCanvas]
+ );
+
+ // Resolve dynamic high-contrast cursor (lightweight native OS hardware acceleration)
  const getCanvasCursor = useCallback(() => {
- const isHighContrast = gridSettings.highContrastCursor !== false;
- if (isSpacePressed || toolMode === 'hand' || isPanning) {
- if (isHighContrast) {
- return isPanning ? HIGH_CONTRAST_GRABBING_CURSOR : HIGH_CONTRAST_GRAB_CURSOR;
- }
- return isPanning ? 'grabbing' : 'grab';
- }
- if (toolMode === 'pen') return isHighContrast ? HIGH_CONTRAST_PEN_CURSOR : 'crosshair';
- if (toolMode === 'node' || toolMode === 'select') return isHighContrast ? HIGH_CONTRAST_NODE_CURSOR : 'default';
- if (toolMode === 'eraser') {
- if (eraserMode === 'node') {
- return isHighContrast ? HIGH_CONTRAST_ANCHOR_ERASER_CURSOR : 'crosshair';
- }
- return isHighContrast ? HIGH_CONTRAST_ERASER_CURSOR : 'crosshair';
- }
- if (toolMode === 'brush' || isShapeTool || toolMode === 'ruler') {
- return isHighContrast ? HIGH_CONTRAST_CROSSHAIR_CURSOR : 'crosshair';
- }
- return 'default';
+  const isHighContrast = gridSettings.highContrastCursor !== false;
+  if (isSpacePressed || toolMode === 'hand' || isPanning) {
+   if (isHighContrast) {
+    return isPanning ? HIGH_CONTRAST_GRABBING_CURSOR : HIGH_CONTRAST_GRAB_CURSOR;
+   }
+   return isPanning ? 'grabbing' : 'grab';
+  }
+  // Pen and Brush both use lightweight, native hardware-accelerated cursor
+  if (toolMode === 'pen' || toolMode === 'brush') {
+   return isHighContrast ? HIGH_CONTRAST_PEN_CURSOR : 'crosshair';
+  }
+  if (toolMode === 'node') return isHighContrast ? HIGH_CONTRAST_NODE_CURSOR : 'default';
+  if (toolMode === 'select') return isHighContrast ? HIGH_CONTRAST_NODE_CURSOR : 'default';
+  if (toolMode === 'eraser') {
+   if (eraserMode === 'node') {
+    return isHighContrast ? HIGH_CONTRAST_ANCHOR_ERASER_CURSOR : 'crosshair';
+   }
+   return isHighContrast ? HIGH_CONTRAST_ERASER_CURSOR : 'crosshair';
+  }
+  if (isShapeTool || toolMode === 'ruler') {
+   return isHighContrast ? HIGH_CONTRAST_CROSSHAIR_CURSOR : 'crosshair';
+  }
+  return 'default';
  }, [gridSettings.highContrastCursor, toolMode, eraserMode, isPanning, isSpacePressed, isShapeTool]);
 
  // ---------------- POINTER EVENT HANDLERS ----------------
@@ -2257,27 +2322,54 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  for (const node of contour.nodes) {
  // Check handleOut
  if (node.handleOut && Math.hypot(node.handleOut.x - pos.x, node.handleOut.y - pos.y) <= handleHitDist) {
- setSelectedContourId(contour.id);
- setSelectedNodeId(node.id);
- setSelectedHandleType('handleOut');
- foundNode = true;
- break;
+  setSelectedContourId(contour.id);
+  setSelectedContourIds([contour.id]);
+  setSelectedNodeId(node.id);
+  setSelectedHandleType('handleOut');
+  nodeDragSessionRef.current = {
+   contourId: contour.id,
+   nodeId: node.id,
+   handleType: 'handleOut',
+   startPos: pos,
+   initialNode: { ...node },
+   initialContour: { ...contour },
+  };
+  foundNode = true;
+  break;
  }
  // Check handleIn
  if (node.handleIn && Math.hypot(node.handleIn.x - pos.x, node.handleIn.y - pos.y) <= handleHitDist) {
- setSelectedContourId(contour.id);
- setSelectedNodeId(node.id);
- setSelectedHandleType('handleIn');
- foundNode = true;
- break;
+  setSelectedContourId(contour.id);
+  setSelectedContourIds([contour.id]);
+  setSelectedNodeId(node.id);
+  setSelectedHandleType('handleIn');
+  nodeDragSessionRef.current = {
+   contourId: contour.id,
+   nodeId: node.id,
+   handleType: 'handleIn',
+   startPos: pos,
+   initialNode: { ...node },
+   initialContour: { ...contour },
+  };
+  foundNode = true;
+  break;
  }
  // Check node anchor
  if (Math.hypot(node.x - pos.x, node.y - pos.y) <= nodeHitDist) {
- setSelectedContourId(contour.id);
- setSelectedNodeId(node.id);
- setSelectedHandleType('node');
- foundNode = true;
- break;
+  setSelectedContourId(contour.id);
+  setSelectedContourIds([contour.id]);
+  setSelectedNodeId(node.id);
+  setSelectedHandleType('node');
+  nodeDragSessionRef.current = {
+   contourId: contour.id,
+   nodeId: node.id,
+   handleType: 'node',
+   startPos: pos,
+   initialNode: { ...node },
+   initialContour: { ...contour },
+  };
+  foundNode = true;
+  break;
  }
  }
  if (foundNode) break;
@@ -2453,15 +2545,31 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  }
  }
 
- // Only update hover cursor coordinates when crosshair, ruler, or pen tool is active, and NOT during panning or brush drawing
+ // Instantaneous direct hardware DOM update for brush drawing reticle (0ms latency, bypasses React render tree)
+ if (toolMode === 'brush' && drawingReticleRef.current) {
+ if (isSpacePressed || toolMode === 'hand' || isPanning) {
+ if (drawingReticleRef.current.style.display !== 'none') {
+ drawingReticleRef.current.style.display = 'none';
+ }
+ } else {
+ drawingReticleRef.current.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+ if (drawingReticleRef.current.style.display === 'none') {
+ drawingReticleRef.current.style.display = '';
+ }
+ }
+ }
+
+ // Only update hover cursor coordinates when crosshair, ruler, or pen tool is active, and NOT during panning or active stroke drawing
+ const isActivelyDrawing = brushStrokePointsRef.current.length > 0 || isPenDrawingRef.current;
  const isDrawingOrPanning =
- toolMode === 'brush' ||
+ isActivelyDrawing ||
  isShapeTool ||
  isSpacePressed ||
  isPanning;
 
  const needsHoverPos =
  Boolean(gridSettings.showCursorCrosshair) ||
+ toolMode === 'brush' ||
  (toolMode === 'pen' && Boolean(activePenContour));
 
  if (needsHoverPos && !isDrawingOrPanning) {
@@ -3085,137 +3193,149 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  return;
  }
 
- // Select/Node Dragging
- if ((toolMode === 'select' || toolMode === 'node') && selectedContourId && selectedNodeId && selectedHandleType) {
- let snapPos = pos;
-
- if (e.pointerType === 'touch') {
- setTouchLoupeState({
- visible: true,
- screenX: e.clientX,
- screenY: e.clientY,
- canvasPos: snapPos,
- });
- }
-
- if (selectedHandleType === 'node' && !e.altKey && (Boolean(gridSettings.snapToGuides) || Boolean(gridSettings.snapToGrid))) {
- const otherContours = contours.filter((c) => c.id !== selectedContourId);
- const snapThreshold = Math.min(5, Math.max(2, Math.round(4 / zoom)));
- const snapResult = snapSinglePoint(
- pos,
- otherContours,
- snapMetrics,
- customGuidelines,
- snapThreshold,
- gridSettings
+ // Select/Node Dragging (Ref-accelerated 0ms latency synchronous tracking)
+ const isDraggingNode = Boolean(
+  nodeDragSessionRef.current ||
+  ((toolMode === 'select' || toolMode === 'node') && selectedContourId && selectedNodeId && selectedHandleType)
  );
- snapPos = snapResult.point;
- setActiveSnapGuides(snapResult.activeGuides);
- } else if (selectedHandleType === 'node') {
- setActiveSnapGuides([]);
- }
 
- const updatedContours = contours.map((contour) => {
- if (contour.id !== selectedContourId) return contour;
+ if (isDraggingNode) {
+  const activeContourId = nodeDragSessionRef.current?.contourId || selectedContourId!;
+  const activeNodeId = nodeDragSessionRef.current?.nodeId || selectedNodeId!;
+  const activeHandleType = nodeDragSessionRef.current?.handleType || selectedHandleType!;
 
- return {
- ...contour,
- nodes: contour.nodes.map((node) => {
- if (node.id !== selectedNodeId) return node;
+  let snapPos = pos;
 
- if (selectedHandleType === 'node') {
- const dx = snapPos.x - node.x;
- const dy = snapPos.y - node.y;
- return {
- ...node,
- x: snapPos.x,
- y: snapPos.y,
- handleIn: node.handleIn ? { x: node.handleIn.x + dx, y: node.handleIn.y + dy } : null,
- handleOut: node.handleOut ? { x: node.handleOut.x + dx, y: node.handleOut.y + dy } : null,
- };
- } else if (selectedHandleType === 'handleOut') {
- if (e.altKey) {
- return {
- ...node,
- handleOut: { x: pos.x, y: pos.y },
- type: 'corner' as const,
- };
- }
- if (node.type === 'smooth' || node.type === 'symmetric') {
- const dx = pos.x - node.x;
- const dy = pos.y - node.y;
- const lenOut = Math.hypot(dx, dy);
- let handleIn = node.handleIn;
- if (lenOut > 0.01 && handleIn) {
- const lenIn =
- node.type === 'symmetric'
- ? lenOut
- : Math.hypot(handleIn.x - node.x, handleIn.y - node.y);
- const angle = Math.atan2(dy, dx);
- handleIn = {
- x: Math.round(node.x - Math.cos(angle) * lenIn),
- y: Math.round(node.y - Math.sin(angle) * lenIn),
- };
- }
- return {
- ...node,
- handleOut: { x: pos.x, y: pos.y },
- handleIn,
- };
- }
- return {
- ...node,
- handleOut: { x: pos.x, y: pos.y },
- };
- } else if (selectedHandleType === 'handleIn') {
- if (e.altKey) {
- return {
- ...node,
- handleIn: { x: pos.x, y: pos.y },
- type: 'corner' as const,
- };
- }
- if (node.type === 'smooth' || node.type === 'symmetric') {
- const dx = pos.x - node.x;
- const dy = pos.y - node.y;
- const lenIn = Math.hypot(dx, dy);
- let handleOut = node.handleOut;
- if (lenIn > 0.01 && handleOut) {
- const lenOut =
- node.type === 'symmetric'
- ? lenIn
- : Math.hypot(handleOut.x - node.x, handleOut.y - node.y);
- const angle = Math.atan2(dy, dx);
- handleOut = {
- x: Math.round(node.x - Math.cos(angle) * lenOut),
- y: Math.round(node.y - Math.sin(angle) * lenOut),
- };
- }
- return {
- ...node,
- handleIn: { x: pos.x, y: pos.y },
- handleOut,
- };
- }
- return {
- ...node,
- handleIn: { x: pos.x, y: pos.y },
- };
- }
- return node;
- }),
- };
- });
+  if (e.pointerType === 'touch') {
+   setTouchLoupeState({
+    visible: true,
+    screenX: e.clientX,
+    screenY: e.clientY,
+    canvasPos: snapPos,
+   });
+  }
 
- pendingContoursRef.current = updatedContours;
- if (nodeDragRafRef.current == null) {
- nodeDragRafRef.current = requestAnimationFrame(() => {
- nodeDragRafRef.current = null;
- if (pendingContoursRef.current) {
- onChangeContours(pendingContoursRef.current);
- }
- });
- }
+  if (activeHandleType === 'node' && !e.altKey && (Boolean(gridSettings.snapToGuides) || Boolean(gridSettings.snapToGrid))) {
+   const otherContours = contours.filter((c) => c.id !== activeContourId);
+   const snapThreshold = Math.min(6, Math.max(2, Math.round(5 / zoom)));
+   const snapResult = snapSinglePoint(
+    pos,
+    otherContours,
+    snapMetrics,
+    customGuidelines,
+    snapThreshold,
+    gridSettings
+   );
+   snapPos = snapResult.point;
+   setActiveSnapGuides(snapResult.activeGuides);
+  } else if (activeHandleType === 'node') {
+   setActiveSnapGuides([]);
+  }
+
+  const currentContours = contoursRef.current || contours;
+  const updatedContours = currentContours.map((contour) => {
+   if (contour.id !== activeContourId) return contour;
+
+   return {
+    ...contour,
+    nodes: contour.nodes.map((node) => {
+     if (node.id !== activeNodeId) return node;
+
+     if (activeHandleType === 'node') {
+      const dx = snapPos.x - node.x;
+      const dy = snapPos.y - node.y;
+      return {
+       ...node,
+       x: snapPos.x,
+       y: snapPos.y,
+       handleIn: node.handleIn ? { x: node.handleIn.x + dx, y: node.handleIn.y + dy } : null,
+       handleOut: node.handleOut ? { x: node.handleOut.x + dx, y: node.handleOut.y + dy } : null,
+      };
+     } else if (activeHandleType === 'handleOut') {
+      if (e.altKey) {
+       return {
+        ...node,
+        handleOut: { x: pos.x, y: pos.y },
+        type: 'corner' as const,
+       };
+      }
+      if (node.type === 'smooth' || node.type === 'symmetric') {
+       const dx = pos.x - node.x;
+       const dy = pos.y - node.y;
+       const lenOut = Math.hypot(dx, dy);
+       let handleIn = node.handleIn;
+       if (lenOut > 0.01 && handleIn) {
+        const lenIn =
+         node.type === 'symmetric'
+          ? lenOut
+          : Math.hypot(handleIn.x - node.x, handleIn.y - node.y);
+        const angle = Math.atan2(dy, dx);
+        handleIn = {
+         x: Math.round(node.x - Math.cos(angle) * lenIn),
+         y: Math.round(node.y - Math.sin(angle) * lenIn),
+        };
+       }
+       return {
+        ...node,
+        handleOut: { x: pos.x, y: pos.y },
+        handleIn,
+       };
+      }
+      return {
+       ...node,
+       handleOut: { x: pos.x, y: pos.y },
+      };
+     } else if (activeHandleType === 'handleIn') {
+      if (e.altKey) {
+       return {
+        ...node,
+        handleIn: { x: pos.x, y: pos.y },
+        type: 'corner' as const,
+       };
+      }
+      if (node.type === 'smooth' || node.type === 'symmetric') {
+       const dx = pos.x - node.x;
+       const dy = pos.y - node.y;
+       const lenIn = Math.hypot(dx, dy);
+       let handleOut = node.handleOut;
+       if (lenIn > 0.01 && handleOut) {
+        const lenOut =
+         node.type === 'symmetric'
+          ? lenIn
+          : Math.hypot(handleOut.x - node.x, handleOut.y - node.y);
+        const angle = Math.atan2(dy, dx);
+        handleOut = {
+         x: Math.round(node.x - Math.cos(angle) * lenOut),
+         y: Math.round(node.y - Math.sin(angle) * lenOut),
+        };
+       }
+       return {
+        ...node,
+        handleIn: { x: pos.x, y: pos.y },
+        handleOut,
+       };
+      }
+      return {
+       ...node,
+       handleIn: { x: pos.x, y: pos.y },
+      };
+     }
+     return node;
+    }),
+   };
+  });
+
+  contoursRef.current = updatedContours;
+  pendingContoursRef.current = updatedContours;
+  if (nodeDragRafRef.current == null) {
+   nodeDragRafRef.current = requestAnimationFrame(() => {
+    nodeDragRafRef.current = null;
+    if (pendingContoursRef.current) {
+     onChangeContours(pendingContoursRef.current);
+    }
+   });
+  }
+  return;
  }
  };
 
@@ -3373,7 +3493,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  if (touchCount === 2) {
  if (onUndo) {
  onUndo();
- showCanvasToast('↺ 2本指タップ: 元に戻す');
  isTwoFingerGestureRef.current = false;
  twoFingerCooldownUntilRef.current = Date.now() + 150;
  activeTwoFingerIdsRef.current = null;
@@ -3382,7 +3501,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  } else if (touchCount === 3) {
  if (onRedo) {
  onRedo();
- showCanvasToast('↻ 3本指タップ: やり直し');
  isTwoFingerGestureRef.current = false;
  twoFingerCooldownUntilRef.current = Date.now() + 150;
  activeTwoFingerIdsRef.current = null;
@@ -3709,17 +3827,18 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  }
 
  // Finalize Node Drag
- if ((toolMode === 'select' || toolMode === 'node') && selectedHandleType) {
- if (nodeDragRafRef.current != null) {
- cancelAnimationFrame(nodeDragRafRef.current);
- nodeDragRafRef.current = null;
- }
- if (pendingContoursRef.current) {
- onChangeContours(pendingContoursRef.current);
- pendingContoursRef.current = null;
- }
- setSelectedHandleType(null);
- onCommitHistory();
+ if (nodeDragSessionRef.current || ((toolMode === 'select' || toolMode === 'node') && selectedHandleType)) {
+  if (nodeDragRafRef.current != null) {
+   cancelAnimationFrame(nodeDragRafRef.current);
+   nodeDragRafRef.current = null;
+  }
+  if (pendingContoursRef.current) {
+   onChangeContours(pendingContoursRef.current);
+   pendingContoursRef.current = null;
+  }
+  nodeDragSessionRef.current = null;
+  setSelectedHandleType(null);
+  onCommitHistory();
  }
 
  // Finalize Bounding Box Transform Drag
@@ -3816,6 +3935,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  pendingTransformContoursRef.current = null;
  setTransformSession(null);
  setSelectedHandleType(null);
+ nodeDragSessionRef.current = null;
  setActiveSnapGuides([]);
  containerRectRef.current = null;
  };
@@ -3866,10 +3986,16 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  if (eraserReticleRef.current) {
  eraserReticleRef.current.style.display = 'none';
  }
+ if (drawingReticleRef.current) {
+ drawingReticleRef.current.style.display = 'none';
+ }
  setHoverCanvasPos(null);
  };
 
  const handleLostPointerCapture = useCallback(() => {
+ if (drawingReticleRef.current) {
+ drawingReticleRef.current.style.display = 'none';
+ }
  if (isErasingRef.current) {
  isErasingRef.current = false;
  lastErasePosRef.current = null;
@@ -3889,6 +4015,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  setDraggingMetric(null);
  setDraggingGuidelineId(null);
  setMarqueeSelection(null);
+ nodeDragSessionRef.current = null;
  }, []);
 
  // Keyboard Shortcuts: Delete node/contour, Undo path point, Reset path, Enter to finalize, Toggle nodes, Space to pan
@@ -4097,22 +4224,26 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  // While drawing pen path -> Backspace/Delete undos the last placed node!
  e.preventDefault();
  handleUndoPenNode();
- } else if (selectedContourIds.length === 1 && selectedNodeId) {
+ } else if (selectedNodeId && (selectedContourId || selectedContourIds.length === 1)) {
  e.preventDefault();
- const targetId = selectedContourIds[0];
- const updated = contours
- .map((contour) => {
- if (contour.id !== targetId) return contour;
- const filteredNodes = contour.nodes.filter((n) => n.id !== selectedNodeId);
- return { ...contour, nodes: filteredNodes };
- })
- .filter((c) => c.nodes.length > 0);
- onChangeContours(updated);
- setSelectedNodeId(null);
- onCommitHistory();
+ handleDeleteSelectedNode();
  } else if (selectedContourIds.length > 0) {
  e.preventDefault();
  handleDeleteSelected();
+ }
+ } else if (e.key.toLowerCase() === 'h' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+ e.preventDefault();
+ if (onChangeGridSettings) {
+ const next = !gridSettings.showCursorCrosshair;
+ onChangeGridSettings((prev) => ({
+ ...prev,
+ showCursorCrosshair: next,
+ highContrastCursor: next,
+ }));
+ showCanvasToast(
+ next ? '照準ポインター・十字線: ON' : '照準ポインター・十字線: OFF',
+ next ? '高視認性照準リング＆十字線ガイドを表示' : 'OS標準の軽量カーソルのみ表示'
+ );
  }
  } else if (e.key === '[' || e.key === ']') {
  if (toolMode === 'eraser') {
@@ -4861,6 +4992,37 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
                 {isOutlineMode ? '輪郭モード' : '塗り表示'}
               </span>
             </button>
+
+            {/* Pointer / Crosshair Reticle Toggle */}
+            {onChangeGridSettings && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !gridSettings.showCursorCrosshair;
+                  onChangeGridSettings((prev) => ({
+                    ...prev,
+                    showCursorCrosshair: next,
+                  }));
+                  showCanvasToast(
+                    next ? '照準ポインター十字線: 表示 (ON)' : '照準ポインター十字線: 非表示 (OFF)',
+                    next ? '高精度十字線ガイドを作図位置に表示' : '軽量標準ポインターのみ表示'
+                  );
+                }}
+                className={`p-1.5 sm:px-2 rounded border transition-colors flex items-center space-x-1 cursor-pointer shrink-0 ${
+                  gridSettings.showCursorCrosshair
+                    ? isLight
+                      ? 'bg-amber-50 border-amber-400 text-amber-900 font-bold'
+                      : 'bg-emerald-950 border-emerald-600 text-emerald-200 font-bold'
+                    : 'border-stone-200 dark:border-stone-700 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 bg-stone-100 dark:bg-stone-800'
+                }`}
+                title={`照準ポインター十字線: ${gridSettings.showCursorCrosshair ? '表示中 (クリックで非表示)' : '非表示 (クリックで表示)'} [Hキー]`}
+              >
+                <CircleDot className={`w-3.5 h-3.5 ${gridSettings.showCursorCrosshair ? 'text-amber-600 dark:text-emerald-400' : 'text-stone-400'}`} />
+                <span className="text-[11px] font-bold">
+                  {gridSettings.showCursorCrosshair ? '照準ON' : '照準OFF'}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Brush Tool Options in Header */}
@@ -5807,6 +5969,36 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  <span className="hidden xs:inline">詳細バー</span>
  <ChevronDown className="w-3 h-3" />
  </button>
+ {onChangeGridSettings && (
+ <>
+ <div className="w-[1px] h-3 bg-stone-300 dark:bg-emerald-800 mx-0.5" />
+ <button
+ type="button"
+ onClick={() => {
+  const next = !gridSettings.showCursorCrosshair;
+  onChangeGridSettings((prev) => ({
+  ...prev,
+  showCursorCrosshair: next,
+  highContrastCursor: next,
+  }));
+  showCanvasToast(
+  next ? '照準ポインター・十字線: ON' : '照準ポインター・十字線: OFF',
+  next ? '高視認性照準リング＆十字線ガイドを表示' : 'OS標準の軽量カーソルのみ表示'
+  );
+ }}
+ className={`p-1 rounded-full transition-colors ${
+  gridSettings.showCursorCrosshair
+  ? isLight
+   ? 'bg-amber-100 text-amber-900 font-bold'
+   : 'bg-emerald-800 text-amber-300 font-bold'
+  : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
+ }`}
+ title={`照準ポインター切替 [Hキー]: ${gridSettings.showCursorCrosshair ? 'ON' : 'OFF'}`}
+ >
+ <CircleDot className="w-3 h-3" />
+ </button>
+ </>
+ )}
  </div>
  )
  )}
@@ -6484,6 +6676,13 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  cursor: getCanvasCursor(),
  }}
  onPointerDown={handlePointerDown}
+ onPointerEnter={(e) => {
+ if (toolMode === 'brush' && drawingReticleRef.current && !isSpacePressed && !isPanning) {
+ const pos = screenToCanvas(e.clientX, e.clientY);
+ drawingReticleRef.current.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+ drawingReticleRef.current.style.display = '';
+ }
+ }}
  onPointerMove={handlePointerMove}
  onPointerUp={handlePointerUp}
  onPointerCancel={handlePointerCancel}
@@ -6635,12 +6834,12 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  strokeWidth={isSelected ? Math.max(2, 2.5 / zoom) : Math.max(14, 18 / zoom)}
  strokeDasharray={isSelected ? '6 4' : undefined}
  className={toolMode === 'select' || toolMode === 'node' ? 'cursor-pointer' : 'pointer-events-none'}
- pointerEvents={toolMode === 'select' || toolMode === 'node' ? 'stroke fill' : 'none'}
+ pointerEvents={toolMode === 'select' ? 'stroke fill' : toolMode === 'node' ? 'stroke' : 'none'}
  onPointerDown={(e) => {
  if (toolMode === 'node') {
  e.stopPropagation();
  const clickPos = screenToCanvas(e.clientX, e.clientY);
- const insertResult = insertNodeOnContourAtPoint(contour, clickPos, 22 / zoom);
+ const insertResult = insertNodeOnContourAtPoint(contour, clickPos, 16 / zoom);
  if (insertResult) {
  const newContours = contours.map((c) => (c.id === contour.id ? insertResult.updatedContour : c));
  onChangeContours(newContours);
@@ -6648,14 +6847,28 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  setSelectedContourIds([contour.id]);
  setSelectedNodeId(insertResult.newNodeId);
  setSelectedHandleType('node');
+ const insertedNode = insertResult.updatedContour.nodes.find((n) => n.id === insertResult.newNodeId);
+ if (insertedNode) {
+  nodeDragSessionRef.current = {
+   contourId: contour.id,
+   nodeId: insertResult.newNodeId,
+   handleType: 'node',
+   startPos: clickPos,
+   initialNode: { ...insertedNode },
+   initialContour: { ...insertResult.updatedContour },
+  };
+  try {
+   (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  } catch {
+   // Ignored
+  }
+ }
  onCommitHistory();
- showCanvasToast('頂点を追加しました');
+ showCanvasToast('頂点を追加しました', 'ドラッグして位置を調整できます');
  return;
  }
  setSelectedContourId(contour.id);
  setSelectedContourIds([contour.id]);
- setSelectedNodeId(null);
- setSelectedHandleType(null);
  return;
  }
  if (toolMode === 'select') {
@@ -6774,8 +6987,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  />
  )}
 
- {/* Selected Contour Highlight & Interactive Bounding Box Transform UI (Only in Select or Node tool modes) */}
- {(toolMode === 'select' || toolMode === 'node') && selectedContourIds.length > 0 && selContoursBBox && (
+ {/* Selected Contour Highlight & Interactive Bounding Box Transform UI (Only in Select tool mode) */}
+ {toolMode === 'select' && selectedContourIds.length > 0 && selContoursBBox && (
  (() => {
  const bbox = selContoursBBox;
  const pad = 4;
@@ -7235,11 +7448,13 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  className={isNodeInteractive ? 'cursor-pointer' : 'pointer-events-none'}
  pointerEvents={isNodeInteractive ? 'all' : 'none'}
  onPointerDown={(e) => {
- if (!isNodeInteractive) return;
- e.stopPropagation();
- setSelectedContourId(contour.id);
- setSelectedNodeId(node.id);
- setSelectedHandleType('node');
+  if (!isNodeInteractive) return;
+  startNodeOrHandleDrag(e, contour, node, 'node');
+ }}
+ onDoubleClick={(e) => {
+  if (!isNodeInteractive) return;
+  e.stopPropagation();
+  handleToggleNodeType(contour.id, node.id);
  }}
  />
  {/* Visual small anchor dot with subtle white border */}
@@ -7270,7 +7485,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  return (
  <g key={node.id}>
  {/* Control Handle Lines (handles shown if showHandles, or in node tool, or node is selected) */}
- {(gridSettings.showHandles || isSelected || (toolMode === 'node' && !isClean)) && (
+ {(gridSettings.showHandles || isSelected || (toolMode === 'node' && isContourActive)) && (
  <>
  {node.handleIn && (
  <g>
@@ -7293,11 +7508,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  className={isHandleInteractive ? 'cursor-move' : 'pointer-events-none'}
  pointerEvents={isHandleInteractive ? 'all' : 'none'}
  onPointerDown={(e) => {
- if (!isHandleInteractive) return;
- e.stopPropagation();
- setSelectedContourId(contour.id);
- setSelectedNodeId(node.id);
- setSelectedHandleType('handleIn');
+  if (!isHandleInteractive) return;
+  startNodeOrHandleDrag(e, contour, node, 'handleIn');
  }}
  />
  {/* HandleIn Circle dot */}
@@ -7333,11 +7545,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  className={isHandleInteractive ? 'cursor-move' : 'pointer-events-none'}
  pointerEvents={isHandleInteractive ? 'all' : 'none'}
  onPointerDown={(e) => {
- if (!isHandleInteractive) return;
- e.stopPropagation();
- setSelectedContourId(contour.id);
- setSelectedNodeId(node.id);
- setSelectedHandleType('handleOut');
+  if (!isHandleInteractive) return;
+  startNodeOrHandleDrag(e, contour, node, 'handleOut');
  }}
  />
  {/* HandleOut Circle dot */}
@@ -7364,11 +7573,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  className={isNodeInteractive ? 'cursor-pointer' : 'pointer-events-none'}
  pointerEvents={isNodeInteractive ? 'all' : 'none'}
  onPointerDown={(e) => {
- if (!isNodeInteractive) return;
- e.stopPropagation();
- setSelectedContourId(contour.id);
- setSelectedNodeId(node.id);
- setSelectedHandleType('node');
+  if (!isNodeInteractive) return;
+  startNodeOrHandleDrag(e, contour, node, 'node');
  }}
  onDoubleClick={(e) => {
  if (!isNodeInteractive) return;
@@ -7712,6 +7918,159 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  r={1.5 / zoom}
  fill={selectionColor}
  />
+ </g>
+ )}
+
+ {/* ---------------- HARDWARE-ACCELERATED BRUSH DRAWING RETICLE (0ms DIRECT GPU DOM TRACKING) ---------------- */}
+ {toolMode === 'brush' && (
+ <g
+ ref={drawingReticleRef}
+ id="live-drawing-reticle"
+ className="brush-drawing-reticle pointer-events-none select-none"
+ style={{ display: 'none' }}
+ >
+ {/* Outer high-contrast white backing circle */}
+ <circle
+ cx={0}
+ cy={0}
+ r={Math.max(4, brushWidth / 2)}
+ fill="rgba(16, 185, 129, 0.08)"
+ stroke="#ffffff"
+ strokeWidth={2.8 / zoom}
+ />
+ {/* Inner high-contrast emerald precision ring */}
+ <circle
+ cx={0}
+ cy={0}
+ r={Math.max(4, brushWidth / 2)}
+ fill="none"
+ stroke="#059669"
+ strokeWidth={1.5 / zoom}
+ />
+
+ {/* 4 Cardinal Crosshair Ticks across brush boundary */}
+ {/* Top tick */}
+ <line
+ x1={0}
+ y1={-Math.max(4, brushWidth / 2) - 5 / zoom}
+ x2={0}
+ y2={-Math.max(4, brushWidth / 2) + 5 / zoom}
+ stroke="#ffffff"
+ strokeWidth={2.8 / zoom}
+ strokeLinecap="round"
+ />
+ <line
+ x1={0}
+ y1={-Math.max(4, brushWidth / 2) - 5 / zoom}
+ x2={0}
+ y2={-Math.max(4, brushWidth / 2) + 5 / zoom}
+ stroke="#059669"
+ strokeWidth={1.4 / zoom}
+ strokeLinecap="round"
+ />
+
+ {/* Bottom tick */}
+ <line
+ x1={0}
+ y1={Math.max(4, brushWidth / 2) - 5 / zoom}
+ x2={0}
+ y2={Math.max(4, brushWidth / 2) + 5 / zoom}
+ stroke="#ffffff"
+ strokeWidth={2.8 / zoom}
+ strokeLinecap="round"
+ />
+ <line
+ x1={0}
+ y1={Math.max(4, brushWidth / 2) - 5 / zoom}
+ x2={0}
+ y2={Math.max(4, brushWidth / 2) + 5 / zoom}
+ stroke="#059669"
+ strokeWidth={1.4 / zoom}
+ strokeLinecap="round"
+ />
+
+ {/* Left tick */}
+ <line
+ x1={-Math.max(4, brushWidth / 2) - 5 / zoom}
+ y1={0}
+ x2={-Math.max(4, brushWidth / 2) + 5 / zoom}
+ y2={0}
+ stroke="#ffffff"
+ strokeWidth={2.8 / zoom}
+ strokeLinecap="round"
+ />
+ <line
+ x1={-Math.max(4, brushWidth / 2) - 5 / zoom}
+ y1={0}
+ x2={-Math.max(4, brushWidth / 2) + 5 / zoom}
+ y2={0}
+ stroke="#059669"
+ strokeWidth={1.4 / zoom}
+ strokeLinecap="round"
+ />
+
+ {/* Right tick */}
+ <line
+ x1={Math.max(4, brushWidth / 2) - 5 / zoom}
+ y1={0}
+ x2={Math.max(4, brushWidth / 2) + 5 / zoom}
+ y2={0}
+ stroke="#ffffff"
+ strokeWidth={2.8 / zoom}
+ strokeLinecap="round"
+ />
+ <line
+ x1={Math.max(4, brushWidth / 2) - 5 / zoom}
+ y1={0}
+ x2={Math.max(4, brushWidth / 2) + 5 / zoom}
+ y2={0}
+ stroke="#059669"
+ strokeWidth={1.4 / zoom}
+ strokeLinecap="round"
+ />
+
+ {/* Center Target Dot: White Outer Ring + Emerald Center */}
+ <circle
+ cx={0}
+ cy={0}
+ r={3.2 / zoom}
+ fill="#ffffff"
+ />
+ <circle
+ cx={0}
+ cy={0}
+ r={1.8 / zoom}
+ fill="#059669"
+ />
+
+ {/* Floating brush size tag badge above cursor */}
+ {brushWidth >= 20 && (
+ <g transform={`translate(0, ${-Math.max(4, brushWidth / 2) - 13 / zoom})`}>
+ <rect
+ x={-28 / zoom}
+ y={-9 / zoom}
+ width={56 / zoom}
+ height={16 / zoom}
+ rx={8 / zoom}
+ fill="#0f172a"
+ stroke="#ffffff"
+ strokeWidth={1.5 / zoom}
+ opacity={0.9}
+ />
+ <text
+ x={0}
+ y={0}
+ textAnchor="middle"
+ dominantBaseline="central"
+ fill="#ffffff"
+ fontSize={9 / zoom}
+ fontWeight="bold"
+ fontFamily="system-ui, -apple-system, sans-serif"
+ >
+ {brushWidth}px
+ </text>
+ </g>
+ )}
  </g>
  )}
 
@@ -8210,7 +8569,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  )}
 
  {/* Right: Floating Canvas Controls (Compactable) */}
- <div className="flex items-center space-x-1.5 pointer-events-auto self-end sm:self-auto flex-nowrap gap-y-1 ml-auto max-w-full overflow-x-auto no-scrollbar">
+ <div className="flex items-center space-x-1.5 pointer-events-auto self-end sm:self-auto flex-wrap sm:flex-nowrap gap-y-1 ml-auto max-w-full overflow-x-auto touch-scroll-x no-scrollbar">
  {/* Collapsed Compact Mini Bar */}
  {isBottomBarCollapsed ? (
  <div
@@ -8254,6 +8613,36 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  >
  幅
  </button>
+ {onChangeGridSettings && (
+ <>
+ <div className="h-3 w-[1px] bg-stone-300 dark:bg-emerald-800" />
+ <button
+ type="button"
+ onClick={() => {
+  const next = !gridSettings.showCursorCrosshair;
+  onChangeGridSettings((prev) => ({
+  ...prev,
+  showCursorCrosshair: next,
+  highContrastCursor: next,
+  }));
+  showCanvasToast(
+  next ? '照準ポインター・十字線: ON' : '照準ポインター・十字線: OFF',
+  next ? '高視認性照準リング＆十字線ガイドを表示' : 'OS標準の軽量カーソルのみ表示'
+  );
+ }}
+ className={`p-1 rounded transition-colors ${
+  gridSettings.showCursorCrosshair
+  ? isLight
+   ? 'bg-amber-100 text-amber-900 font-bold'
+   : 'bg-emerald-800 text-amber-300 font-bold'
+  : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
+ }`}
+ title={`照準ポインター切替 [Hキー]: ${gridSettings.showCursorCrosshair ? 'ON' : 'OFF'}`}
+ >
+ <CircleDot className="w-3.5 h-3.5" />
+ </button>
+ </>
+ )}
  </div>
  ) : (
  <>
@@ -8348,18 +8737,76 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
  {toolMode === 'node' && (
  <div
- className={`px-2 py-1 rounded-lg text-[10.5px] font-bold flex items-center space-x-1 border ${
+ className={`px-2 py-1 rounded-lg text-[10.5px] font-bold flex items-center space-x-1.5 border shadow-sm ${
  isLight
  ? 'bg-emerald-50 text-emerald-950 border-emerald-300'
  : 'bg-[#15231a] text-emerald-300 border-emerald-800'
  }`}
  >
  <Crosshair className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
- <span>パス頂点編集モード</span>
- <span className="text-[9.5px] opacity-75 font-normal ml-1">
- (Alt: スナップ一時解除 / S: スナップON/OFF)
- </span>
+ <span>パス頂点編集</span>
+ {selectedNodeId && selectedContourId ? (
+  <>
+  <span className="w-px h-3 bg-emerald-400/40 mx-0.5" />
+  <button
+  onClick={() => handleToggleNodeType(selectedContourId, selectedNodeId)}
+  className="px-1.5 py-0.5 rounded text-[10px] bg-sky-100 hover:bg-sky-200 dark:bg-sky-950 dark:hover:bg-sky-900 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-700 font-bold flex items-center gap-1 transition-colors"
+  title="角 ⇄ スムーズ曲線を切替 (頂点をダブルクリックでも可能)"
+  >
+  <span>角⇄曲線</span>
+  </button>
+  <button
+  onClick={handleDeleteSelectedNode}
+  className="px-1.5 py-0.5 rounded text-[10px] bg-rose-100 hover:bg-rose-200 dark:bg-rose-950 dark:hover:bg-rose-900 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700 font-bold flex items-center gap-1 transition-colors"
+  title="選択した頂点を削除 (Delete/Backspaceキー)"
+  >
+  <Trash2 className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+  <span>削除</span>
+  </button>
+  </>
+ ) : (
+  <span className="text-[9.5px] opacity-75 font-normal ml-0.5">
+  (頂点・ハンドルをドラッグ / 線上クリックで追加)
+  </span>
+ )}
  </div>
+ )}
+
+ {onChangeGridSettings && (
+ <button
+ onClick={() => {
+  const next = !gridSettings.showCursorCrosshair;
+  onChangeGridSettings((prev) => ({
+  ...prev,
+  showCursorCrosshair: next,
+  highContrastCursor: next,
+  }));
+  showCanvasToast(
+  next ? '照準ポインター・十字線: ON' : '照準ポインター・十字線: OFF',
+  next ? '高視認性照準リング＆十字線ガイドを表示' : 'OS標準の軽量カーソルのみ表示'
+  );
+ }}
+ className={`px-2 py-1 rounded-lg text-[10.5px] font-bold flex items-center space-x-1.5 transition-all border shadow-sm shrink-0 ${
+  gridSettings.showCursorCrosshair
+  ? isLight
+   ? 'bg-amber-100 text-amber-950 border-amber-400 hover:bg-amber-200'
+   : 'bg-emerald-950 text-emerald-300 border-emerald-600 hover:bg-emerald-900'
+  : isLight
+   ? 'bg-stone-100 text-stone-600 border-stone-300 hover:bg-stone-200'
+   : 'bg-stone-800 text-stone-400 border-stone-700 hover:bg-stone-700'
+ }`}
+ title={`照準ポインター切替 [Hキー]: ${gridSettings.showCursorCrosshair ? '表示中 (クリックでOFF)' : '非表示 (クリックでON)'}`}
+ >
+ <CircleDot className={`w-3.5 h-3.5 ${gridSettings.showCursorCrosshair ? 'text-amber-600 dark:text-emerald-400' : 'text-stone-400'}`} />
+ <span className="hidden xs:inline">照準:</span>
+ <span className={`px-1 py-0.2 rounded text-[9.5px] font-mono font-black ${
+  gridSettings.showCursorCrosshair
+  ? 'bg-amber-600 dark:bg-emerald-600 text-white'
+  : 'bg-stone-300 dark:bg-stone-700 text-stone-700 dark:text-stone-300'
+ }`}>
+  {gridSettings.showCursorCrosshair ? 'ON' : 'OFF'}
+ </span>
+ </button>
  )}
 
  {toolMode === 'trace_adjust' && (
@@ -8536,45 +8983,27 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  </button>
  )}
 
- {/* High Contrast Cursor Quick Toggle */}
- {onChangeGridSettings && (
- <button
- onClick={() =>
- onChangeGridSettings((prev) => ({
- ...prev,
- highContrastCursor: prev.highContrastCursor === false ? true : false,
- }))
- }
- title={`高視認性カーソル: ${gridSettings.highContrastCursor !== false ? 'ON (背景と同化しない二重輪郭)' : 'OFF'}`}
- className={`p-1.5 rounded transition-colors ${
- gridSettings.highContrastCursor !== false
- ? isLight
- ? 'bg-amber-100 text-amber-900 border border-amber-300 font-bold'
- : 'bg-emerald-800 text-amber-300 font-bold'
- : isLight
- ? 'text-stone-600 hover:bg-emerald-100/50'
- : 'text-emerald-400 hover:bg-emerald-900/40'
- }`}
- >
- <MousePointer className="w-3.5 h-3.5" />
- </button>
- )}
-
  {/* Cursor Crosshair Reticle Quick Toggle */}
  {onChangeGridSettings && (
  <button
- onClick={() =>
- onChangeGridSettings((prev) => ({
- ...prev,
- showCursorCrosshair: !prev.showCursorCrosshair,
- }))
- }
- title={`カーソル照準十字線: ${gridSettings.showCursorCrosshair ? '表示中' : '非表示 (クリックでON)'}`}
+ onClick={() => {
+  const next = !gridSettings.showCursorCrosshair;
+  onChangeGridSettings((prev) => ({
+  ...prev,
+  showCursorCrosshair: next,
+  highContrastCursor: next,
+  }));
+  showCanvasToast(
+  next ? '照準ポインター・十字線: ON' : '照準ポインター・十字線: OFF',
+  next ? '高視認性照準リング＆十字線ガイドを表示' : 'OS標準の軽量カーソルのみ表示'
+  );
+ }}
+ title={`照準ポインター・十字線: ${gridSettings.showCursorCrosshair ? '表示中 (クリックでOFF)' : '非表示 (クリックでON)'} [Hキー]`}
  className={`p-1.5 rounded transition-colors ${
  gridSettings.showCursorCrosshair
  ? isLight
- ? 'bg-emerald-600 text-white font-bold '
- : 'bg-emerald-600 text-white font-bold'
+ ? 'bg-amber-100 text-amber-900 border border-amber-300 font-bold'
+ : 'bg-emerald-800 text-amber-300 font-bold'
  : isLight
  ? 'text-stone-600 hover:bg-emerald-100/50'
  : 'text-emerald-400 hover:bg-emerald-900/40'

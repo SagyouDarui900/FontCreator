@@ -20,7 +20,15 @@ import {
   ArrowRight,
   Info,
 } from 'lucide-react';
-import { FontProject, OpenTypeFeaturesConfig, OpenTypeFeatureLigature, VerticalWritingGlyphSub } from '../types';
+import {
+  FontProject,
+  OpenTypeFeaturesConfig,
+  OpenTypeFeatureLigature,
+  VerticalWritingGlyphSub,
+  PaltGlyphMetric,
+  ProportionalMetricsConfig,
+} from '../types';
+import { deriveProjectPaltMetrics } from '../utils/fontCompiler';
 
 interface OpenTypeFeaturesModalProps {
   project: FontProject;
@@ -31,10 +39,10 @@ interface OpenTypeFeaturesModalProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
 }
 
-type OpenTypeTab = 'vert' | 'liga' | 'gpos' | 'preview';
+type OpenTypeTab = 'vert' | 'liga' | 'gpos' | 'palt' | 'preview';
 
 const isOpenTypeTab = (value: string): value is OpenTypeTab =>
-  value === 'vert' || value === 'liga' || value === 'gpos' || value === 'preview';
+  value === 'vert' || value === 'liga' || value === 'gpos' || value === 'palt' || value === 'preview';
 
 // Preset Japanese Vertical Substitutions (Standard GSUB 'vert' table)
 const DEFAULT_VERT_PRESETS = [
@@ -77,6 +85,9 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
   onShowToast,
 }) => {
   const [activeTab, setActiveTab] = useState<OpenTypeTab>('vert');
+  const [opticalSideBearingPercent, setOpticalSideBearingPercent] = useState<number>(
+    project.openTypeFeatures?.palt?.opticalSideBearingPercent ?? 5
+  );
 
   // Config State initialized from project or defaults
   const config: OpenTypeFeaturesConfig = useMemo(() => {
@@ -103,6 +114,14 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
           enabled: true,
         })),
         customKerningPairs: [],
+        palt: {
+          enabled: true,
+          autoDerivePalt: true,
+          autoDeriveVpal: true,
+          opticalSideBearingPercent: 5,
+          paltList: [],
+          vpalList: [],
+        },
       }
     );
   }, [project.openTypeFeatures, project.metadata]);
@@ -234,6 +253,58 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
     onShowToast('合字ルールを削除しました', 'info');
   };
 
+  // Proportional Metrics (palt) Handlers
+  const togglePaltGlobal = () => {
+    const currentPalt = config.palt || {
+      enabled: false,
+      autoDerivePalt: true,
+      autoDeriveVpal: true,
+      opticalSideBearingPercent: 5,
+      paltList: [],
+      vpalList: [],
+    };
+    const updated = {
+      ...config,
+      palt: {
+        ...currentPalt,
+        enabled: !currentPalt.enabled,
+      },
+    };
+    updateFeatures(updated);
+    onShowToast(`プロポーショナルメトリクス (palt) を${updated.palt.enabled ? '有効化' : '無効化'}しました`, 'info');
+  };
+
+  const handleAutoDerivePalt = () => {
+    const list = deriveProjectPaltMetrics(project, opticalSideBearingPercent);
+    const updated: OpenTypeFeaturesConfig = {
+      ...config,
+      palt: {
+        enabled: true,
+        autoDerivePalt: true,
+        autoDeriveVpal: true,
+        opticalSideBearingPercent,
+        paltList: list,
+        vpalList: config.palt?.vpalList || [],
+      },
+    };
+    updateFeatures(updated);
+    onShowToast(`${list.length} 文字のプロポーショナルメトリクス (palt) を自動算出・登録しました`, 'success');
+  };
+
+  const togglePaltItem = (unicode: number) => {
+    if (!config.palt) return;
+    const updatedList = config.palt.paltList.map((p) =>
+      p.unicode === unicode ? { ...p, enabled: !p.enabled } : p
+    );
+    updateFeatures({
+      ...config,
+      palt: {
+        ...config.palt,
+        paltList: updatedList,
+      },
+    });
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -328,6 +399,13 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
               shortLabel: 'カーニング',
               icon: ArrowUpDown,
               count: Object.keys(project.kerning || {}).length,
+            },
+            {
+              id: 'palt',
+              label: 'プロポーショナルメトリクス (`palt`/`vpal`)',
+              shortLabel: '文字ツメ(palt)',
+              icon: Sparkles,
+              count: (config.palt?.paltList || []).filter((p) => p.enabled).length,
             },
             {
               id: 'preview',
@@ -746,6 +824,175 @@ export const OpenTypeFeaturesModal: React.FC<OpenTypeFeaturesModalProps> = ({
                     ※ より詳細な2Dカーニング調整やペアマトリクス編集は、ツールバーの「カーニング調整」モーダルからシームレスに行えます。
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: プロポーショナルメトリクス (palt / vpal) */}
+          {activeTab === 'palt' && (
+            <div className="space-y-6 max-w-4xl mx-auto">
+              <div
+                className={`p-5 rounded-2xl border transition-colors space-y-4 ${
+                  isLight ? 'bg-stone-50/80 border-stone-200' : 'bg-[#152319] border-[#25382b]'
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${
+                        config.palt?.enabled
+                          ? isLight
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-emerald-900/60 text-emerald-300 border-emerald-700'
+                          : 'bg-stone-200 text-stone-500 border-stone-300 dark:bg-stone-800 dark:border-stone-700'
+                      }`}
+                    >
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm sm:text-base">
+                        プロポーショナルメトリクス (`palt` / `vpal` GPOS Table)
+                      </h3>
+                      <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+                        全角（1000 UPM）の仮想ボディから字面外の余白を詰め、ツメ組み時に文字固有の字幅で送る機能です
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleAutoDerivePalt}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-all ${
+                        isLight
+                          ? 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50'
+                          : 'bg-[#1b2b20] text-emerald-300 border-emerald-800 hover:bg-[#223628]'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>全グリフの字面から一括自動算出</span>
+                    </button>
+
+                    <button
+                      onClick={togglePaltGlobal}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        config.palt?.enabled
+                          ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                          : 'bg-stone-300 dark:bg-stone-800 text-stone-700 dark:text-stone-300'
+                      }`}
+                    >
+                      {config.palt?.enabled ? 'palt機能 ON' : 'palt機能 OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Optical Padding slider */}
+                <div className="pt-3 border-t border-stone-200 dark:border-[#25382b] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-stone-700 dark:text-stone-300">
+                      光学サイドベアリング余白比率（字面の左右に確保する最小余白）
+                    </span>
+                    <p className="text-[11px] text-stone-500">
+                      手引き第12・14ページ準拠：字面輪郭（インク領域）の外側に付与する均等マージン率
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-3 shrink-0">
+                    <input
+                      type="range"
+                      min="1"
+                      max="15"
+                      step="1"
+                      value={opticalSideBearingPercent}
+                      onChange={(e) => setOpticalSideBearingPercent(Number(e.target.value))}
+                      className="w-32 accent-emerald-600"
+                    />
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 w-12 text-right">
+                      {opticalSideBearingPercent}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Registered / Derived Palt Glyph Metrics List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-stone-500 uppercase tracking-wider flex items-center space-x-1.5">
+                    <Type className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>登録済みグリフのツメ量一覧 ({(config.palt?.paltList || []).length} 件)</span>
+                  </h4>
+                  <span className="text-[11px] font-mono text-stone-400">
+                    有効: {(config.palt?.paltList || []).filter((p) => p.enabled).length} 件
+                  </span>
+                </div>
+
+                {(config.palt?.paltList || []).length === 0 ? (
+                  <div
+                    className={`p-8 rounded-2xl border text-center space-y-3 ${
+                      isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#152319] border-[#25382b]'
+                    }`}
+                  >
+                    <Sparkles className="w-8 h-8 text-amber-500 mx-auto" />
+                    <div className="space-y-1">
+                      <p className="font-bold text-sm">プロポーショナルメトリクス情報がまだ算出されていません</p>
+                      <p className="text-xs text-stone-500">
+                        「全グリフの字面から一括自動算出」をクリックすると、作成した漢字・かなのインク境界から自動でツメ幅を生成します。
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleAutoDerivePalt}
+                      className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs"
+                    >
+                      今すぐ自動算出する
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {config.palt!.paltList.map((metric) => (
+                      <div
+                        key={metric.unicode}
+                        className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-all ${
+                          metric.enabled
+                            ? isLight
+                              ? 'bg-white border-emerald-300'
+                              : 'bg-[#18261c] border-emerald-800'
+                            : isLight
+                            ? 'bg-stone-50 border-stone-200 opacity-60'
+                            : 'bg-[#131b15] border-[#1f2e22] opacity-50'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <button
+                            onClick={() => togglePaltItem(metric.unicode)}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                              metric.enabled
+                                ? 'bg-emerald-600 border-emerald-600 text-white'
+                                : 'border-stone-300 dark:border-stone-700'
+                            }`}
+                          >
+                            {metric.enabled && <Check className="w-3 h-3" />}
+                          </button>
+
+                          <div className="w-8 h-8 rounded-lg bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-lg font-bold shrink-0">
+                            {metric.char}
+                          </div>
+
+                          <div className="min-w-0 font-mono text-[11px]">
+                            <div className="font-sans font-bold truncate">
+                              U+{metric.unicode.toString(16).toUpperCase()}
+                            </div>
+                            <div className="text-stone-500 text-[10px]">
+                              {metric.originalAdvance} → <strong className="text-emerald-600 dark:text-emerald-400">{metric.proportionalAdvance}</strong> ({metric.deltaAdvance})
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right text-[10px] font-mono text-stone-400">
+                          <div>L:{metric.opticalMarginLeft}</div>
+                          <div>R:{metric.opticalMarginRight}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -1317,13 +1317,18 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
  {/* Cursor Crosshair Reticle Toggle */}
  <button
- onClick={() => setGridSettings((s) => ({ ...s, showCursorCrosshair: !s.showCursorCrosshair }))}
+ onClick={() =>
+ setGridSettings((s) => {
+  const next = !s.showCursorCrosshair;
+  return { ...s, showCursorCrosshair: next, highContrastCursor: next };
+ })
+ }
  className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] sm:min-w-[32px] min-h-[36px] sm:min-h-[32px] rounded-xl transition-colors duration-75 flex items-center justify-center relative shrink-0 ${
  gridSettings.showCursorCrosshair
  ? themeClasses.activeTool
  : themeClasses.activeToolHover
  }`}
- title="十字ポインターガイド線"
+ title="十字ポインター・照準ガイド線 (クリックで表示/非表示)"
  >
  <Crosshair className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
  </button>
@@ -2062,7 +2067,12 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
  <button
  type="button"
- onClick={() => setGridSettings((s) => ({ ...s, showCursorCrosshair: !s.showCursorCrosshair }))}
+ onClick={() =>
+ setGridSettings((s) => {
+  const next = !s.showCursorCrosshair;
+  return { ...s, showCursorCrosshair: next, highContrastCursor: next };
+ })
+ }
  className={`p-2.5 rounded-xl border text-[11px] font-bold flex flex-col items-center gap-1 transition-colors ${
  gridSettings.showCursorCrosshair
  ? 'bg-emerald-600 text-white border-emerald-600'
@@ -2072,7 +2082,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  }`}
  >
  <Crosshair className="w-4 h-4" />
- <span>十字ガイド</span>
+ <span>照準ポインター</span>
  </button>
  </div>
 

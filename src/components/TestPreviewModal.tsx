@@ -61,6 +61,7 @@ interface TestPreviewModalProps {
   onSelectGlyphForEdit?: (unicode: number) => void;
   theme: ThemeMode;
   onShowToast?: (msg: string, type?: 'success' | 'info' | 'error') => void;
+  onOpenMojikumiStudio?: () => void;
 }
 
 const SAMPLE_PRESETS = [
@@ -207,6 +208,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
   onSelectGlyphForEdit,
   theme,
   onShowToast,
+  onOpenMojikumiStudio,
 }) => {
   const [testText, setTestText] = useState<string>(
     'いろはにほへと　ちりぬるを\nわかよたれそ　つねならむ\nうゐのおくやま　けふこえて\nあさきゆめみし　ゑひもせす'
@@ -1567,6 +1569,26 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>全文字中央整列</span>
+              </button>
+            )}
+
+            {/* Link to Mojikumi Studio */}
+            {onOpenMojikumiStudio && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenMojikumiStudio();
+                }}
+                className={`h-7 px-2.5 rounded-md text-xs font-semibold border transition-colors flex items-center space-x-1.5 ${
+                  isLight
+                    ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border-emerald-300'
+                    : 'bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 border-emerald-700'
+                }`}
+                title="ベタ組み・ツメ組み・アケ組み比較やJISアキ量・禁則スタジオを開く"
+              >
+                <Type className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+                <span>文字組みスタジオ (ベタ/ツメ/アケ)</span>
               </button>
             )}
 

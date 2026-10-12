@@ -1,5 +1,13 @@
 import * as opentype from 'opentype.js';
-import { FontMetadata, FontProject, GlyphData, PathContour } from '../types';
+import {
+  FontMetadata,
+  FontProject,
+  GlyphData,
+  PathContour,
+  PaltGlyphMetric,
+  VpalGlyphMetric,
+  ProportionalMetricsConfig,
+} from '../types';
 import { DEFAULT_SAMPLE_GLYPHS } from '../data/defaultSampleGlyphs';
 import {
   generateId,
@@ -277,6 +285,86 @@ export function isAsymmetricOrPunctuationGlyph(unicode: number, char?: string): 
 }
 
 /**
+ * Calculate Proportional Metrics ('palt' table) for all drawn glyphs in project.
+ * Derives optical sidebearing compression by analyzing contour bounding boxes against full em advance.
+ */
+export function deriveProjectPaltMetrics(
+  project: FontProject,
+  sideBearingPercent: number = 5
+): PaltGlyphMetric[] {
+  const upm = project.metadata.unitsPerEm || DEFAULT_UPM;
+  const padding = Math.round(upm * (Math.max(1, Math.min(25, sideBearingPercent)) / 100));
+  const list: PaltGlyphMetric[] = [];
+
+  for (const g of Object.values(project.glyphs || {})) {
+    if (!g || typeof g.unicode !== 'number' || g.unicode <= 32) continue;
+    if (!g.contours || g.contours.length === 0) continue;
+
+    const bbox = getContoursBoundingBox(g.contours);
+    if (bbox.width <= 0) continue;
+
+    const origAdv = g.advanceWidth || upm;
+    // For CJK and symbols: proportional width is tight ink bounds plus optical padding on left and right
+    const propAdv = Math.max(100, Math.min(origAdv, Math.round(bbox.width + padding * 2)));
+    const xPlacement = Math.round(padding - bbox.minX);
+    const deltaAdv = propAdv - origAdv;
+
+    list.push({
+      unicode: g.unicode,
+      char: g.char || String.fromCodePoint(g.unicode),
+      originalAdvance: origAdv,
+      proportionalAdvance: propAdv,
+      xPlacement,
+      deltaAdvance: deltaAdv,
+      opticalMarginLeft: Math.max(0, Math.round(bbox.minX)),
+      opticalMarginRight: Math.max(0, Math.round(origAdv - bbox.maxX)),
+      enabled: true,
+    });
+  }
+
+  return list;
+}
+
+/**
+ * Calculate Vertical Proportional Metrics ('vpal' table) for glyphs.
+ */
+export function deriveProjectVpalMetrics(
+  project: FontProject,
+  sideBearingPercent: number = 5
+): VpalGlyphMetric[] {
+  const upm = project.metadata.unitsPerEm || DEFAULT_UPM;
+  const padding = Math.round(upm * (Math.max(1, Math.min(25, sideBearingPercent)) / 100));
+  const list: VpalGlyphMetric[] = [];
+
+  for (const g of Object.values(project.glyphs || {})) {
+    if (!g || typeof g.unicode !== 'number' || g.unicode <= 32) continue;
+    if (!g.contours || g.contours.length === 0) continue;
+
+    const bbox = getContoursBoundingBox(g.contours);
+    if (bbox.height <= 0) continue;
+
+    const origAdv = project.openTypeFeatures?.verticalWriting?.defaultVertAdvance || upm;
+    const propAdv = Math.max(100, Math.min(origAdv, Math.round(bbox.height + padding * 2)));
+    const yPlacement = Math.round(padding - bbox.minY);
+    const deltaAdv = propAdv - origAdv;
+
+    list.push({
+      unicode: g.unicode,
+      char: g.char || String.fromCodePoint(g.unicode),
+      originalAdvance: origAdv,
+      proportionalAdvance: propAdv,
+      yPlacement,
+      deltaAdvance: deltaAdv,
+      opticalMarginTop: Math.max(0, Math.round(bbox.minY)),
+      opticalMarginBottom: Math.max(0, Math.round(origAdv - bbox.maxY)),
+      enabled: true,
+    });
+  }
+
+  return list;
+}
+
+/**
  * Compile the FontProject into an OpenType font object and binary buffer
  */
 export function compileFont(
@@ -345,6 +433,29 @@ export function compileFont(
       if (!pair.enabled || !Number.isFinite(pair.amount)) continue;
       const key = `${String.fromCodePoint(pair.firstUnicode)},${String.fromCodePoint(pair.secondUnicode)}`;
       configuredKerning[key] = pair.amount;
+    }
+
+    // Embed Proportional Metrics (palt) adjustments into kerning / GPOS if enabled
+    if (featureConfig?.palt?.enabled) {
+      const paltItems =
+        featureConfig.palt.paltList && featureConfig.palt.paltList.length > 0
+          ? featureConfig.palt.paltList
+          : deriveProjectPaltMetrics(project, featureConfig.palt.opticalSideBearingPercent || 5);
+
+      for (const p of paltItems) {
+        if (!p.enabled) continue;
+        // Punctuation and bracket pairs kerning adjustment
+        if (p.char === '」' || p.char === '）' || p.char === '、' || p.char === '。') {
+          // Add tighter kern pair with following non-yakumono
+          const followCandidates = ['「', '（', 'あ', 'い', 'う', 'え', 'お', '日', '本', '語'];
+          for (const fc of followCandidates) {
+            const pairKey = `${p.char},${fc}`;
+            if (!configuredKerning[pairKey]) {
+              configuredKerning[pairKey] = Math.round(p.deltaAdvance / 2);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -650,8 +761,10 @@ export function compileFont(
     if (u >= 0x31f0 && u <= 0x31ff) { uRange2 |= 0x01000000; } // Bit 56: Katakana Phonetic Extensions
     if (u >= 0x3200 && u <= 0x32ff) { uRange2 |= 0x02000000; } // Bit 57: Enclosed CJK Letters and Months
     if (u >= 0x3300 && u <= 0x33ff) { uRange2 |= 0x04000000; } // Bit 58: CJK Compatibility
+    if (u >= 0x3400 && u <= 0x4dbf) { uRange2 |= 0x08000000; hasKanji = true; } // Bit 59: CJK Unified Ideographs Ext A
     if (u >= 0x4e00 && u <= 0x9fff) { uRange2 |= 0x08000000; hasKanji = true; } // Bit 59: CJK Unified Ideographs
     if (u >= 0xf900 && u <= 0xfaff) { uRange2 |= 0x20000000; } // Bit 61: CJK Compatibility Ideographs
+    if (u >= 0x20000 && u <= 0x2a6df) { uRange2 |= 0x00002000; hasKanji = true; } // Bit 45: CJK Unified Ideographs Ext B
     if (u >= 0xff00 && u <= 0xffef) { uRange3 |= 0x00000010; } // Bit 68: Halfwidth and Fullwidth Forms
   }
 

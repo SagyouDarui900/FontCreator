@@ -628,6 +628,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
       items: [
         { id: 'jis_1', name: 'JIS第1水準漢字', count: '2,965字' },
         { id: 'jis_2', name: 'JIS第2水準漢字', count: '3,390字' },
+        { id: 'jis_3', name: 'JIS第3水準漢字', count: '1,259字' },
+        { id: 'jis_4', name: 'JIS第4水準漢字', count: '2,436字' },
       ],
     },
     {
@@ -660,6 +662,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
     if (found.id === 'grade6') return '小学6年漢字 (191字)';
     if (found.id === 'jis_1') return 'JIS第1水準 (2,965字)';
     if (found.id === 'jis_2') return 'JIS第2水準 (3,390字)';
+    if (found.id === 'jis_3') return 'JIS第3水準 (1,259字)';
+    if (found.id === 'jis_4') return 'JIS第4水準 (2,436字)';
     if (found.id === 'halfwidth') return '半角カタカナ (63字)';
     if (found.id === 'gaiji') return '外字・私用領域 (64字)';
     return found.name;
@@ -679,6 +683,8 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
     { id: 'grade6', label: '小6' },
     { id: 'jis_1', label: 'JIS第1' },
     { id: 'jis_2', label: 'JIS第2' },
+    { id: 'jis_3', label: 'JIS第3' },
+    { id: 'jis_4', label: 'JIS第4' },
     { id: 'halfwidth', label: '半角カナ' },
     { id: 'gaiji', label: '外字' },
   ], [modifiedCount]);
@@ -1057,8 +1063,10 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                   )}
                 </div>
 
-                {/* Quick 1-Tap Horizontal Swipeable Category Tabs (Direct Switching without any Modal/Picker) */}
-                <div className="flex items-center gap-1 overflow-x-auto pb-0.5 custom-scrollbar touch-scroll-x min-w-0 text-[10px] select-none">
+                {/* Quick 1-Tap Horizontal Swipeable Category Tabs (Unified Segmented Controls) */}
+                <div className={`p-1 rounded-xl flex items-center gap-1 overflow-x-auto no-scrollbar touch-scroll-x min-w-0 select-none whitespace-nowrap ${
+                  isLight ? 'bg-stone-100/90' : 'bg-[#121c15]'
+                }`}>
                   {quickCategoryTabs.map((pill) => (
                     <button
                       key={pill.id}
@@ -1069,14 +1077,14 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                         setCurrentPage(1);
                         setIsCategoryDropdownOpen(false);
                       }}
-                      className={`px-2.5 py-1 rounded-full font-bold shrink-0 transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 transition-all cursor-pointer whitespace-nowrap ${
                         activeCategoryId === pill.id
                           ? isLight
-                            ? 'bg-emerald-700 text-white '
-                            : 'bg-emerald-500 text-stone-950 '
+                            ? 'bg-white text-emerald-950 shadow-xs ring-1 ring-emerald-600/20'
+                            : 'bg-[#1e2f23] text-emerald-100 shadow-xs ring-1 ring-emerald-500/30'
                           : isLight
-                          ? 'bg-emerald-100/70 text-emerald-900 hover:bg-emerald-200/80 active:scale-95'
-                          : 'bg-[#18261e] text-emerald-300 hover:bg-[#22352a] active:scale-95'
+                          ? 'text-stone-600 hover:text-stone-900 hover:bg-white/60 active:scale-95'
+                          : 'text-emerald-400/80 hover:text-emerald-200 hover:bg-[#1a281e] active:scale-95'
                       }`}
                     >
                       {pill.label}
@@ -1221,21 +1229,23 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                 />
               </div>
 
-              {/* Status Filter Chips (すべて / 作成済み / 未作成) */}
-              <div className="grid grid-cols-3 gap-1 pt-0.5">
+              {/* Status Filter Segmented Control (すべて / 作成済み / 未作成) */}
+              <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl text-xs font-bold ${
+                isLight ? 'bg-stone-100/90' : 'bg-[#121c15]'
+              }`}>
                 <button
                   onClick={() => {
                     setStatusFilter('all');
                     setCurrentPage(1);
                   }}
-                  className={`py-1 px-1 text-[10px] font-bold rounded text-center truncate whitespace-nowrap transition-all ${
+                  className={`py-1.5 px-1 rounded-lg text-center truncate whitespace-nowrap transition-all ${
                     statusFilter === 'all'
                       ? isLight
-                        ? 'bg-stone-800 text-white '
-                        : 'bg-emerald-400 text-stone-950 '
+                        ? 'bg-white text-stone-900 shadow-xs'
+                        : 'bg-[#1e2f23] text-emerald-100 shadow-xs'
                       : isLight
-                      ? 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                      : 'bg-[#1c2921] text-emerald-400 hover:bg-[#25372c]'
+                      ? 'text-stone-600 hover:text-stone-900'
+                      : 'text-emerald-400/80 hover:text-emerald-200'
                   }`}
                   title="すべて表示"
                 >
@@ -1246,18 +1256,18 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                     setStatusFilter('completed');
                     setCurrentPage(1);
                   }}
-                  className={`py-1 px-1 text-[10px] font-bold rounded text-center flex items-center justify-center gap-0.5 truncate whitespace-nowrap transition-all ${
+                  className={`py-1.5 px-1 rounded-lg text-center flex items-center justify-center gap-1 truncate whitespace-nowrap transition-all ${
                     statusFilter === 'completed'
                       ? isLight
-                        ? 'bg-emerald-700 text-white '
-                        : 'bg-emerald-400 text-stone-950 '
+                        ? 'bg-white text-emerald-900 shadow-xs ring-1 ring-emerald-600/20'
+                        : 'bg-[#1e2f23] text-emerald-100 shadow-xs ring-1 ring-emerald-500/30'
                       : isLight
-                      ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                      : 'bg-emerald-950/70 text-emerald-300 hover:bg-emerald-900'
+                      ? 'text-stone-600 hover:text-stone-900'
+                      : 'text-emerald-400/80 hover:text-emerald-200'
                   }`}
                   title="作成済みのみ表示"
                 >
-                  <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                   <span className="truncate">済 ({categoryStats.completed})</span>
                 </button>
                 <button
@@ -1265,18 +1275,18 @@ export const GlyphGrid: React.FC<GlyphGridProps> = memo(({
                     setStatusFilter('pending');
                     setCurrentPage(1);
                   }}
-                  className={`py-1 px-1 text-[10px] font-bold rounded text-center flex items-center justify-center gap-0.5 truncate whitespace-nowrap transition-all ${
+                  className={`py-1.5 px-1 rounded-lg text-center flex items-center justify-center gap-1 truncate whitespace-nowrap transition-all ${
                     statusFilter === 'pending'
                       ? isLight
-                        ? 'bg-amber-700 text-white '
-                        : 'bg-amber-400 text-stone-950 '
+                        ? 'bg-white text-stone-900 shadow-xs'
+                        : 'bg-[#1e2f23] text-emerald-100 shadow-xs'
                       : isLight
-                      ? 'bg-amber-50 text-amber-900 hover:bg-amber-100'
-                      : 'bg-amber-950/70 text-amber-300 hover:bg-amber-900'
+                      ? 'text-stone-600 hover:text-stone-900'
+                      : 'text-emerald-400/80 hover:text-emerald-200'
                   }`}
                   title="未作成のみ表示"
                 >
-                  <CircleDashed className="w-2.5 h-2.5 shrink-0" />
+                  <CircleDashed className="w-3 h-3 text-stone-400 shrink-0" />
                   <span className="truncate">未 ({categoryStats.total - categoryStats.completed})</span>
                 </button>
               </div>

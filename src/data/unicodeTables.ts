@@ -1,6 +1,8 @@
 import { CharCategory } from '../types';
 import { JIS_LEVEL_1_KANJI } from './jisLevel1';
 import { JIS_LEVEL_2_KANJI } from './jisLevel2';
+import { JIS_LEVEL_3_KANJI } from './jisLevel3';
+import { JIS_LEVEL_4_KANJI } from './jisLevel4';
 
 // 小学校各学年の配当漢字 (計1026字)
 export const ELEMENTARY_GRADE_KANJI = {
@@ -323,7 +325,7 @@ export const UNICODE_CATEGORIES: CharCategory[] = [
     nameEn: 'Grade 6 Kanji',
     chars: ELEMENTARY_GRADE_KANJI.grade6,
   },
-  // JIS水準別漢字 (第1水準 全2,965字 / 第2水準 全3,390字)
+  // JIS水準別漢字 (第1水準 全2,965字 / 第2水準 全3,390字 / 第3水準 全1,259字 / 第4水準 全2,436字)
   {
     id: 'jis_1',
     name: 'JIS第1水準 (2,965字 全字)',
@@ -335,6 +337,18 @@ export const UNICODE_CATEGORIES: CharCategory[] = [
     name: 'JIS第2水準 (3,390字 全字)',
     nameEn: 'JIS Level 2 Kanji (3,390 chars)',
     chars: JIS_LEVEL_2_KANJI,
+  },
+  {
+    id: 'jis_3',
+    name: 'JIS第3水準 (1,259字 全字)',
+    nameEn: 'JIS Level 3 Kanji (1,259 chars)',
+    chars: JIS_LEVEL_3_KANJI,
+  },
+  {
+    id: 'jis_4',
+    name: 'JIS第4水準 (2,436字 全字)',
+    nameEn: 'JIS Level 4 Kanji (2,436 chars)',
+    chars: JIS_LEVEL_4_KANJI,
   },
   {
     id: 'halfwidth',
@@ -360,7 +374,7 @@ export function getCategoryCharList(category: CharCategory): { char: string; cod
 
   if (category.chars) {
     return category.chars.map((char) => {
-      const code = char.charCodeAt(0);
+      const code = char.codePointAt(0) || 0;
       let name = `U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
       if (code === 0x3000) {
         name = '全角空白 (U+3000)';
