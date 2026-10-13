@@ -22,6 +22,7 @@ import {
   contoursToSvgPath,
   getContoursBoundingBox,
   interpolateContours,
+  groupContoursForRendering,
 } from '../utils/pathUtils';
 import { compileFont } from '../utils/fontCompiler';
 
@@ -618,15 +619,17 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
                     )}
 
                     {/* New Weight Result */}
-                    {previewModifiedContours.length > 0 && (
-                      <path
-                        d={contoursToSvgPath(previewModifiedContours)}
-                        fill={isLight ? '#1e293b' : '#ecfdf5'}
-                        fillRule="evenodd"
-                        stroke={isLight ? '#065f46' : '#34d399'}
-                        strokeWidth={1}
-                      />
-                    )}
+                    {previewModifiedContours.length > 0 &&
+                      groupContoursForRendering(previewModifiedContours).map((group) => (
+                        <path
+                          key={group.id}
+                          d={group.d}
+                          fill={isLight ? '#1e293b' : '#ecfdf5'}
+                          fillRule={group.fillRule}
+                          stroke={isLight ? '#065f46' : '#34d399'}
+                          strokeWidth={1}
+                        />
+                      ))}
                   </svg>
 
                   <div className="absolute bottom-2 left-3 text-[11px] font-mono opacity-70">
@@ -773,15 +776,17 @@ export const WeightInterpolationModal: React.FC<WeightInterpolationModalProps> =
                       />
                     )}
                     {/* Interpolated Result */}
-                    {masterInterpContours.length > 0 && (
-                      <path
-                        d={contoursToSvgPath(masterInterpContours)}
-                        fill={isLight ? '#1e293b' : '#ecfdf5'}
-                        fillRule="evenodd"
-                        stroke={isLight ? '#065f46' : '#34d399'}
-                        strokeWidth={1}
-                      />
-                    )}
+                    {masterInterpContours.length > 0 &&
+                      groupContoursForRendering(masterInterpContours).map((group) => (
+                        <path
+                          key={group.id}
+                          d={group.d}
+                          fill={isLight ? '#1e293b' : '#ecfdf5'}
+                          fillRule={group.fillRule}
+                          stroke={isLight ? '#065f46' : '#34d399'}
+                          strokeWidth={1}
+                        />
+                      ))}
                   </svg>
 
                   <div className="absolute top-2 left-3 flex gap-2 text-[10px] font-mono">

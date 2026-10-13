@@ -5442,17 +5442,20 @@ export function scaleMultipleContours(
 
 /**
  * Compute the signed area of a 2D contour using the shoelace formula.
+ * Takes Bézier curve handles into account by dense sampling if present.
  * In screen coordinates (Y downwards):
  * - Positive area (> 0) means CLOCKWISE in screen space (Clockwise in TrueType font Y-up space)
  * - Negative area (< 0) means COUNTER-CLOCKWISE in screen space (Counter-Clockwise in TrueType space)
  */
 export function getContourSignedArea(contour: PathContour): number {
-  const nodes = contour.nodes;
-  if (!nodes || nodes.length < 3) return 0;
+  if (!contour || !contour.nodes || contour.nodes.length < 3) return 0;
+  const hasCurves = contour.nodes.some((n) => n.handleIn != null || n.handleOut != null);
+  const pts = hasCurves ? sampleContourPoints(contour, 6) : contour.nodes;
+  if (!pts || pts.length < 3) return 0;
   let area = 0;
-  for (let i = 0; i < nodes.length; i++) {
-    const p1 = nodes[i];
-    const p2 = nodes[(i + 1) % nodes.length];
+  for (let i = 0; i < pts.length; i++) {
+    const p1 = pts[i];
+    const p2 = pts[(i + 1) % pts.length];
     area += p1.x * p2.y - p2.x * p1.y;
   }
   return area / 2;
@@ -5500,17 +5503,27 @@ export function isContourContained(inner: PathContour, outer: PathContour): bool
     return false;
   }
   if (!inner.nodes || inner.nodes.length === 0) return false;
+
+  const innerArea = Math.abs(getContourSignedArea(inner));
+  const outerArea = Math.abs(getContourSignedArea(outer));
+  if (innerArea >= outerArea * 0.95) return false;
+
+  // Dense polyline check: for a TRUE hole, sampled points along inner must be strictly inside outer
+  const sampled = sampleContourPoints(inner, 8);
+  if (!sampled || sampled.length === 0) return false;
+
   let insideCount = 0;
-  for (const node of inner.nodes) {
-    if (isPointInContour(node, outer)) {
+  for (const pt of sampled) {
+    if (isPointInContour(pt, outer)) {
       insideCount++;
     }
   }
+
   const centerPt = { x: innerBbox.centerX, y: innerBbox.centerY };
   const centerInside = isPointInContour(centerPt, outer);
-  // Both high node containment (> 85%) AND center point inside required:
-  // Prevents intersecting/crossing strokes from being misidentified as inner counter holes!
-  return insideCount >= inner.nodes.length * 0.85 && centerInside;
+  // For a true enclosed counter-hole (e.g. eye of 日, 口, O, loop of あ), virtually all sampled points (>= 92%)
+  // and center must be inside outer: crossing strokes that exit or span across will be correctly rejected!
+  return insideCount >= sampled.length * 0.92 && centerInside;
 }
 
 /**
@@ -5578,6 +5591,40 @@ export function groupContoursWithHoles(contours: PathContour[]): PathContour[][]
   }
 
   return Array.from(rootGroups.values());
+}
+
+export interface RenderGroup {
+  id: string;
+  d: string;
+  fillRule: 'nonzero' | 'evenodd';
+}
+
+/**
+ * Group contours for safe SVG/canvas rendering:
+ * Nested counter-holes stay with their parent contour (rendered with evenodd),
+ * while independent overlapping strokes remain in separate groups (each rendered with nonzero).
+ * This eliminates white holes at stroke crossings while keeping character holes (日, 口, O, あ) transparent!
+ */
+export function groupContoursForRendering(contours: PathContour[]): RenderGroup[] {
+  if (!contours || contours.length === 0) return [];
+
+  if (contours.length === 1) {
+    return [
+      {
+        id: contours[0].id || 'contour-0',
+        d: contoursToSvgPath(contours),
+        fillRule: 'nonzero',
+      },
+    ];
+  }
+
+  const groups = groupContoursWithHoles(contours);
+
+  return groups.map((group, idx) => ({
+    id: group.map((c) => c.id).join('-') || `group-${idx}`,
+    d: contoursToSvgPath(group),
+    fillRule: group.length > 1 ? 'evenodd' : 'nonzero',
+  }));
 }
 
 /**

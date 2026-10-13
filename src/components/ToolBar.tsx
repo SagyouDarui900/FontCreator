@@ -273,7 +273,7 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
 
  return (
  <div
- className={`flex sm:flex-col items-center justify-start gap-1 px-1 sm:px-1 py-1 sm:py-1 border-t sm:border-t-0 sm:border-r shrink-0 sm:shrink z-20 select-none transition-colors w-full sm:w-11 md:w-12 h-auto sm:h-full sm:min-h-0 overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto no-scrollbar pb-[max(env(safe-area-inset-bottom,0px),8px)] sm:pb-1 ${themeClasses.toolbarBg}`}
+ className={`flex sm:flex-col items-center justify-start gap-1 px-1 sm:px-1 py-1 sm:py-1 border-t sm:border-t-0 sm:border-r shrink-0 sm:shrink z-20 select-none transition-colors w-full sm:w-11 md:w-12 h-auto sm:h-full sm:min-h-0 overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto no-scrollbar ${themeClasses.toolbarBg}`}
  >
  {/* Mobile Backdrop for Popups */}
  {(showBrushMenu || showShapeMenu || showGridMenu) && !isSmScreen && (

@@ -591,7 +591,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  const containerRectRef = useRef<DOMRect | null>(null);
  const lastTapTimeRef = useRef<number>(0);
  const [isStylusActive, setIsStylusActive] = useState<boolean>(false);
+ const isStylusActiveRef = useRef<boolean>(false);
  const [liveStylusPressure, setLiveStylusPressure] = useState<number | null>(null);
+ const lastPressureValRef = useRef<number | null>(null);
 
  // Selection & Node Editing State
  const [selectedContourIds, setSelectedContourIds] = useState<string[]>([]);
@@ -911,9 +913,11 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  // Bottom Floating Bar Compact/Expand State
  const [isBottomBarCollapsed, setIsBottomBarCollapsed] = useState<boolean>(() => {
  try {
- return localStorage.getItem('mojisaku_bottom_bar_collapsed') === 'true';
+ const saved = localStorage.getItem('mojisaku_bottom_bar_collapsed');
+ if (saved !== null) return saved === 'true';
+ return typeof window !== 'undefined' && window.innerWidth < 640;
  } catch {
- return false;
+ return typeof window !== 'undefined' && window.innerWidth < 640;
  }
  });
 
@@ -1592,12 +1596,30 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  return () => window.removeEventListener('keydown', handleCanvasShortcut);
  }, [resetView, onToggleZenMode, showCanvasToast, handleZoomStep, isAnyModalOpen, toolMode, handleResetTracePosition]);
 
- // Screen to Canvas Coordinates Converter (Pure geometric mapping with zero drift)
+ // Invalidate cached container rect on window resize/orientation change or scrolling
+ useEffect(() => {
+ const handleInvalidateContainerRect = () => {
+ containerRectRef.current = null;
+ };
+ window.addEventListener('resize', handleInvalidateContainerRect);
+ window.addEventListener('scroll', handleInvalidateContainerRect);
+ return () => {
+ window.removeEventListener('resize', handleInvalidateContainerRect);
+ window.removeEventListener('scroll', handleInvalidateContainerRect);
+ };
+ }, []);
+
+ // Screen to Canvas Coordinates Converter (Pure geometric mapping with zero drift & zero layout thrashing)
  const screenToCanvas = useCallback(
  (clientX: number, clientY: number): Point => {
- const rect = containerRef.current?.getBoundingClientRect();
- if (!rect) return { x: 0, y: 0 };
+ let rect = containerRectRef.current;
+ if (!rect) {
+ rect = containerRef.current?.getBoundingClientRect() || null;
+ if (rect) {
  containerRectRef.current = rect;
+ }
+ }
+ if (!rect) return { x: 0, y: 0 };
  const currentZoom = zoomRef.current || 1;
  const currentPan = panRef.current || { x: 0, y: 0 };
  const x = (clientX - rect.left - currentPan.x) / currentZoom;
@@ -1945,9 +1967,12 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  // Immediately cancel any conflicting touch gesture if Apple Pencil touches the screen
  isTwoFingerGestureRef.current = false;
  activeTwoFingerIdsRef.current = null;
+ if (!isStylusActiveRef.current) {
+ isStylusActiveRef.current = true;
  setIsStylusActive(true);
+ }
  if (e.pressure && e.pressure > 0) {
- setLiveStylusPressure(Math.round(e.pressure * 100));
+ lastPressureValRef.current = Math.round(e.pressure * 100);
  }
  }
 
@@ -2209,10 +2234,13 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  if (pressureSensitivity === 'off') {
  pres = 0.5;
  } else if (isPen) {
+ if (!isStylusActiveRef.current) {
+ isStylusActiveRef.current = true;
  setIsStylusActive(true);
+ }
  const rawP = e.pressure && e.pressure > 0 ? e.pressure : 0.15;
  pres = Math.max(0.04, Math.min(1.0, (rawP - 0.03) / 0.65));
- setLiveStylusPressure(Math.round(pres * 100));
+ lastPressureValRef.current = Math.round(pres * 100);
  } else if (e.pressure && e.pressure > 0 && e.pressure !== 0.5) {
  pres = e.pressure;
  } else {
@@ -2569,8 +2597,8 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
 
  const needsHoverPos =
  Boolean(gridSettings.showCursorCrosshair) ||
- toolMode === 'brush' ||
- (toolMode === 'pen' && Boolean(activePenContour));
+ (toolMode === 'pen' && Boolean(activePenContour)) ||
+ (toolMode === 'eraser' && eraserMode === 'node');
 
  if (needsHoverPos && !isDrawingOrPanning) {
  if (hoverRafRef.current == null) {
@@ -3100,10 +3128,6 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  } else {
  rawPres = 0.15;
  }
- if (Date.now() - lastPressureUpdateRef.current > 150) {
- lastPressureUpdateRef.current = Date.now();
- setLiveStylusPressure(Math.round(rawPres * 100));
- }
  } else if (typeof ev.pressure === 'number' && ev.pressure > 0 && ev.pressure !== 0.5) {
  rawPres = ev.pressure;
  } else {
@@ -3455,6 +3479,9 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  if (e.pointerType === 'pen') {
  isPenDrawingRef.current = false;
  lastPenActiveTimeRef.current = Date.now();
+ if (lastPressureValRef.current !== null) {
+ setLiveStylusPressure(lastPressureValRef.current);
+ }
  }
 
  const remainingTouches = Array.from(touchPointersRef.current.entries())
@@ -6057,7 +6084,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  {/* Hand Tool Active Floating HUD Indicator (Compact & Unobtrusive) */}
  {(toolMode === 'hand' || isSpacePressed) && (
  <div
- className={`absolute top-2 left-2 sm:top-2.5 sm:left-2.5 z-30 px-2 py-0.5 rounded-md border flex items-center gap-1.5 text-[10.5px] font-semibold transition-all duration-150 pointer-events-none select-none max-w-fit ${
+ className={`absolute top-11 left-2 sm:top-2.5 sm:left-2.5 z-30 px-2 py-0.5 rounded-md border flex items-center gap-1.5 text-[10.5px] font-semibold transition-all duration-150 pointer-events-none select-none max-w-fit ${
  isLight
  ? 'bg-white/95 border-emerald-300 text-emerald-900 shadow-sm'
  : 'bg-[#121c15]/95 border-emerald-700/60 text-emerald-200 shadow-sm'
@@ -6076,7 +6103,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  {/* Enhanced Trace Adjust Mode Active Floating HUD Bar */}
  {toolMode === 'trace_adjust' && (
  <div
- className={`absolute top-2 sm:top-2.5 left-1/2 -translate-x-1/2 z-30 px-2.5 sm:px-3.5 py-1.5 rounded-xl border shadow-lg flex items-center gap-2 text-xs font-medium transition-all duration-150 pointer-events-auto max-w-[96vw] overflow-x-auto no-scrollbar ${
+ className={`absolute top-11 sm:top-2.5 left-1/2 -translate-x-1/2 z-30 px-2.5 sm:px-3.5 py-1.5 rounded-xl border shadow-lg flex items-center gap-2 text-xs font-medium transition-all duration-150 pointer-events-auto max-w-[96vw] overflow-x-auto no-scrollbar ${
  isLight
  ? 'bg-white/95 border-stone-200/90 text-stone-800 '
  : 'bg-[#141e17]/95 border-emerald-800/60 text-emerald-100 '
@@ -8569,7 +8596,7 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  )}
 
  {/* Right: Floating Canvas Controls (Compactable) */}
- <div className="flex items-center space-x-1.5 pointer-events-auto self-end sm:self-auto flex-wrap sm:flex-nowrap gap-y-1 ml-auto max-w-full overflow-x-auto touch-scroll-x no-scrollbar">
+ <div className="flex items-center space-x-1.5 pointer-events-auto self-end sm:self-auto flex-nowrap ml-auto max-w-full overflow-x-auto touch-scroll-x no-scrollbar py-0.5">
  {/* Collapsed Compact Mini Bar */}
  {isBottomBarCollapsed ? (
  <div
@@ -9198,14 +9225,14 @@ export const GlyphCanvas: React.FC<GlyphCanvasProps> = React.memo(({
  {/* Mobile Selected Contour Quick Action Bar (Only in Select or Node tool modes) */}
  {(toolMode === 'select' || toolMode === 'node') && selectedContourIds.length > 0 && (
  <div
- className={`sm:hidden absolute bottom-16 left-3 right-3 z-30 flex items-center justify-between px-3 py-1.5 rounded-full border shadow-xl ${
+ className={`sm:hidden absolute bottom-14 left-2 right-2 z-30 flex items-center justify-between px-3 py-1.5 rounded-full border shadow-xl whitespace-nowrap ${
  isLight
  ? 'bg-white border-emerald-300/80 text-stone-800'
  : 'bg-[#121c15] border-emerald-700/60 text-emerald-100'
  }`}
  >
- <div className="flex items-center space-x-1">
- <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+ <div className="flex items-center space-x-1 shrink-0">
+ <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 whitespace-nowrap">
  選択中{selectedContourIds.length > 1 ? ` (${selectedContourIds.length}個)` : ''}
  </span>
  </div>

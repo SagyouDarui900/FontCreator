@@ -388,9 +388,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
  {/* Brand & Project Info (Compact on tablet/mobile) */}
  <div className="flex items-center gap-1.5 shrink min-w-0">
  <div className="flex flex-col min-w-0 justify-center">
- <span className="text-xs font-bold tracking-tight flex items-center gap-1.5 min-w-0 leading-tight">
+ <span className="text-xs font-bold tracking-tight flex items-center gap-1.5 min-w-0 leading-tight whitespace-nowrap">
  <span
- className="truncate max-w-[65px] xs:max-w-[95px] sm:max-w-[130px] md:max-w-[160px] lg:max-w-[200px]"
+ className="truncate max-w-[85px] xs:max-w-[120px] sm:max-w-[150px] md:max-w-[180px] lg:max-w-[220px] whitespace-nowrap"
  title={project.metadata.familyName || 'FontCreator'}
  >
  {project.metadata.familyName && project.metadata.familyName !== 'OTEdit-Style Font' && project.metadata.familyName !== '新規フォント'

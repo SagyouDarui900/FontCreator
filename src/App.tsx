@@ -1631,7 +1631,7 @@ export default function App() {
       <div className={`flex-1 flex flex-col sm:flex-row min-h-0 min-w-0 w-full flex-grow flex-shrink grow shrink relative overflow-hidden isolate ${isAnyModalOpen ? 'pointer-events-none select-none' : ''}`}>
         
         {/* 1. Stationary Design Dock (Leftmost): ToolBar */}
-        <div className="order-last sm:order-first shrink-0 w-full sm:w-auto h-auto sm:h-full sm:min-h-0 z-20 flex flex-col">
+        <div className={`${showGridDrawer || showMetricsDrawer ? 'hidden sm:flex' : 'flex'} order-last sm:order-first shrink-0 w-full sm:w-auto h-auto sm:h-full sm:min-h-0 z-20 flex-col`}>
           <ToolBar
             toolMode={toolMode}
             setToolMode={setToolMode}
@@ -1778,14 +1778,14 @@ export default function App() {
             setShowGridDrawer(!showGridDrawer);
             setShowMetricsDrawer(false);
           }}
-          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${
+          className={`flex flex-col items-center py-1 px-1 rounded-md transition-colors whitespace-nowrap shrink-0 ${
             showGridDrawer
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
         >
           <Grid className="w-4 h-4" />
-          <span className="text-[9.5px] mt-0.5">文字一覧</span>
+          <span className="text-[9px] mt-0.5 leading-none whitespace-nowrap">文字一覧</span>
         </button>
 
         <button
@@ -1793,14 +1793,14 @@ export default function App() {
             setShowGridDrawer(false);
             setShowMetricsDrawer(false);
           }}
-          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${
+          className={`flex flex-col items-center py-1 px-1 rounded-md transition-colors whitespace-nowrap shrink-0 ${
             !showGridDrawer && !showMetricsDrawer
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
         >
           <Paintbrush className="w-4 h-4" />
-          <span className="text-[9.5px] mt-0.5">作図</span>
+          <span className="text-[9px] mt-0.5 leading-none whitespace-nowrap">作図</span>
         </button>
 
         <button
@@ -1808,37 +1808,37 @@ export default function App() {
             setShowMetricsDrawer(!showMetricsDrawer);
             setShowGridDrawer(false);
           }}
-          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${
+          className={`flex flex-col items-center py-1 px-1 rounded-md transition-colors whitespace-nowrap shrink-0 ${
             showMetricsDrawer
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
           }`}
         >
           <Sliders className="w-4 h-4" />
-          <span className="text-[9.5px] mt-0.5">メトリクス</span>
+          <span className="text-[9px] mt-0.5 leading-none whitespace-nowrap">メトリクス</span>
         </button>
 
         <button
           onClick={handleOpenRadicalStudioFromDrawer}
-          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${themeClasses.activeToolHover}`}
+          className={`flex flex-col items-center py-1 px-1 rounded-md transition-colors whitespace-nowrap shrink-0 ${themeClasses.activeToolHover}`}
           title="部首・作字パーツ工房"
         >
           <Layers className="w-4 h-4" />
-          <span className="text-[9.5px] mt-0.5">部首工房</span>
+          <span className="text-[9px] mt-0.5 leading-none whitespace-nowrap">部首工房</span>
         </button>
 
         <button
           onClick={() => setIsTestModalOpen(true)}
-          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${themeClasses.activeToolHover}`}
+          className={`flex flex-col items-center py-1 px-1 rounded-md transition-colors whitespace-nowrap shrink-0 ${themeClasses.activeToolHover}`}
           title="組版テスト・文章試し打ち"
         >
           <Eye className="w-4 h-4" />
-          <span className="text-[9.5px] mt-0.5">組版テスト</span>
+          <span className="text-[9px] mt-0.5 leading-none whitespace-nowrap">組版テスト</span>
         </button>
 
         <button
           onClick={() => setIsMobileThemeModalOpen(true)}
-          className={`flex flex-col items-center py-1 px-1.5 rounded-md transition-colors ${
+          className={`flex flex-col items-center py-1 px-1 rounded-md transition-colors whitespace-nowrap shrink-0 ${
             isMobileThemeModalOpen
               ? themeClasses.activeTool
               : themeClasses.activeToolHover
@@ -1846,10 +1846,10 @@ export default function App() {
           title="テーマ・配色の切り替え"
         >
           <Palette className="w-4 h-4 text-amber-500 dark:text-amber-400" />
-          <span className="text-[9.5px] mt-0.5">テーマ</span>
+          <span className="text-[9px] mt-0.5 leading-none whitespace-nowrap">テーマ</span>
         </button>
 
-        <div className="flex items-center space-x-0.5 pl-1 border-l border-stone-200/80 dark:border-stone-800/80">
+        <div className="flex items-center space-x-0.5 pl-0.5 border-l border-stone-200/80 dark:border-stone-800/80 shrink-0">
           <button
             onClick={handleUndo}
             disabled={undoStack.length === 0}

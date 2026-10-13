@@ -586,16 +586,43 @@ export function booleanUnionContours(contours: PathContour[]): PathContour[] {
     const paperPaths: paper.Path[] = closedContours.map((c) => contourToPaperPath(scope, c));
     const n = paperPaths.length;
 
-    // Determine containment hierarchy: a path is a hole if it is inside another path of larger area
+    // Determine containment hierarchy: a path is a hole if it is strictly enclosed by another path of larger area.
+    // Crucially: if path i crosses or intersects path j (crossings.length > 0), they are crossing/overlapping
+    // strokes, NEVER an isolated hole! Crossing strokes MUST be united together, not subtracted.
     const isHole = new Array<boolean>(n).fill(false);
     for (let i = 0; i < n; i++) {
       const pi = paperPaths[i];
       const areaI = Math.abs(pi.area);
-      const centerI = pi.bounds.center;
+      const bI = pi.bounds;
       for (let j = 0; j < n; j++) {
         if (i === j) continue;
         const pj = paperPaths[j];
-        if (Math.abs(pj.area) > areaI && pj.contains(centerI)) {
+        const areaJ = Math.abs(pj.area);
+        // Candidate parent must have strictly larger area
+        if (areaJ <= areaI * 1.05) continue;
+
+        // Bounding box of inner must be inside bounding box of outer (with 2px tolerance)
+        if (
+          bI.left < pj.bounds.left - 2 ||
+          bI.right > pj.bounds.right + 2 ||
+          bI.top < pj.bounds.top - 2 ||
+          bI.bottom > pj.bounds.bottom + 2
+        ) {
+          continue;
+        }
+
+        // Boundary crossing test: if they cross each other, it is an overlapping/intersecting stroke, NOT a hole!
+        const crossings = pi.getCrossings(pj);
+        if (crossings && crossings.length > 0) {
+          continue;
+        }
+
+        // Center and quarter points containment test
+        const centerContained = pj.contains(bI.center);
+        const q1Contained = pj.contains(new scope.Point(bI.left + bI.width * 0.25, bI.top + bI.height * 0.25));
+        const q2Contained = pj.contains(new scope.Point(bI.right - bI.width * 0.25, bI.bottom - bI.height * 0.25));
+
+        if (centerContained && q1Contained && q2Contained) {
           isHole[i] = true;
           break;
         }

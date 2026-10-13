@@ -136,10 +136,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           glyphs: previewGlyphs,
         };
 
-        // For live preview, disable heavy raster boolean union to keep UI silky smooth and responsive
         const { blobUrl } = compileFont(previewSubsetProject, {
           ...compileOptions,
-          mergeOverlaps: false,
+          mergeOverlaps: true,
         });
         if (isCancelled) {
           URL.revokeObjectURL(blobUrl);

@@ -112,6 +112,7 @@ import {
  getContoursBoundingBox,
  unionContours,
  normalizeGlyphContoursWinding,
+ groupContoursForRendering,
  simplifyGlyphContours,
  isPointNearContour,
  eraseContoursAtPoint,
@@ -2977,6 +2978,10 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  });
 
  // SVG Paths for render
+ const mainRenderGroups = useMemo(() => {
+   if (!activePart || !activePart.contours || activePart.contours.length === 0) return [];
+   return groupContoursForRendering(activePart.contours);
+ }, [activePart?.contours]);
  const mainSvgPath = activePart && activePart.contours && activePart.contours.length > 0
  ? contoursToSvgPath(normalizeGlyphContoursWinding(activePart.contours))
  : '';
@@ -5498,16 +5503,21 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  const bgGlyph = allGlyphs.find((g) => g.char === watermarkChar || (watermarkChar && g.unicode === watermarkChar.codePointAt(0)));
  if (bgGlyph && bgGlyph.contours && bgGlyph.contours.length > 0) {
  return (
- <path
- d={contoursToSvgPath(bgGlyph.contours)}
- fill={isLight ? '#047857' : '#34d399'}
- fillOpacity={watermarkOpacity}
- fillRule="evenodd"
- stroke={isLight ? '#059669' : '#10b981'}
- strokeWidth={1.5}
- strokeDasharray="4 4"
- pointerEvents="none"
- />
+   <>
+     {groupContoursForRendering(bgGlyph.contours).map((group) => (
+       <path
+         key={group.id}
+         d={group.d}
+         fill={isLight ? '#047857' : '#34d399'}
+         fillOpacity={watermarkOpacity}
+         fillRule={group.fillRule}
+         stroke={isLight ? '#059669' : '#10b981'}
+         strokeWidth={1.5}
+         strokeDasharray="4 4"
+         pointerEvents="none"
+       />
+     ))}
+   </>
  );
  }
  return (
@@ -5561,15 +5571,17 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
  {/* ================= DRAWN GLYPH PATHS ================= */}
  {/* Main Part Contours */}
- {mainSvgPath && (
- <path
- d={mainSvgPath}
- fill={isWireframeMode ? 'none' : (isLight ? '#1c2920' : '#ecfdf5')}
- fillRule="evenodd"
- stroke={isLight ? '#047857' : '#34d399'}
- strokeWidth={isWireframeMode ? 2.5 : 1}
- />
- )}
+ {mainRenderGroups.length > 0 &&
+  mainRenderGroups.map((group) => (
+   <path
+    key={group.id}
+    d={group.d}
+    fill={isWireframeMode ? 'none' : (isLight ? '#1c2920' : '#ecfdf5')}
+    fillRule={group.fillRule}
+    stroke={isLight ? '#047857' : '#34d399'}
+    strokeWidth={isWireframeMode ? 2.5 : 1}
+   />
+  ))}
 
  {/* Selected Contour Highlight */}
  {selectedContourId && activePart && (
@@ -6405,15 +6417,16 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  )}
 
  {/* Render Current Part positioned per insertPlacement */}
- <path
- d={contoursToSvgPath(
- normalizeGlyphContoursWinding(
- transformContoursForPlacement(activePart.contours, insertPlacement, activePart.category)
- )
- )}
- fill={isLight ? '#064e3b' : '#34d399'}
- fillRule="evenodd"
- />
+ {groupContoursForRendering(
+   transformContoursForPlacement(activePart.contours, insertPlacement, activePart.category)
+ ).map((group) => (
+   <path
+     key={group.id}
+     d={group.d}
+     fill={isLight ? '#064e3b' : '#34d399'}
+     fillRule={group.fillRule}
+   />
+ ))}
  </svg>
  </div>
  <p className="text-[10.5px] text-stone-500 leading-relaxed text-center break-words">

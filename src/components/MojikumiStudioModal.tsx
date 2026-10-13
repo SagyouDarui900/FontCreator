@@ -104,6 +104,10 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
   // Active Tab in Sidebar: 'mojikumi' | 'kinsoku' | 'qh_calc'
   const [activeTab, setActiveTab] = useState<'mojikumi' | 'kinsoku' | 'qh_calc'>('mojikumi');
 
+  // Mobile Tab navigation: 'mojikumi' | 'kinsoku' | 'qh_calc' | 'text'
+  const [mobileTab, setMobileTab] = useState<'mojikumi' | 'kinsoku' | 'qh_calc' | 'text'>('mojikumi');
+  const [mobileCompareSubTab, setMobileCompareSubTab] = useState<'beta' | 'tsume' | 'ake'>('beta');
+
   // Writing direction
   const [isVertical, setIsVertical] = useState<boolean>(false);
 
@@ -236,6 +240,455 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
     onShowToast('文字組み設定JSONをエクスポートしました', 'success');
   };
 
+  // Reusable settings content renderer for both Desktop sidebar & Mobile bottom sheet
+  const renderSettingsContent = (category: 'mojikumi' | 'kinsoku' | 'qh_calc' | 'text') => {
+    switch (category) {
+      case 'text':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="font-bold flex items-center justify-between text-stone-700 dark:text-stone-300 text-xs">
+                <span>検証用サンプルテキスト</span>
+                <BookOpen className="w-4 h-4 text-stone-400" />
+              </label>
+              <select
+                value={selectedSampleIndex}
+                onChange={(e) => {
+                  const idx = Number(e.target.value);
+                  setSelectedSampleIndex(idx);
+                  if (SAMPLE_TEXTS[idx]) {
+                    setCustomText(SAMPLE_TEXTS[idx].text);
+                  }
+                }}
+                className={`w-full min-h-[44px] px-3 py-2 rounded-xl border text-xs ${
+                  isLight ? 'bg-white border-stone-300 text-stone-900' : 'bg-[#1a281e] border-[#2b4032] text-stone-100'
+                }`}
+              >
+                {SAMPLE_TEXTS.map((s, idx) => (
+                  <option key={idx} value={idx}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                value={customText}
+                onChange={(e) => setCustomText(e.target.value)}
+                rows={3}
+                className={`w-full p-2.5 rounded-xl border text-xs resize-none font-sans leading-relaxed ${
+                  isLight ? 'bg-white border-stone-300 text-stone-900' : 'bg-[#1a281e] border-[#2b4032] text-stone-100'
+                }`}
+                placeholder="組版を検証するテキストを入力..."
+              />
+            </div>
+
+            {/* Paragraph Indent */}
+            <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-[#25382b]">
+              <label className="font-bold text-stone-700 dark:text-stone-300 text-xs">
+                段落行頭1字下げ設定（JIS X 4051準拠）
+              </label>
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  { id: 'visual_half', name: '見た目半角アキ（推奨）', desc: '始め鉤括弧「」は二分アキ、通常文字は全角下げ' },
+                  { id: 'full_em', name: '全角アキ（厳格）', desc: '全ての段落先頭を均等に全角1字下げ' },
+                  { id: 'none', name: '字下げなし', desc: '行頭インデントを行わず天付きで配置' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelectIndentPreset(item.id as ParagraphIndentPresetId)}
+                    className={`min-h-[44px] p-2.5 rounded-xl border text-left transition-all ${
+                      currentConfig.paragraphIndent === item.id
+                        ? isLight
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                          : 'bg-emerald-950/60 border-emerald-500 text-emerald-200 font-bold'
+                        : isLight
+                        ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+                        : 'bg-[#17241b] border-[#25382b] text-stone-300 hover:bg-[#1d2f23]'
+                    }`}
+                  >
+                    <div className="text-xs font-bold">{item.name}</div>
+                    <div className="text-[11px] text-stone-500 truncate">{item.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'mojikumi':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="font-bold text-stone-700 dark:text-stone-300 text-xs">
+                7大文字組みプリセット（JIS・手引き基準）
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(Object.keys(MOJIKUMI_PRESETS) as MojikumiPresetId[]).map((pid) => {
+                  const p = MOJIKUMI_PRESETS[pid];
+                  const isSelected = currentConfig.preset === pid;
+                  return (
+                    <button
+                      key={pid}
+                      onClick={() => handleSelectPreset(pid)}
+                      className={`min-h-[44px] p-2.5 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? isLight
+                            ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold ring-1 ring-emerald-500'
+                            : 'bg-emerald-950/60 border-emerald-500 text-emerald-200 font-bold ring-1 ring-emerald-500'
+                          : isLight
+                          ? 'bg-white border-stone-200 hover:bg-stone-100 text-stone-800'
+                          : 'bg-[#17241b] border-[#25382b] hover:bg-[#1d2f23] text-stone-200'
+                      }`}
+                    >
+                      <div className="text-xs font-bold flex items-center justify-between">
+                        <span>{p.name}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                      </div>
+                      <div className="text-[10.5px] text-stone-500 mt-0.5 line-clamp-1">{p.description}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Table summary of Akiryo */}
+            <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-[#25382b]">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-stone-700 dark:text-stone-300 text-xs">
+                  主要アキ量・優先順位テーブル
+                </span>
+                <span className="text-[10px] font-mono text-stone-400">最小-最適-最大 (優先度)</span>
+              </div>
+
+              <div className="space-y-1.5 font-mono text-[11px]">
+                <div className="flex justify-between py-1.5 px-2.5 rounded-lg bg-stone-100 dark:bg-[#17241b]">
+                  <span className="font-sans">句点後のアキ</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                    {currentConfig.table.kuten_to_nonYakumono.min}% - {currentConfig.table.kuten_to_nonYakumono.optimal}% - {currentConfig.table.kuten_to_nonYakumono.max}% (普{currentConfig.table.kuten_to_nonYakumono.priority})
+                  </span>
+                </div>
+                <div className="flex justify-between py-1.5 px-2.5 rounded-lg bg-stone-100 dark:bg-[#17241b]">
+                  <span className="font-sans">読点後のアキ</span>
+                  <span>
+                    {currentConfig.table.touten_to_nonYakumono.min}% - {currentConfig.table.touten_to_nonYakumono.optimal}% - {currentConfig.table.touten_to_nonYakumono.max}% (普{currentConfig.table.touten_to_nonYakumono.priority})
+                  </span>
+                </div>
+                <div className="flex justify-between py-1.5 px-2.5 rounded-lg bg-stone-100 dark:bg-[#17241b]">
+                  <span className="font-sans">中点類の前後のアキ</span>
+                  <span>
+                    {currentConfig.table.middleDot_around.min}% - {currentConfig.table.middleDot_around.optimal}% - {currentConfig.table.middleDot_around.max}% (普{currentConfig.table.middleDot_around.priority})
+                  </span>
+                </div>
+                <div className="flex justify-between py-1.5 px-2.5 rounded-lg bg-stone-100 dark:bg-[#17241b]">
+                  <span className="font-sans">半角英字と和文間</span>
+                  <span>
+                    {currentConfig.table.halfLatin_around_nonYakumono.min}% - {currentConfig.table.halfLatin_around_nonYakumono.optimal}% - {currentConfig.table.halfLatin_around_nonYakumono.max}% (普{currentConfig.table.halfLatin_around_nonYakumono.priority})
+                  </span>
+                </div>
+                <div className="flex justify-between py-1.5 px-2.5 rounded-lg bg-stone-100 dark:bg-[#17241b]">
+                  <span className="font-sans">半角数字と和文間</span>
+                  <span>
+                    {currentConfig.table.halfDigit_around_nonYakumono.min}% - {currentConfig.table.halfDigit_around_nonYakumono.optimal}% - {currentConfig.table.halfDigit_around_nonYakumono.max}% (普{currentConfig.table.halfDigit_around_nonYakumono.priority})
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'kinsoku':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="font-bold text-stone-700 dark:text-stone-300 text-xs">
+                禁則処理セット（手引き第25ページ）
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'weak_v2', name: '弱い禁則 v2 (推奨)', desc: '現代書籍・ベタ組み標準' },
+                  { id: 'strong', name: '強い禁則', desc: '小書き仮名含む' },
+                  { id: 'weak', name: '弱い禁則', desc: '句読点・括弧類のみ' },
+                  { id: 'none', name: '禁則なし', desc: '文字通り配置' },
+                ].map((ks) => (
+                  <button
+                    key={ks.id}
+                    onClick={() => setCurrentConfig((prev) => ({ ...prev, kinsoku: ks.id as any }))}
+                    className={`min-h-[44px] p-2.5 rounded-xl border text-left transition-all ${
+                      currentConfig.kinsoku === ks.id
+                        ? isLight
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                          : 'bg-emerald-950/60 border-emerald-500 text-emerald-200 font-bold'
+                        : isLight
+                        ? 'bg-white border-stone-200 hover:bg-stone-100 text-stone-700'
+                        : 'bg-[#17241b] border-[#25382b] hover:bg-[#1d2f23] text-stone-300'
+                    }`}
+                  >
+                    <div className="text-xs font-bold">{ks.name}</div>
+                    <div className="text-[10px] text-stone-500 truncate">{ks.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="font-bold text-stone-700 dark:text-stone-300 text-xs">
+                禁則調整方式
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setCurrentConfig((prev) => ({ ...prev, kinsokuAdjust: 'push_out' }))}
+                  className={`min-h-[44px] p-2.5 rounded-xl border text-center transition-all ${
+                    currentConfig.kinsokuAdjust === 'push_out'
+                      ? isLight
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                        : 'bg-emerald-950/60 border-emerald-500 text-emerald-200 font-bold'
+                      : isLight
+                      ? 'bg-white border-stone-200 text-stone-700'
+                      : 'bg-[#17241b] border-[#25382b] text-stone-300'
+                  }`}
+                >
+                  <div className="text-xs font-bold">追い出し優先</div>
+                  <div className="text-[10px] text-stone-500">次行へ送る</div>
+                </button>
+                <button
+                  onClick={() => setCurrentConfig((prev) => ({ ...prev, kinsokuAdjust: 'push_in' }))}
+                  className={`min-h-[44px] p-2.5 rounded-xl border text-center transition-all ${
+                    currentConfig.kinsokuAdjust === 'push_in'
+                      ? isLight
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                        : 'bg-emerald-950/60 border-emerald-500 text-emerald-200 font-bold'
+                      : isLight
+                      ? 'bg-white border-stone-200 text-stone-700'
+                      : 'bg-[#17241b] border-[#25382b] text-stone-300'
+                  }`}
+                >
+                  <div className="text-xs font-bold">追い込み優先</div>
+                  <div className="text-[10px] text-stone-500">行内に詰める</div>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-[#25382b]">
+              <label className="font-bold text-stone-700 dark:text-stone-300 text-xs">
+                ぶら下がり設定（手引き第27ページ）
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'none', name: 'なし' },
+                  { id: 'standard', name: '標準' },
+                  { id: 'forced', name: '強制' },
+                ].map((bm) => (
+                  <button
+                    key={bm.id}
+                    onClick={() => setCurrentConfig((prev) => ({ ...prev, burasagari: bm.id as any }))}
+                    className={`min-h-[44px] p-2.5 rounded-xl border text-center transition-all ${
+                      currentConfig.burasagari === bm.id
+                        ? isLight
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                          : 'bg-emerald-950/60 border-emerald-500 text-emerald-200 font-bold'
+                        : isLight
+                        ? 'bg-white border-stone-200 text-stone-700'
+                        : 'bg-[#17241b] border-[#25382b] text-stone-300'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">{bm.name}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-stone-500 dark:text-stone-400 leading-relaxed">
+                行末の句読点（、。）を版面（字詰め枠）の外に配置し、字送りのマス目リズムを維持します。
+              </p>
+            </div>
+          </div>
+        );
+
+      case 'qh_calc':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <label className="font-bold text-stone-700 dark:text-stone-300 text-xs">
+                Q・H組版設計パラメータ
+              </label>
+
+              {/* Font Size Q */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-medium">文字サイズ (Q)</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] text-stone-400">({dimensions.fontSizePt}pt)</span>
+                    <span className="font-mono font-bold text-emerald-600">{fontSizeQ} Q</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFontSizeQ((prev) => Math.max(7, prev - 1))}
+                    className="min-h-[44px] min-w-[44px] rounded-lg border border-stone-300 dark:border-stone-700 flex items-center justify-center font-bold text-sm bg-white dark:bg-[#1a281e]"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="range"
+                    min="7"
+                    max="100"
+                    step="0.5"
+                    value={fontSizeQ}
+                    onChange={(e) => setFontSizeQ(Number(e.target.value))}
+                    className="flex-1 accent-emerald-600 h-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFontSizeQ((prev) => Math.min(100, prev + 1))}
+                    className="min-h-[44px] min-w-[44px] rounded-lg border border-stone-300 dark:border-stone-700 flex items-center justify-center font-bold text-sm bg-white dark:bg-[#1a281e]"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Line Feed H */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-medium">行送り (H)</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] text-stone-400">({dimensions.lineGapMm}mmアキ)</span>
+                    <span className="font-mono font-bold text-emerald-600">{lineFeedH} H</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLineFeedH((prev) => Math.max(fontSizeQ, prev - 1))}
+                    className="min-h-[44px] min-w-[44px] rounded-lg border border-stone-300 dark:border-stone-700 flex items-center justify-center font-bold text-sm bg-white dark:bg-[#1a281e]"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="range"
+                    min={fontSizeQ}
+                    max="150"
+                    step="0.5"
+                    value={lineFeedH}
+                    onChange={(e) => setLineFeedH(Number(e.target.value))}
+                    className="flex-1 accent-emerald-600 h-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setLineFeedH((prev) => Math.min(150, prev + 1))}
+                    className="min-h-[44px] min-w-[44px] rounded-lg border border-stone-300 dark:border-stone-700 flex items-center justify-center font-bold text-sm bg-white dark:bg-[#1a281e]"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Chars per line */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-medium">1行の字数（字詰め）</span>
+                  <span className="font-mono font-bold text-emerald-600">{charsPerLine} 字</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCharsPerLine((prev) => Math.max(5, prev - 1))}
+                    className="min-h-[44px] min-w-[44px] rounded-lg border border-stone-300 dark:border-stone-700 flex items-center justify-center font-bold text-sm bg-white dark:bg-[#1a281e]"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="range"
+                    min="5"
+                    max="50"
+                    step="1"
+                    value={charsPerLine}
+                    onChange={(e) => setCharsPerLine(Number(e.target.value))}
+                    className="flex-1 accent-emerald-600 h-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCharsPerLine((prev) => Math.min(50, prev + 1))}
+                    className="min-h-[44px] min-w-[44px] rounded-lg border border-stone-300 dark:border-stone-700 flex items-center justify-center font-bold text-sm bg-white dark:bg-[#1a281e]"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Number of lines */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-medium">行数</span>
+                  <span className="font-mono font-bold text-emerald-600">{lineCount} 行</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLineCount((prev) => Math.max(2, prev - 1))}
+                    className="min-h-[44px] min-w-[44px] rounded-lg border border-stone-300 dark:border-stone-700 flex items-center justify-center font-bold text-sm bg-white dark:bg-[#1a281e]"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="range"
+                    min="2"
+                    max="20"
+                    step="1"
+                    value={lineCount}
+                    onChange={(e) => setLineCount(Number(e.target.value))}
+                    className="flex-1 accent-emerald-600 h-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setLineCount((prev) => Math.min(20, prev + 1))}
+                    className="min-h-[44px] min-w-[44px] rounded-lg border border-stone-300 dark:border-stone-700 flex items-center justify-center font-bold text-sm bg-white dark:bg-[#1a281e]"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Calculated Box Dimensions Card */}
+            <div className={`p-3.5 rounded-xl border space-y-2 ${isLight ? 'bg-emerald-50/70 border-emerald-200' : 'bg-emerald-950/40 border-emerald-800'}`}>
+              <div className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5 text-xs">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>ベタ組みに最適なテキストエリア寸法</span>
+              </div>
+
+              <div className="space-y-1.5 font-mono text-xs">
+                <div>
+                  <div className="text-[10px] text-stone-500 font-sans">幅（文字サイズ × 字数）:</div>
+                  <div className="font-bold text-sm text-stone-900 dark:text-stone-100">{dimensions.widthMm} mm ({dimensions.formulaWidth})</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-stone-500 font-sans">高さ（行送り × (行数-1) + 文字サイズ）:</div>
+                  <div className="font-bold text-sm text-stone-900 dark:text-stone-100">{dimensions.heightMm} mm ({dimensions.formulaHeight})</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Link to OpenType Features */}
+            {onOpenOpenTypeModal && (
+              <div className="pt-2 border-t border-stone-200 dark:border-[#25382b]">
+                <button
+                  onClick={onOpenOpenTypeModal}
+                  className={`w-full min-h-[44px] p-2.5 rounded-xl border text-left text-xs font-bold transition-all flex items-center justify-between ${
+                    isLight ? 'bg-stone-100 hover:bg-stone-200 border-stone-300 text-stone-800' : 'bg-[#1b2b20] hover:bg-[#23382a] border-[#2b4032] text-stone-200'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>OpenType `palt`/`vpal` をフォントに埋め込む</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-stone-400" />
+                </button>
+              </div>
+            )}
+          </div>
+        );
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -349,9 +802,9 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
 
         {/* Modal Main Body */}
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
-          {/* LEFT: Controls & Rules Panel (Width 360px) */}
+          {/* CONTROLS & RULES: Bottom scrollable tabbed panel on mobile, left sidebar on desktop */}
           <aside
-            className={`w-full md:w-[360px] flex flex-col border-b md:border-b-0 md:border-r shrink-0 overflow-y-auto custom-scrollbar ${
+            className={`order-2 md:order-1 w-full md:w-[360px] flex-1 md:flex-none flex flex-col border-t md:border-t-0 md:border-r shrink-0 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar ${
               isLight ? 'bg-stone-50/70 border-stone-200' : 'bg-[#121c15] border-[#25382b]'
             }`}
           >
@@ -777,8 +1230,10 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
             </div>
           </aside>
 
-          {/* RIGHT: Typography Preview Viewport */}
-          <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* PREVIEW VIEWPORT: Fixed at top on mobile (order-1, h-[38vh] sm:h-[44vh]), flex-1 on desktop (order-2) */}
+          <main className={`order-1 md:order-2 w-full h-[38vh] sm:h-[44vh] md:h-auto md:flex-1 shrink-0 md:shrink min-h-0 flex flex-col overflow-hidden border-b md:border-b-0 ${
+            isLight ? 'border-stone-200 bg-stone-50/40' : 'border-[#25382b] bg-[#0d1611]'
+          }`}>
             {/* Viewport Sub-header */}
             <div
               className={`px-4 py-2 border-b flex items-center justify-between text-xs shrink-0 ${

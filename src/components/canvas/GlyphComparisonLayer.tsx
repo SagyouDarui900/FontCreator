@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { GlyphOverlaySettings, FontProject, GlyphData } from '../../types';
-import { contoursToSvgPath } from '../../utils/pathUtils';
+import { contoursToSvgPath, groupContoursForRendering } from '../../utils/pathUtils';
 
 interface GlyphComparisonLayerProps {
   overlaySettings?: GlyphOverlaySettings;
@@ -37,6 +37,13 @@ export const GlyphComparisonLayer: React.FC<GlyphComparisonLayerProps> = React.m
       return undefined;
     }, [project, overlaySettings.referenceUnicode, overlaySettings.referenceChar]);
 
+    const renderGroups = useMemo(() => {
+      if (!refGlyph || !refGlyph.contours || refGlyph.contours.length === 0) {
+        return [];
+      }
+      return groupContoursForRendering(refGlyph.contours);
+    }, [refGlyph]);
+
     const pathData = useMemo(() => {
       if (!refGlyph || !refGlyph.contours || refGlyph.contours.length === 0) {
         return null;
@@ -44,7 +51,7 @@ export const GlyphComparisonLayer: React.FC<GlyphComparisonLayerProps> = React.m
       return contoursToSvgPath(refGlyph.contours);
     }, [refGlyph]);
 
-    if (!refGlyph || !pathData) return null;
+    if (!refGlyph || renderGroups.length === 0) return null;
 
     const opacity = overlaySettings.opacity ?? 0.45;
     const color = overlaySettings.color || (isLight ? '#0284c7' : '#38bdf8');
@@ -105,33 +112,40 @@ export const GlyphComparisonLayer: React.FC<GlyphComparisonLayerProps> = React.m
         )}
 
         {/* Fill Mode */}
-        {renderMode === 'fill' && (
-          <path
-            d={pathData}
-            fill={color}
-            fillRule="evenodd"
-            stroke={color}
-            strokeWidth={1}
-            opacity={0.8}
-          />
-        )}
+        {renderMode === 'fill' &&
+          renderGroups.map((group) => (
+            <path
+              key={group.id}
+              d={group.d}
+              fill={color}
+              fillRule={group.fillRule}
+              stroke={color}
+              strokeWidth={1}
+              opacity={0.8}
+            />
+          ))}
 
         {/* Difference Mode (Fill + Solid Accent Outline) */}
         {renderMode === 'difference' && (
           <g>
-            <path
-              d={pathData}
-              fill={color}
-              fillRule="evenodd"
-              opacity={0.35}
-            />
-            <path
-              d={pathData}
-              fill="none"
-              stroke={color}
-              strokeWidth={2}
-              strokeLinejoin="round"
-            />
+            {renderGroups.map((group) => (
+              <path
+                key={group.id}
+                d={group.d}
+                fill={color}
+                fillRule={group.fillRule}
+                opacity={0.35}
+              />
+            ))}
+            {pathData && (
+              <path
+                d={pathData}
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                strokeLinejoin="round"
+              />
+            )}
           </g>
         )}
 

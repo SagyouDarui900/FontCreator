@@ -14,6 +14,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { FontProject, GlyphData, PathContour, BezierNode } from '../types';
+import { groupContoursForRendering } from '../utils/pathUtils';
 
 interface GridFittingModalProps {
   project: FontProject;
@@ -995,13 +996,16 @@ export const GridFittingModal: React.FC<GridFittingModalProps> = ({
                         }
                       })}
 
-                    {/* Glyph Path Contour */}
-                    <path
-                      d={currentSvgPath}
-                      fill={isLight ? '#1c1917' : '#34d399'}
-                      fillRule="evenodd"
-                      opacity={enablePreview ? '0.9' : '1.0'}
-                    />
+                    {/* Glyph Path Contours: Grouped to prevent overlap whitecutouts while preserving holes */}
+                    {groupContoursForRendering(enablePreview ? fittedGlyph.contours : currentGlyph.contours).map((group) => (
+                      <path
+                        key={group.id}
+                        d={group.d}
+                        fill={isLight ? '#1c1917' : '#34d399'}
+                        fillRule={group.fillRule}
+                        opacity={enablePreview ? '0.9' : '1.0'}
+                      />
+                    ))}
                   </svg>
                 </div>
 

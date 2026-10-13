@@ -26,7 +26,7 @@ import {
 import { FontProject, GlyphData } from '../types';
 import { UNICODE_CATEGORIES, getCategoryCharList, KANA_PAIRS } from '../data/unicodeTables';
 import { DAKUTEN_MAPPINGS } from '../utils/dakutenHelper';
-import { contoursToSvgPath, normalizeGlyphContoursWinding } from '../utils/pathUtils';
+import { contoursToSvgPath, normalizeGlyphContoursWinding, groupContoursForRendering } from '../utils/pathUtils';
 import { ThemeMode, isLightTheme, getThemeClasses } from '../utils/theme';
 
 interface GlyphGridProps {
@@ -77,11 +77,11 @@ const GlyphGridCard = memo(
     onSelectGlyph: (code: number, char: string) => void;
     onContextMenu: (e: React.MouseEvent, item: { char: string; code: number; name?: string }) => void;
   }) => {
-    const hasContours = Boolean(glyphData && glyphData.contours && glyphData.contours.length > 0);
     const strokeCount = glyphData?.contours?.length || 0;
-    const svgPath = useMemo(() => {
-      if (!hasContours || !glyphData?.contours) return null;
-      return contoursToSvgPath(glyphData.contours);
+    const hasContours = strokeCount > 0;
+    const renderGroups = useMemo(() => {
+      if (!hasContours || !glyphData?.contours) return [];
+      return groupContoursForRendering(glyphData.contours);
     }, [hasContours, glyphData?.contours]);
 
     const pair = KANA_PAIRS[item.char];
@@ -169,35 +169,38 @@ const GlyphGridCard = memo(
 
         {/* Single Center Character Display (Vector SVG if drawn, or Reference Glyph if undrawn) */}
         <div className="flex-1 flex items-center justify-center w-full min-h-0 min-w-0 overflow-hidden relative z-10 p-0.5 pointer-events-none">
-          {hasContours && svgPath ? (
+          {hasContours && renderGroups.length > 0 ? (
             <svg
               viewBox={`0 0 ${unitsPerEm} ${unitsPerEm}`}
               preserveAspectRatio="xMidYMid meet"
               className="w-full h-full max-w-[88%] max-h-[88%] object-contain"
             >
-              <path
-                d={svgPath}
-                fill={
-                  isSelected
-                    ? isLight
-                      ? '#065f46'
-                      : '#34d399'
-                    : isLight
-                    ? '#1f2937'
-                    : '#ecfdf5'
-                }
-                stroke={
-                  isSelected
-                    ? isLight
-                      ? '#047857'
-                      : '#6ee7b7'
-                    : isLight
-                    ? '#374151'
-                    : '#a7f3d0'
-                }
-                strokeWidth={1}
-                fillRule="evenodd"
-              />
+              {renderGroups.map((group) => (
+                <path
+                  key={group.id}
+                  d={group.d}
+                  fill={
+                    isSelected
+                      ? isLight
+                        ? '#065f46'
+                        : '#34d399'
+                      : isLight
+                      ? '#1f2937'
+                      : '#ecfdf5'
+                  }
+                  stroke={
+                    isSelected
+                      ? isLight
+                        ? '#047857'
+                        : '#6ee7b7'
+                      : isLight
+                      ? '#374151'
+                      : '#a7f3d0'
+                  }
+                  strokeWidth={1}
+                  fillRule={group.fillRule}
+                />
+              ))}
             </svg>
           ) : item.code === 0x3000 ? (
             <div

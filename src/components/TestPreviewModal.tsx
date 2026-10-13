@@ -50,7 +50,7 @@ import {
 import { useRef } from 'react';
 import { FontProject, PathContour, Point } from '../types';
 import { compileFont, balanceProjectGlyphMargins } from '../utils/fontCompiler';
-import { getContoursBoundingBox, smoothAndFixTransformedContours } from '../utils/pathUtils';
+import { getContoursBoundingBox, smoothAndFixTransformedContours, groupContoursForRendering } from '../utils/pathUtils';
 import { ThemeMode, isLightTheme } from '../utils/theme';
 
 interface TestPreviewModalProps {
@@ -377,7 +377,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
   const [isTopControlsCollapsed, setIsTopControlsCollapsed] = useState<boolean>(false);
   const [showHintBanner, setShowHintBanner] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [mobileTab, setMobileTab] = useState<'preview' | 'settings' | 'adjust'>('preview');
+  const [mobileTab, setMobileTab] = useState<'settings' | 'adjust'>('settings');
   const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   );
@@ -1044,14 +1044,14 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                               strokeDasharray={`${Math.round(upm * 0.015)} ${Math.round(upm * 0.015)}`}
                             />
 
-                            {/* Rendered Contours */}
+                            {/* Rendered Contours: Safe grouping prevents whiteout on stroke overlap while keeping holes transparent */}
                             <g>
-                              {livePreviewContours.map((c, idx) => (
+                              {groupContoursForRendering(livePreviewContours).map((group) => (
                                 <path
-                                  key={idx}
-                                  d={contourToSvgPathData(c)}
+                                  key={group.id}
+                                  d={group.d}
                                   fill="currentColor"
-                                  fillRule="nonzero"
+                                  fillRule={group.fillRule}
                                   opacity="0.88"
                                 />
                               ))}
@@ -1763,65 +1763,6 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
           </div>
         </div>
 
-        {/* Mobile Tab Navigation Bar (Visible only on mobile md:hidden) */}
-        <div className="flex md:hidden border-b border-emerald-200/60 dark:border-[#223326] bg-[#edf5f0] dark:bg-[#121c15] shrink-0">
-          <button
-            type="button"
-            onClick={() => setMobileTab('preview')}
-            className={`flex-1 py-2 text-xs font-bold flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
-              mobileTab === 'preview'
-                ? isLight
-                  ? 'border-emerald-700 text-emerald-950 bg-white/70 shadow-xs'
-                  : 'border-emerald-400 text-emerald-100 bg-emerald-950/60 shadow-xs'
-                : isLight
-                ? 'border-transparent text-stone-600 hover:text-stone-900'
-                : 'border-transparent text-emerald-400/80 hover:text-emerald-200'
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>用紙プレビュー</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileTab('settings')}
-            className={`flex-1 py-2 text-xs font-bold flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
-              mobileTab === 'settings'
-                ? isLight
-                  ? 'border-emerald-700 text-emerald-950 bg-white/70 shadow-xs'
-                  : 'border-emerald-400 text-emerald-100 bg-emerald-950/60 shadow-xs'
-                : isLight
-                ? 'border-transparent text-stone-600 hover:text-stone-900'
-                : 'border-transparent text-emerald-400/80 hover:text-emerald-200'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>文章・組版設定</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsSideAdjusterOpen(true);
-              setMobileTab('adjust');
-            }}
-            className={`flex-1 py-2 text-xs font-bold flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
-              mobileTab === 'adjust'
-                ? isLight
-                  ? 'border-emerald-700 text-emerald-950 bg-white/70 shadow-xs'
-                  : 'border-emerald-400 text-emerald-100 bg-emerald-950/60 shadow-xs'
-                : isLight
-                ? 'border-transparent text-stone-600 hover:text-stone-900'
-                : 'border-transparent text-emerald-400/80 hover:text-emerald-200'
-            }`}
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-            <span className="truncate max-w-[90px]">
-              {selectedCharInfo ? `「${selectedCharInfo.char}」微調整` : '文字微調整'}
-            </span>
-            {selectedCharInfo && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            )}
-          </button>
-        </div>
 
         {/* Informational Guidance Banner (Optional toggle) */}
         {showHintBanner && (
@@ -1853,14 +1794,65 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
         {layoutMode === 'split' ? (
           /* ==================== SPLIT MODE (SIDEBAR + FULL-HEIGHT PREVIEW) ==================== */
           <div ref={mainContainerRef} className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
-            {/* Left Control Sidebar */}
+            {/* Left Control Sidebar / Bottom Controls on mobile */}
             {(isSidebarOpen || isMobileScreen) && (
               <div
                 style={{ width: isMobileScreen ? '100%' : `${leftSidebarWidth}px` }}
-                className={`w-full md:w-auto h-full border-b md:border-b-0 md:border-r flex flex-col shrink-0 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar max-w-full pb-16 md:pb-0 ${
+                className={`order-2 md:order-1 w-full md:w-auto flex-1 md:flex-initial md:h-full min-h-0 flex flex-col shrink-0 overflow-hidden border-t md:border-t-0 md:border-r max-w-full ${
                   isLight ? 'bg-[#f7faf8] border-[#d8e6df]' : 'bg-[#131b15] border-[#25362b]'
-                } ${mobileTab !== 'settings' ? 'hidden md:flex' : 'flex'}`}
+                }`}
               >
+                {/* Mobile Tab Switcher */}
+                <div className="flex md:hidden border-b border-emerald-200/60 dark:border-[#223326] bg-[#edf5f0] dark:bg-[#121c15] shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setMobileTab('settings')}
+                    className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center space-x-1.5 border-b-2 transition-all cursor-pointer ${
+                      mobileTab === 'settings'
+                        ? isLight
+                          ? 'border-emerald-700 text-emerald-950 bg-white/80 shadow-xs'
+                          : 'border-emerald-400 text-emerald-100 bg-emerald-950/70 shadow-xs'
+                        : isLight
+                        ? 'border-transparent text-stone-600 hover:text-stone-900'
+                        : 'border-transparent text-emerald-400/80 hover:text-emerald-200'
+                    }`}
+                  >
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>文章・組版設定</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSideAdjusterOpen(true);
+                      setMobileTab('adjust');
+                    }}
+                    className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center space-x-1.5 border-b-2 transition-all cursor-pointer ${
+                      mobileTab === 'adjust'
+                        ? isLight
+                          ? 'border-emerald-700 text-emerald-950 bg-white/80 shadow-xs'
+                          : 'border-emerald-400 text-emerald-100 bg-emerald-950/70 shadow-xs'
+                        : isLight
+                        ? 'border-transparent text-stone-600 hover:text-stone-900'
+                        : 'border-transparent text-emerald-400/80 hover:text-emerald-200'
+                    }`}
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span className="truncate max-w-[120px]">
+                      {selectedCharInfo ? `「${selectedCharInfo.char}」個別調整` : '文字個別調整'}
+                    </span>
+                    {selectedCharInfo && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Adjuster content when active on mobile */}
+                {isMobileScreen && mobileTab === 'adjust' ? (
+                  <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar">
+                    {renderSideAdjustPanel()}
+                  </div>
+                ) : (
+                  <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar pb-12 md:pb-0">
                 {/* 1. Text Input & Presets */}
                 <div className="p-3 sm:p-3.5 border-b border-inherit">
                   <div className="flex items-center justify-between mb-1.5">
@@ -2349,20 +2341,11 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                     </button>
                   </div>
 
-                  {/* Mobile Return to Preview Button */}
-                  <div className="pt-2 md:hidden">
-                    <button
-                      type="button"
-                      onClick={() => setMobileTab('preview')}
-                      className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 shadow-sm"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>プレビュー結果を見る</span>
-                    </button>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
             {/* Drag Resizer Left */}
             {isSidebarOpen && !isMobileScreen && (
@@ -2378,9 +2361,9 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
               </div>
             )}
 
-            {/* Right: Full-Height Proofing Canvas Area */}
+            {/* Proofing Canvas Area: Fixed at top on mobile (order-1, h-[40vh] sm:h-[44vh]), main center pane on desktop (order-2) */}
             <div
-              className={`flex-1 min-h-0 h-full overflow-auto overscroll-contain p-2.5 sm:p-8 select-text relative ${
+              className={`order-1 md:order-2 w-full h-[40vh] sm:h-[44vh] md:h-full md:flex-1 shrink-0 md:shrink min-h-0 flex flex-col overflow-auto overscroll-contain p-2.5 sm:p-8 select-text relative border-b md:border-b-0 ${
                 isLight ? 'bg-[#eef4f0]' : 'bg-[#0b100d]'
               } ${
                 showGenkoGrid
@@ -2388,7 +2371,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
                     ? 'bg-[radial-gradient(#c8ded3_1px,transparent_1px)] [background-size:24px_24px]'
                     : 'bg-[radial-gradient(#25362b_1px,transparent_1px)] [background-size:24px_24px]'
                   : ''
-              } ${mobileTab !== 'preview' ? 'hidden md:flex flex-col' : 'flex flex-col'}`}
+              }`}
             >
               {errorMsg ? (
                 <div className="p-4 bg-rose-50 border border-rose-300 rounded text-rose-700 text-xs">
@@ -3187,8 +3170,8 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
               </div>
             )}
 
-            {/* Right Side Docked Glyph Adjuster Panel */}
-            {isSideAdjusterOpen && renderSideAdjustPanel()}
+            {/* Right Side Docked Glyph Adjuster Panel (Desktop only) */}
+            {isSideAdjusterOpen && !isMobileScreen && renderSideAdjustPanel()}
           </div>
         </>
       )}

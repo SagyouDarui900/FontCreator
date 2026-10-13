@@ -493,7 +493,7 @@ export function compileFont(
 
     const scaleFactor = options?.scaleFactor !== undefined ? options.scaleFactor : 1.35;
     const shouldBalance = options?.balanceSideBearings !== false;
-    const shouldMerge = options?.mergeOverlaps === true;
+    const shouldMerge = options?.mergeOverlaps !== false;
 
     if (glyphContours.length > 0) {
       const origBbox = getContoursBoundingBox(glyphContours);

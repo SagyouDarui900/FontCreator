@@ -18,12 +18,14 @@ import {
 import { BundledFontsModal } from './BundledFontsModal';
 import { KANJI_RADICALS } from '../data/kanjiRadicals';
 import { PathContour, CustomPart, RadicalPlacement, GlyphData } from '../types';
+import { GlyphPreviewSvg } from './GlyphPreviewSvg';
 import {
   contoursToSvgPath,
   generateId,
   transformContoursForPlacement,
   generateShapeByType,
   SHAPE_PRESETS,
+  groupContoursForRendering,
 } from '../utils/pathUtils';
 import {
   extractRadicalFromFont,
@@ -845,11 +847,20 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                   <RefreshCw className="w-6 h-6 animate-spin text-emerald-600" />
                 ) : extractedContours.length > 0 ? (
                   <svg viewBox="0 0 1000 1000" className="w-full h-full">
-                    <path
-                      d={contoursToSvgPath(transformContoursForPlacement(extractedContours, placement, extractRegion !== 'full' ? extractRegion : categoryFilter !== 'all' ? categoryFilter : 'other'))}
-                      fill={isLight ? '#111827' : '#ecfdf5'}
-                      fillRule="evenodd"
-                    />
+                    {groupContoursForRendering(
+                      transformContoursForPlacement(
+                        extractedContours,
+                        placement,
+                        extractRegion !== 'full' ? extractRegion : categoryFilter !== 'all' ? categoryFilter : 'other'
+                      )
+                    ).map((group) => (
+                      <path
+                        key={group.id}
+                        d={group.d}
+                        fill={isLight ? '#111827' : '#ecfdf5'}
+                        fillRule={group.fillRule}
+                      />
+                    ))}
                   </svg>
                 ) : (
                   <span className="text-xs text-stone-400">輪郭なし</span>
@@ -1097,13 +1108,11 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                     title={`${preset.name} (${preset.description}) をキャンバスに挿入`}
                   >
                     <div className="w-12 h-12 flex items-center justify-center p-1">
-                      <svg viewBox="0 0 1000 1000" className="w-full h-full">
-                        <path
-                          d={svgPath}
-                          fill={isLight ? '#1f2937' : '#ecfdf5'}
-                          className={isLight ? 'group-hover:fill-emerald-800' : 'group-hover:fill-emerald-300'}
-                        />
-                      </svg>
+                      <GlyphPreviewSvg
+                        contours={shapeContours}
+                        fill={isLight ? '#1f2937' : '#ecfdf5'}
+                        className="w-full h-full"
+                      />
                     </div>
                     <span
                       className={`text-[10px] font-bold mt-1 truncate w-full text-center ${
@@ -1150,13 +1159,11 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                       title={`文字「${glyph.char}」の輪郭を取り込む`}
                     >
                       <div className="w-10 h-10 flex items-center justify-center">
-                        <svg viewBox="0 0 1000 1000" className="w-full h-full">
-                          <path
-                            d={svgPath}
-                            fill={isLight ? '#1f2937' : '#ecfdf5'}
-                            className={isLight ? 'group-hover:fill-emerald-800' : 'group-hover:fill-emerald-300'}
-                          />
-                        </svg>
+                        <GlyphPreviewSvg
+                          contours={glyph.contours}
+                          fill={isLight ? '#1f2937' : '#ecfdf5'}
+                          className="w-full h-full"
+                        />
                       </div>
                       <span className="text-xs font-bold mt-1 text-emerald-950 dark:text-emerald-200">
                         {glyph.char}
@@ -1322,13 +1329,11 @@ export const RadicalsDrawer: React.FC<RadicalsDrawerProps> = ({
                         /* Vector Contour Preview */
                         <div className="flex flex-col items-center">
                           <div className="w-14 h-14 flex items-center justify-center p-1">
-                            <svg viewBox="0 0 1000 1000" className="w-full h-full">
-                              <path
-                                d={svgPath}
-                                fill={isLight ? '#1f2937' : '#ecfdf5'}
-                                className={isLight ? 'group-hover:fill-emerald-800' : 'group-hover:fill-emerald-300'}
-                              />
-                            </svg>
+                            <GlyphPreviewSvg
+                              contours={part.contours}
+                              fill={isLight ? '#1f2937' : '#ecfdf5'}
+                              className="w-full h-full"
+                            />
                           </div>
                           <span className="text-[11px] font-bold mt-1 text-center truncate w-full">
                             {part.name}
