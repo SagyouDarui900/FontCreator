@@ -694,13 +694,13 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
       <div
-        className={`w-full max-w-[1400px] h-[94vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border ${
+        className={`w-full max-w-[1520px] h-[95vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border ${
           isLight ? 'bg-white border-stone-200 text-stone-900' : 'bg-[#0f1712] border-[#25382b] text-stone-100'
         }`}
       >
         {/* Modal Top Bar */}
         <header
-          className={`px-4 sm:px-6 py-3.5 border-b flex items-center justify-between gap-4 shrink-0 ${
+          className={`px-4 sm:px-6 py-3.5 border-b flex items-start sm:items-center justify-between gap-3 sm:gap-4 shrink-0 flex-wrap ${
             isLight ? 'bg-stone-50 border-stone-200' : 'bg-[#152319] border-[#25382b]'
           }`}
         >
@@ -713,7 +713,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
               <Type className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center justify-end gap-2 flex-wrap">
                 <h2 className="text-base font-bold tracking-tight">日本語組版・文字組みスタジオ</h2>
                 <span className="text-[11px] font-mono text-stone-500">JIS X 4051 & Illustrator準拠</span>
               </div>
@@ -804,13 +804,13 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
           {/* CONTROLS & RULES: Bottom scrollable tabbed panel on mobile, left sidebar on desktop */}
           <aside
-            className={`order-2 md:order-1 w-full md:w-[360px] flex-1 md:flex-none flex flex-col border-t md:border-t-0 md:border-r shrink-0 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar ${
+            className={`order-2 md:order-1 w-full md:w-[420px] xl:w-[460px] flex-1 md:flex-none flex flex-col border-t md:border-t-0 md:border-r shrink-0 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar ${
               isLight ? 'bg-stone-50/70 border-stone-200' : 'bg-[#121c15] border-[#25382b]'
             }`}
           >
             {/* Sidebar Tabs */}
             <div
-              className={`flex items-center px-4 py-2 border-b text-xs font-bold gap-1 shrink-0 ${
+              className={`grid grid-cols-3 items-center px-4 py-2.5 border-b text-xs font-bold gap-1.5 shrink-0 ${
                 isLight ? 'bg-stone-100/70 border-stone-200' : 'bg-[#152319] border-[#25382b]'
               }`}
             >
@@ -825,7 +825,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex-1 py-1.5 rounded-lg flex items-center justify-center space-x-1 transition-all ${
+                    className={`min-h-[38px] px-1 py-2 rounded-lg flex items-center justify-center space-x-1 transition-all ${
                       isSel
                         ? isLight
                           ? 'bg-white text-emerald-900 shadow-sm font-bold'
@@ -842,7 +842,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
               })}
             </div>
 
-            <div className="p-4 space-y-5 text-xs">
+            <div className="p-4 sm:p-5 space-y-6 text-sm">
               {/* Sample Text Selector */}
               <div className="space-y-1.5">
                 <label className="font-bold flex items-center justify-between text-stone-700 dark:text-stone-300">
@@ -871,7 +871,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                 <textarea
                   value={customText}
                   onChange={(e) => setCustomText(e.target.value)}
-                  rows={3}
+                  rows={4}
                   className={`w-full p-2 rounded-lg border text-xs resize-none font-sans leading-relaxed ${
                     isLight ? 'bg-white border-stone-300 text-stone-900' : 'bg-[#1a281e] border-[#2b4032] text-stone-100'
                   }`}
