@@ -168,31 +168,39 @@ src/
 │   ├── ToolBar.tsx              # ツールパレット
 │   ├── MetricsPanel.tsx         # 字幅・送り幅調整パネル
 │   ├── PenPresetsModal.tsx      # ペンスタジオ・マイブラシ管理モーダル
+│   ├── MojikumiStudioModal.tsx  # JIS X 4051準拠 文字組み・組版設計スタジオ
+│   ├── FontQualityModal.tsx     # フォント品質検査・自動補正モーダル
+│   ├── FontInfoModal.tsx        # フォント情報・ライセンスメタデータ設定
 │   ├── PWAInstallButton.tsx     # PWAインストールボタン
 │   ├── OfflineIndicator.tsx     # オフライン接続表示
+│   ├── ErrorBoundary.tsx        # 例外捕捉・緊急JSONデータ救済エクスポート
 │   ├── ExportModal.tsx          # フォント・データ出力モーダル
 │   ├── TestPreviewModal.tsx     # 組版テストプレビューモーダル
 │   ├── PixelFontStudioModal.tsx # ピクセルフォント作成モーダル
 │   ├── StorageManagerModal.tsx  # ストレージ・バックアップ管理モーダル
-│   ├── QualityCheckerModal.tsx  # フォント品質検査モーダル
 │   ├── WeightInterpolationModal.tsx # ウェイト補間モーダル
-│   ├── RadicalStudioModal.tsx   # 部首作字モーダル
+│   ├── RadicalStudioModal.tsx   # 部首作字・康熙字典214部首スタジオ
 │   ├── ShortcutsHelpModal.tsx   # ヘルプ・ショートカットモーダル
 │   └── ...
 ├── hooks/
+│   ├── useBrushDrawing.ts       # ブラシ描画・筆圧・スプライン処理フック
+│   ├── useNodeEditing.ts        # ベジェノード選択・編集・ルーペ拡大フック
 │   ├── usePWAInstall.ts         # PWAインストール状態フック
 │   └── useOnlineStatus.ts       # ネットワーク状態検知フック
 ├── data/
 │   └── unicodeTables.ts         # 文字コード・JIS水準テーブル
 ├── utils/
-│   ├── fontCompiler.ts          # フォントバイナリ生成 (OpenType/TrueType)
-│   ├── pathUtils.ts             # ベクター計算・輪郭処理
+│   ├── fontCompiler.ts          # フォントバイナリ生成 (OpenType/TrueType/WOFF/WOFF2)
+│   ├── pathUtils.ts             # ベクター計算・輪郭処理 (path/ サブパッケージ統括)
+│   ├── mojikumiEngine.ts        # JIS X 4051準拠 文字組み・禁則・ぶら下がり・QH計算
+│   ├── qualityChecker.ts        # フォント品質スキャン・密度解析・自動修正
+│   ├── pixelFontUtils.ts        # ビットマップ・ドットフォント変換処理
 │   ├── indexedDBStorage.ts      # IndexedDB 永続化処理
 │   ├── storageManager.ts        # LocalStorage / スナップショット管理
 │   ├── radicalExtractor.ts      # 部首データ抽出処理
 │   ├── imageVectorizer.ts       # 画像トレース処理
 │   └── ...
-├── types.ts                     # TypeScript 型定義
+├── types.ts                     # TypeScript 型定義 (strict準拠)
 ├── App.tsx                      # ルートコンポーネント
 └── main.tsx                     # エントリーポイント
 ```
