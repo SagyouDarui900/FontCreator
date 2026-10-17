@@ -221,7 +221,7 @@ export const ProjectDiagnosticsPanel: React.FC<ProjectDiagnosticsPanelProps> = (
       )
       .join('\n');
 
-    const fullExport = `【フォント制作診断 未完了・要確認文字リスト (${attentionItems.length}字)】\n対象スコープ: ${diagReport.scope}\n要確認文字一覧:\n${charsText}\n\n詳細リスト:\n${detailText}`;
+    const fullExport = `【フォント制作診断 未完了・要確認文字リスト (${attentionItems.length}字)】\n対象スコープ: ${diagScope}\n要確認文字一覧:\n${charsText}\n\n詳細リスト:\n${detailText}`;
 
     navigator.clipboard
       .writeText(fullExport)
@@ -635,10 +635,11 @@ export const ProjectDiagnosticsPanel: React.FC<ProjectDiagnosticsPanelProps> = (
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               ref={searchInputRef}
+              data-diag-search="true"
               type="text"
               value={diagSearchQuery}
               onChange={(e) => setDiagSearchQuery(e.target.value)}
-              placeholder="文字、Unicode、理由で検索..."
+              placeholder="文字、Unicode、理由で検索... (/)"
               className={`w-full pl-8 pr-3 py-1.5 rounded-lg border text-xs outline-hidden transition-colors ${
                 isLight
                   ? 'bg-stone-50 border-stone-200 focus:border-amber-600 focus:bg-white text-stone-900'

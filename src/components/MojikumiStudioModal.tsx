@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   X,
   Type,
@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Maximize2,
   Copy,
+  Play,
 } from 'lucide-react';
 import {
   FontProject,
@@ -47,6 +48,7 @@ import {
   BURASAGARI_CHARS,
   FormattedLayoutResult,
 } from '../utils/mojikumiEngine';
+import { compileFont } from '../utils/fontCompiler';
 import { ThemeMode, isLightTheme } from '../utils/theme';
 
 interface MojikumiStudioModalProps {
@@ -57,6 +59,7 @@ interface MojikumiStudioModalProps {
   theme: ThemeMode;
   onShowToast: (msg: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
   onOpenOpenTypeModal?: () => void;
+  onOpenTestPreview?: () => void;
 }
 
 const SAMPLE_TEXTS = [
@@ -95,6 +98,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
   theme,
   onShowToast,
   onOpenOpenTypeModal,
+  onOpenTestPreview,
 }) => {
   const isLight = isLightTheme(theme);
 
@@ -106,7 +110,49 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
 
   // Mobile Tab navigation: 'mojikumi' | 'kinsoku' | 'qh_calc' | 'text'
   const [mobileTab, setMobileTab] = useState<'mojikumi' | 'kinsoku' | 'qh_calc' | 'text'>('mojikumi');
-  const [mobileCompareSubTab, setMobileCompareSubTab] = useState<'beta' | 'tsume' | 'ake'>('beta');
+  const [mobileCompareSubTab, setMobileCompareSubTab] = useState<'all' | 'beta' | 'tsume' | 'ake'>('all');
+
+  // Font Source Selection ('custom' | 'mincho' | 'gothic')
+  const [fontSource, setFontSource] = useState<'custom' | 'mincho' | 'gothic'>('custom');
+  const [compiledFontName, setCompiledFontName] = useState<string>('CustomMojikumiFont');
+  const compiledBlobUrlRef = useRef<string | null>(null);
+
+  // Dynamically compile the user's custom font for realistic typesetting verification
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const { blobUrl } = compileFont(project, {
+        mergeOverlaps: true,
+        normalizeWinding: true,
+      });
+      const newFontName = `CustomMojikumiFont_${Date.now()}`;
+      if (typeof FontFace !== 'undefined') {
+        const ff = new FontFace(newFontName, `url('${blobUrl}')`);
+        ff.load()
+          .then((loaded) => {
+            document.fonts.add(loaded);
+            setCompiledFontName(newFontName);
+            if (compiledBlobUrlRef.current && compiledBlobUrlRef.current !== blobUrl) {
+              URL.revokeObjectURL(compiledBlobUrlRef.current);
+            }
+            compiledBlobUrlRef.current = blobUrl;
+          })
+          .catch(() => {});
+      }
+    } catch (e) {
+      // Fallback gracefully to system font
+    }
+  }, [isOpen, project.updatedAt]);
+
+  const effectiveFontFamily = useMemo(() => {
+    if (fontSource === 'custom') {
+      return `'${compiledFontName}', 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif`;
+    }
+    if (fontSource === 'mincho') {
+      return `'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif`;
+    }
+    return `'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', sans-serif`;
+  }, [fontSource, compiledFontName]);
 
   // Writing direction
   const [isVertical, setIsVertical] = useState<boolean>(false);
@@ -215,6 +261,15 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
       isVertical,
       usePalt: false,
       trackingEm: 0.15, // +150 / 1000em
+    });
+  }, [customText, charsPerLine, currentConfig, isVertical]);
+
+  // 4. カレント設定レイアウト (単一詳細ビュー用 - ユーザーが選択した設定をリアルタイム反映)
+  const currentLayout = useMemo(() => {
+    return simulateTypesetting(customText, charsPerLine, currentConfig, {
+      isVertical,
+      usePalt: currentConfig.preset === 'tsume',
+      trackingEm: 0,
     });
   }, [customText, charsPerLine, currentConfig, isVertical]);
 
@@ -601,7 +656,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                     max="50"
                     step="1"
                     value={charsPerLine}
-                    onChange={(e) => setCharsPerLine(Number(e.target.value))}
+                    onChange={(e) => setCharsPerLine(Math.max(5, Math.min(50, Number(e.target.value) || 5)))}
                     className="flex-1 accent-emerald-600 h-2"
                   />
                   <button
@@ -634,7 +689,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                     max="20"
                     step="1"
                     value={lineCount}
-                    onChange={(e) => setLineCount(Number(e.target.value))}
+                    onChange={(e) => setLineCount(Math.max(2, Math.min(20, Number(e.target.value) || 2)))}
                     className="flex-1 accent-emerald-600 h-2"
                   />
                   <button
@@ -770,6 +825,26 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
             >
               <span>{isVertical ? '縦組み (Vertical)' : '横組み (Horizontal)'}</span>
             </button>
+
+            {/* Jump to TestPreviewModal (試し打ちへ) */}
+            {onOpenTestPreview && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenTestPreview();
+                }}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center space-x-1.5 ${
+                  isLight
+                    ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-950'
+                    : 'bg-emerald-950/70 hover:bg-emerald-900 border-emerald-700 text-emerald-200'
+                }`}
+                title="フォント試し打ち・字形調整モーダルを開く"
+              >
+                <Play className="w-3.5 h-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
+                <span className="hidden sm:inline">字形試し打ちへ</span>
+                <span className="sm:hidden">試し打ち</span>
+              </button>
+            )}
 
             <button
               onClick={handleSaveToProject}
@@ -1126,7 +1201,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                         max="60"
                         step="0.5"
                         value={fontSizeQ}
-                        onChange={(e) => setFontSizeQ(Number(e.target.value))}
+                        onChange={(e) => setFontSizeQ(Math.max(6, Math.min(80, Number(e.target.value) || 6)))}
                         className="w-full accent-emerald-600"
                       />
                     </div>
@@ -1145,7 +1220,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                         max="100"
                         step="0.5"
                         value={lineFeedH}
-                        onChange={(e) => setLineFeedH(Number(e.target.value))}
+                        onChange={(e) => setLineFeedH(Math.max(8, Math.min(120, Number(e.target.value) || 8)))}
                         className="w-full accent-emerald-600"
                       />
                       <div className="text-[10px] text-stone-400 flex justify-between">
@@ -1166,7 +1241,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                         max="40"
                         step="1"
                         value={charsPerLine}
-                        onChange={(e) => setCharsPerLine(Number(e.target.value))}
+                        onChange={(e) => setCharsPerLine(Math.max(5, Math.min(50, Number(e.target.value) || 5)))}
                         className="w-full accent-emerald-600"
                       />
                     </div>
@@ -1183,7 +1258,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                         max="20"
                         step="1"
                         value={lineCount}
-                        onChange={(e) => setLineCount(Number(e.target.value))}
+                        onChange={(e) => setLineCount(Math.max(2, Math.min(20, Number(e.target.value) || 2)))}
                         className="w-full accent-emerald-600"
                       />
                     </div>
@@ -1255,7 +1330,51 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
               </div>
 
               <div className="flex items-center space-x-2">
+                {/* Font Source Selector */}
+                <div className="flex items-center space-x-1">
+                  <span className="text-[11px] text-stone-500 hidden sm:inline">フォント:</span>
+                  <div className={`flex items-center p-0.5 rounded-lg border text-[11px] ${isLight ? 'bg-stone-200/60 border-stone-300' : 'bg-[#1b2b20] border-[#2b4032]'}`}>
+                    <button
+                      type="button"
+                      onClick={() => setFontSource('custom')}
+                      className={`px-2 py-0.5 rounded transition-all ${
+                        fontSource === 'custom'
+                          ? isLight ? 'bg-white text-emerald-950 font-bold shadow-xs' : 'bg-emerald-700 text-white font-bold'
+                          : 'text-stone-500 hover:text-stone-900 dark:hover:text-stone-200'
+                      }`}
+                      title="このプロジェクトで制作中のグリフ（未作成文字はシステム明朝フォールバック）"
+                    >
+                      制作中
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFontSource('mincho')}
+                      className={`px-2 py-0.5 rounded transition-all ${
+                        fontSource === 'mincho'
+                          ? isLight ? 'bg-white text-emerald-950 font-bold shadow-xs' : 'bg-emerald-700 text-white font-bold'
+                          : 'text-stone-500 hover:text-stone-900 dark:hover:text-stone-200'
+                      }`}
+                      title="標準明朝体（JIS組版の標準規範）"
+                    >
+                      明朝
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFontSource('gothic')}
+                      className={`px-2 py-0.5 rounded transition-all ${
+                        fontSource === 'gothic'
+                          ? isLight ? 'bg-white text-emerald-950 font-bold shadow-xs' : 'bg-emerald-700 text-white font-bold'
+                          : 'text-stone-500 hover:text-stone-900 dark:hover:text-stone-200'
+                      }`}
+                      title="ゴシック体（見出し・キャッチ用）"
+                    >
+                      ゴシック
+                    </button>
+                  </div>
+                </div>
+
                 <button
+                  type="button"
                   onClick={() => setShowBodyGrid(!showBodyGrid)}
                   className={`px-2 py-1 rounded border text-[11px] font-medium transition-all ${
                     showBodyGrid
@@ -1272,58 +1391,100 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
               </div>
             </div>
 
+            {/* Mobile 3-Way Sub Tabs */}
+            {viewMode === 'compare3' && (
+              <div
+                className={`flex lg:hidden items-center justify-center p-1 border-b gap-1 text-xs shrink-0 ${
+                  isLight ? 'bg-stone-100/70 border-stone-200' : 'bg-[#121c15] border-[#25382b]'
+                }`}
+              >
+                {[
+                  { id: 'all', label: '3様式すべて' },
+                  { id: 'beta', label: 'ベタ組み' },
+                  { id: 'tsume', label: 'ツメ組み' },
+                  { id: 'ake', label: 'アケ組み' },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setMobileCompareSubTab(st.id as any)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                      mobileCompareSubTab === st.id
+                        ? isLight
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-emerald-600 text-white'
+                        : isLight
+                        ? 'text-stone-600 hover:bg-stone-200/50'
+                        : 'text-stone-400 hover:bg-[#1a281e]'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* PREVIEW CONTAINER */}
             <div className="flex-1 min-h-0 p-4 sm:p-6 overflow-auto custom-scrollbar">
               {viewMode === 'compare3' ? (
                 /* 3-WAY SPLIT VIEW: ベタ組み vs ツメ組み vs アケ組み */
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
                   {/* COLUMN 1: ベタ組み */}
-                  <TypesettingColumnCard
-                    title="ベタ組み (Solid)"
-                    tag="和文等幅 · 本文向け"
-                    desc="全角仮想ボディ均等割り。句点の区切り感を保持し一定のリズムで読ませる。"
-                    layout={betaLayout}
-                    charsPerLine={charsPerLine}
-                    fontSizeQ={fontSizeQ}
-                    lineFeedH={lineFeedH}
-                    showGrid={showBodyGrid}
-                    isVertical={isVertical}
-                    isLight={isLight}
-                    accentColor="emerald"
-                  />
+                  <div className={`h-full ${mobileCompareSubTab !== 'all' && mobileCompareSubTab !== 'beta' ? 'hidden lg:flex' : 'flex'}`}>
+                    <TypesettingColumnCard
+                      title="ベタ組み (Solid)"
+                      tag="和文等幅 · 本文向け"
+                      desc="全角仮想ボディ均等割り。句点の区切り感を保持し一定のリズムで読ませる。"
+                      layout={betaLayout}
+                      charsPerLine={charsPerLine}
+                      fontSizeQ={fontSizeQ}
+                      lineFeedH={lineFeedH}
+                      showGrid={showBodyGrid}
+                      isVertical={isVertical}
+                      isLight={isLight}
+                      accentColor="emerald"
+                      fontFamily={effectiveFontFamily}
+                    />
+                  </div>
 
                   {/* COLUMN 2: ツメ組み */}
-                  <TypesettingColumnCard
-                    title="ツメ組み (Tight / Palt)"
-                    tag="プロポーショナル · 見出し向け"
-                    desc="OpenType palt適用。字面余白を詰め、タイトな一体感と凝縮感を生む。"
-                    layout={tsumeLayout}
-                    charsPerLine={charsPerLine}
-                    fontSizeQ={fontSizeQ}
-                    lineFeedH={lineFeedH}
-                    showGrid={showBodyGrid}
-                    isVertical={isVertical}
-                    isLight={isLight}
-                    accentColor="blue"
-                  />
+                  <div className={`h-full ${mobileCompareSubTab !== 'all' && mobileCompareSubTab !== 'tsume' ? 'hidden lg:flex' : 'flex'}`}>
+                    <TypesettingColumnCard
+                      title="ツメ組み (Tight / Palt)"
+                      tag="プロポーショナル · 見出し向け"
+                      desc="OpenType palt適用。字面余白を詰め、タイトな一体感と凝縮感を生む。"
+                      layout={tsumeLayout}
+                      charsPerLine={charsPerLine}
+                      fontSizeQ={fontSizeQ}
+                      lineFeedH={lineFeedH}
+                      showGrid={showBodyGrid}
+                      isVertical={isVertical}
+                      isLight={isLight}
+                      accentColor="blue"
+                      fontFamily={effectiveFontFamily}
+                    />
+                  </div>
 
                   {/* COLUMN 3: アケ組み */}
-                  <TypesettingColumnCard
-                    title="アケ組み (Spaced / Tracking)"
-                    tag="トラッキング +150 · リード向け"
-                    desc="全体の字間を均等にアケて組む。落ち着きと余韻のあるタイトル・キャッチ向け。"
-                    layout={akeLayout}
-                    charsPerLine={charsPerLine}
-                    fontSizeQ={fontSizeQ}
-                    lineFeedH={lineFeedH}
-                    showGrid={showBodyGrid}
-                    isVertical={isVertical}
-                    isLight={isLight}
-                    accentColor="purple"
-                  />
+                  <div className={`h-full ${mobileCompareSubTab !== 'all' && mobileCompareSubTab !== 'ake' ? 'hidden lg:flex' : 'flex'}`}>
+                    <TypesettingColumnCard
+                      title="アケ組み (Spaced / Tracking)"
+                      tag="トラッキング +150 · リード向け"
+                      desc="全体の字間を均等にアケて組む。落ち着きと余韻のあるタイトル・キャッチ向け。"
+                      layout={akeLayout}
+                      charsPerLine={charsPerLine}
+                      fontSizeQ={fontSizeQ}
+                      lineFeedH={lineFeedH}
+                      showGrid={showBodyGrid}
+                      isVertical={isVertical}
+                      isLight={isLight}
+                      accentColor="purple"
+                      fontFamily={effectiveFontFamily}
+                    />
+                  </div>
                 </div>
               ) : (
-                /* SINGLE DETAILED VIEW */
+                /* SINGLE DETAILED VIEW (ユーザー選択設定をリアルタイム表示) */
                 <div
                   className={`max-w-4xl mx-auto p-6 rounded-2xl border transition-colors shadow-sm space-y-6 ${
                     isLight ? 'bg-white border-stone-200' : 'bg-[#152319] border-[#25382b]'
@@ -1331,14 +1492,14 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                 >
                   <div className="flex items-center justify-between border-b pb-3 border-stone-200 dark:border-[#25382b]">
                     <div>
-                      <h3 className="font-bold text-base">単一詳細組版プレビュー</h3>
+                      <h3 className="font-bold text-base">単一詳細組版プレビュー（{MOJIKUMI_PRESETS[currentConfig.preset]?.name}）</h3>
                       <p className="text-xs text-stone-500">
                         文字サイズ: {fontSizeQ}Q ({dimensions.fontSizePt}pt) · 行送り: {lineFeedH}H · {charsPerLine}字詰め
                       </p>
                     </div>
                     <div className="text-right text-xs font-mono text-stone-500">
-                      <div>行数: {betaLayout.lineCount}行</div>
-                      <div>ぶら下がり文字数: {betaLayout.burasagariCount}字</div>
+                      <div>行数: {currentLayout.lineCount}行</div>
+                      <div>ぶら下がり文字数: {currentLayout.burasagariCount}字</div>
                     </div>
                   </div>
 
@@ -1351,7 +1512,7 @@ export const MojikumiStudioModal: React.FC<MojikumiStudioModalProps> = ({
                       writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
                     }}
                   >
-                    {renderLayoutLines(betaLayout, charsPerLine, fontSizeQ, lineFeedH, showBodyGrid, isLight)}
+                    {renderLayoutLines(currentLayout, charsPerLine, fontSizeQ, lineFeedH, showBodyGrid, isLight, isVertical, effectiveFontFamily)}
                   </div>
                 </div>
               )}
@@ -1375,6 +1536,7 @@ interface TypesettingColumnCardProps {
   isVertical: boolean;
   isLight: boolean;
   accentColor: 'emerald' | 'blue' | 'purple';
+  fontFamily: string;
 }
 
 const TypesettingColumnCard: React.FC<TypesettingColumnCardProps> = ({
@@ -1389,10 +1551,11 @@ const TypesettingColumnCard: React.FC<TypesettingColumnCardProps> = ({
   isVertical,
   isLight,
   accentColor,
+  fontFamily,
 }) => {
   return (
     <div
-      className={`flex flex-col rounded-2xl border overflow-hidden transition-all ${
+      className={`flex flex-col rounded-2xl border overflow-hidden transition-all w-full ${
         isLight ? 'bg-white border-stone-200 shadow-sm' : 'bg-[#152319] border-[#25382b]'
       }`}
     >
@@ -1427,7 +1590,7 @@ const TypesettingColumnCard: React.FC<TypesettingColumnCardProps> = ({
           writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
         }}
       >
-        {renderLayoutLines(layout, charsPerLine, fontSizeQ, lineFeedH, showGrid, isLight)}
+        {renderLayoutLines(layout, charsPerLine, fontSizeQ, lineFeedH, showGrid, isLight, isVertical, fontFamily)}
       </div>
     </div>
   );
@@ -1439,21 +1602,94 @@ function renderLayoutLines(
   fontSizeQ: number,
   lineFeedH: number,
   showGrid: boolean,
-  isLight: boolean
+  isLight: boolean,
+  isVertical: boolean,
+  fontFamily: string
 ) {
   // Approximate scale for screen rendering
   const emPx = Math.max(14, Math.round(fontSizeQ * 1.4));
   const lineGapPx = Math.max(6, Math.round((lineFeedH - fontSizeQ) * 1.4));
 
+  if (isVertical) {
+    // 縦組み (vertical-rl): 行は右から左（flex-row-reverse）、文字は上から下（flex-col）
+    return (
+      <div
+        className="flex flex-row-reverse items-start select-text"
+        style={{
+          gap: `${lineGapPx}px`,
+          fontFamily,
+          writingMode: 'vertical-rl',
+          textOrientation: 'mixed',
+        }}
+      >
+        {layout.lines.map((line, lIdx) => (
+          <div
+            key={lIdx}
+            className={`flex flex-col items-center relative shrink-0 ${line.isOverflown ? 'bg-rose-500/10' : ''}`}
+            style={{ minWidth: `${emPx}px` }}
+          >
+            {/* Visual Grid Column Center Axis */}
+            {showGrid && (
+              <div
+                className="absolute inset-0 pointer-events-none border-r border-dashed border-stone-300 dark:border-stone-800"
+                style={{ right: '50%' }}
+              />
+            )}
+
+            {line.glyphs.map((g, gIdx) => {
+              return (
+                <span
+                  key={gIdx}
+                  className={`inline-flex items-center justify-center relative transition-all ${
+                    g.isHanging
+                      ? 'text-amber-600 dark:text-amber-400 font-bold bg-amber-500/20 rounded'
+                      : ''
+                  }`}
+                  style={{
+                    width: `${emPx}px`,
+                    minHeight: `${emPx}px`,
+                    fontSize: `${emPx}px`,
+                    lineHeight: 1,
+                    paddingTop: `${g.spacingBeforeEm * emPx}px`,
+                    paddingBottom: `${g.spacingAfterEm * emPx}px`,
+                  }}
+                  title={`文字:「${g.char}」 前アキ:${Math.round(g.spacingBeforeEm * 100)}% 後アキ:${Math.round(g.spacingAfterEm * 100)}% ${
+                    g.isHanging ? '(ぶら下がり)' : ''
+                  }`}
+                >
+                  {/* Visual Square Body Indicator */}
+                  {showGrid && (
+                    <span
+                      className="absolute inset-0 pointer-events-none border border-stone-200/50 dark:border-stone-800/60"
+                      style={{ width: `${emPx}px`, height: `${emPx}px` }}
+                    />
+                  )}
+                  {g.char}
+                </span>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // 横組み (horizontal-tb): 行は上から下（flex-col）、文字は左から右（flex-row）
   return (
-    <div className="space-y-2 select-text" style={{ gap: `${lineGapPx}px` }}>
+    <div
+      className="flex flex-col select-text"
+      style={{
+        gap: `${lineGapPx}px`,
+        fontFamily,
+      }}
+    >
       {layout.lines.map((line, lIdx) => (
         <div
           key={lIdx}
-          className={`flex items-baseline relative ${line.isOverflown ? 'bg-rose-500/10' : ''}`}
+          className={`flex flex-row items-baseline relative flex-wrap sm:flex-nowrap ${line.isOverflown ? 'bg-rose-500/10' : ''}`}
           style={{ minHeight: `${emPx}px` }}
         >
-          {/* Visual Grid Baseline / Box Guides */}
+          {/* Visual Grid Baseline */}
           {showGrid && (
             <div
               className="absolute inset-0 pointer-events-none border-b border-dashed border-stone-300 dark:border-stone-800"
@@ -1462,9 +1698,6 @@ function renderLayoutLines(
           )}
 
           {line.glyphs.map((g, gIdx) => {
-            const hasMarginBefore = g.spacingBeforeEm > 0;
-            const hasMarginAfter = g.spacingAfterEm > 0;
-
             return (
               <span
                 key={gIdx}

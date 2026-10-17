@@ -909,22 +909,8 @@ export function checkFontQuality(
     const glyphName = g.name || `uni${unicode.toString(16).toUpperCase()}`;
     const contours = g.contours || [];
 
-    // 空グリフ（空白文字 U+0020 は除外）
+    // 空グリフは未制作状態（プロジェクト診断で管理）のため品質検査の幾何異常からは除外
     if (contours.length === 0) {
-      if (unicode !== 0x0020 && unicode !== 0x3000) {
-        issues.push({
-          id: `empty-${unicode}`,
-          unicode,
-          char,
-          glyphName,
-          type: 'extreme_bounds',
-          severity: 'info',
-          title: '輪郭のない空グリフ',
-          description: `グリフ「${char}」に輪郭パスが登録されていません。フォント出力時に空白文字として出力されます。`,
-          recommendation: 'この文字を使用する場合はキャンバスで作図してください。',
-          canAutoFix: false,
-        });
-      }
       return;
     }
 
@@ -1268,7 +1254,9 @@ export function checkFontQuality(
     else if (iss.severity === 'warning') warningCount++;
     else infoCount++;
 
-    if (iss.type in categoryCounts) {
+    if (iss.type === 'isolated_node') {
+      categoryCounts.excessive_nodes++;
+    } else if (iss.type in categoryCounts) {
       categoryCounts[iss.type as keyof typeof categoryCounts]++;
     } else {
       categoryCounts.other++;
@@ -1330,17 +1318,29 @@ export function fixQualityIssue(
     case 'align_baseline': {
       const bbox = getContoursBoundingBox(newContours);
       const targetBaselineY = issue.details?.targetBaselineY ?? DEFAULT_BASELINE_Y;
-      const currentBottom = bbox.maxY;
-      let deltaY = targetBaselineY - currentBottom;
+      let deltaY = 0;
 
-      // 文字の形・縦横比を一切変えず、位置のみを平行移動
-      // 仮想ボディの上端 (Y=30) を突き抜けてクリッピングされないよう安全リミット
-      if (bbox.minY + deltaY < 30) {
-        deltaY = 30 - bbox.minY;
-      }
-      // 仮想ボディの下端 (Y=970) を突き抜けないよう安全リミット
-      if (bbox.maxY + deltaY > 970) {
-        deltaY = 970 - bbox.maxY;
+      if (issue.details?.deviationType === 'overflow_top') {
+        deltaY = 30 - bbox.minY; // 上端がはみ出しているため下へ移動
+        if (bbox.maxY + deltaY > 970) {
+          deltaY = Math.max(0, 970 - bbox.maxY);
+        }
+      } else if (issue.details?.deviationType === 'overflow_bottom') {
+        deltaY = 960 - bbox.maxY; // 下端が床を突き抜けているため上へ移動
+        if (bbox.minY + deltaY < 30) {
+          deltaY = 30 - bbox.minY;
+        }
+      } else {
+        deltaY = targetBaselineY - bbox.maxY;
+        // 文字の形・縦横比を一切変えず、位置のみを平行移動
+        // 仮想ボディの上端 (Y=30) を突き抜けてクリッピングされないよう安全リミット
+        if (bbox.minY + deltaY < 30) {
+          deltaY = 30 - bbox.minY;
+        }
+        // 仮想ボディの下端 (Y=970) を突き抜けないよう安全リミット
+        if (bbox.maxY + deltaY > 970) {
+          deltaY = 970 - bbox.maxY;
+        }
       }
 
       // 微小な差 (<= 2px) の場合は形を最優先して移動しない
@@ -1354,7 +1354,7 @@ export function fixQualityIssue(
 
       newContours = newContours.map((c) => ({
         ...c,
-        nodes: c.nodes.map((n) => ({
+        nodes: (c.nodes || []).map((n) => ({
           ...n,
           y: Math.round(n.y + deltaY),
           handleIn: n.handleIn ? { ...n.handleIn, y: Math.round(n.handleIn.y + deltaY) } : null,
@@ -1366,8 +1366,17 @@ export function fixQualityIssue(
     }
 
     case 'merge_intersection': {
-      newContours = resolveContourOverlaps(newContours);
-      successMessage = `文字「${issue.char}」の一筆書き交差・重なり部分を自動結合し、白抜きを解消しました`;
+      const resolved = resolveContourOverlaps(newContours);
+      if (resolved && resolved.length > 0) {
+        newContours = resolved;
+        successMessage = `文字「${issue.char}」の一筆書き交差・重なり部分を自動結合し、白抜きを解消しました`;
+      } else {
+        return {
+          updatedProject: project,
+          success: false,
+          message: `文字「${issue.char}」の交差結合処理に失敗しました`,
+        };
+      }
       break;
     }
 
@@ -1399,6 +1408,7 @@ export function fixQualityIssue(
   updatedGlyphs[issue.unicode] = {
     ...glyph,
     contours: newContours,
+    modified: true,
   };
 
   return {
@@ -1475,6 +1485,7 @@ export function batchEqualizeProjectStrokes(
       updatedGlyphs[unicode] = {
         ...glyph,
         contours: res.contours,
+        modified: true,
       };
 
       details.push({
@@ -1516,15 +1527,22 @@ export function batchFixQualityIssues(
   let fixedCount = 0;
 
   const targetIssues = filterType
-    ? issues.filter((iss) => iss.type === filterType && iss.canAutoFix)
+    ? issues.filter((iss) => {
+        if (!iss.canAutoFix) return false;
+        if (filterType === 'excessive_nodes') {
+          return iss.type === 'excessive_nodes' || iss.type === 'isolated_node';
+        }
+        return iss.type === filterType;
+      })
     : issues.filter((iss) => iss.canAutoFix);
 
-  // 同一ユニコードを重複修正しないよう整理
-  const seenUnicodes = new Set<number>();
+  // 同一文字に対して同一種類の修正が重複適用されないよう整理
+  const appliedFixes = new Set<string>();
 
   for (const iss of targetIssues) {
-    if (seenUnicodes.has(iss.unicode)) continue;
-    seenUnicodes.add(iss.unicode);
+    const fixKey = `${iss.unicode}:${iss.autoFixType || iss.type}`;
+    if (appliedFixes.has(fixKey)) continue;
+    appliedFixes.add(fixKey);
 
     const res = fixQualityIssue(currentProject, iss);
     if (res.success) {

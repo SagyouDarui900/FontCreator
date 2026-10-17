@@ -159,6 +159,7 @@ export interface GlyphData {
   modified?: boolean;
   notes?: string;
   locked?: boolean;
+  updatedAt?: number;
 }
 
 export interface CustomGuideline {
@@ -228,6 +229,7 @@ export type ToolMode =
   | 'starburst'
   | 'diamond'
   | 'polygon'
+  | 'hexagon'
   | 'line'
   | 'hand'
   | 'trace_adjust';
@@ -247,6 +249,7 @@ export type ShapeType =
   | 'starburst'
   | 'diamond'
   | 'hexagon'
+  | 'polygon'
   | 'semicircle'
   | 'ring'
   | 'pill'
@@ -360,6 +363,7 @@ export type PartCategory =
 export interface CustomPart {
   id: string;
   name: string;
+  char?: string;
   category?: PartCategory;
   description?: string;
   contours: PathContour[];

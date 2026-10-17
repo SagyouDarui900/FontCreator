@@ -343,6 +343,7 @@ export type CharKind =
   | 'half_latin'
   | 'half_digit'
   | 'full_space'
+  | 'half_space'
   | 'non_yakumono';
 
 export function getCharKind(ch: string): CharKind {
@@ -352,6 +353,7 @@ export function getCharKind(ch: string): CharKind {
   if (KINSOKU_CHARS.kuten.includes(ch)) return 'kuten';
   if (KINSOKU_CHARS.middleDots.includes(ch)) return 'middle_dot';
   if (ch === '　') return 'full_space';
+  if (ch === ' ' || ch === '\t') return 'half_space';
   if (/^[a-zA-Z]$/.test(ch)) return 'half_latin';
   if (/^[0-9]$/.test(ch)) return 'half_digit';
   return 'non_yakumono';
@@ -367,6 +369,7 @@ export interface TypesettingDimensions {
   lineFeedH: number;       // 行送り (H: 1H = 0.25mm)
   lineFeedPt: number;      // pt換算
   lineGapH: number;        // 行間 (H = 行送り - 文字サイズ)
+  lineGapMm: number;       // 行間 (mm = lineGapH * 0.25)
   charsPerLine: number;    // 1行字詰め
   lineCount: number;       // 行数
   widthMm: number;         // テキストエリア幅 (mm)
@@ -394,6 +397,7 @@ export function calculateTypesettingDimensions(
     lineFeedH,
     lineFeedPt: Math.round(lineFeedH * ptPerUnit * 10) / 10,
     lineGapH,
+    lineGapMm: Math.round(lineGapH * mmPerUnit * 10) / 10,
     charsPerLine,
     lineCount,
     widthMm: Math.round(widthMm * 10) / 10,
@@ -513,6 +517,8 @@ export function simulateTypesetting(
   const burasagariMode = config.burasagari;
   const trackingEm = options?.trackingEm ?? 0;
   const usePalt = options?.usePalt ?? false;
+  // Safety guard against <= 0 or NaN charsPerLine to prevent infinite loops
+  const safeCharsPerLine = Math.max(1, Math.floor(charsPerLine || 1));
 
   const paragraphs = text.split('\n');
   const lines: FormattedLine[] = [];
@@ -546,7 +552,6 @@ export function simulateTypesetting(
       while (charCursor < chars.length) {
         const ch = chars[charCursor];
         const kind = getCharKind(ch);
-        const isFirstInLine = currentLineGlyphs.length === 0;
 
         // 幅（ベタ組みは1.0em、ツメ組み/palt時は約物やカナを適度に圧縮）
         let baseAdvance = 1.0;
@@ -555,14 +560,14 @@ export function simulateTypesetting(
             baseAdvance = 0.5; // 約物は半角
           } else if (kind === 'middle_dot') {
             baseAdvance = 0.5;
-          } else if (kind === 'half_latin' || kind === 'half_digit') {
-            baseAdvance = 0.55;
+          } else if (kind === 'half_latin' || kind === 'half_digit' || kind === 'half_space') {
+            baseAdvance = 0.5;
           } else if (KINSOKU_CHARS.smallKana.includes(ch)) {
             baseAdvance = 0.8;
           } else {
             baseAdvance = 0.95; // 和文もわずかにツメ
           }
-        } else if (kind === 'half_latin' || kind === 'half_digit') {
+        } else if (kind === 'half_latin' || kind === 'half_digit' || kind === 'half_space') {
           baseAdvance = 0.5;
         }
 
@@ -574,8 +579,23 @@ export function simulateTypesetting(
 
         const glyphTotalAdvance = baseAdvance + beforeEm + afterEm + trackingEm;
 
-        // 行長判定
-        const wouldExceed = currentAdvanceEm + glyphTotalAdvance > charsPerLine + 0.05;
+        // If the line is empty, we MUST place at least one glyph to guarantee forward progress
+        if (currentLineGlyphs.length === 0) {
+          currentLineGlyphs.push({
+            char: ch,
+            charIndex: totalCharCount + charCursor,
+            kind,
+            spacingBeforeEm: beforeEm,
+            spacingAfterEm: afterEm,
+            isHanging: false,
+          });
+          currentAdvanceEm += glyphTotalAdvance;
+          charCursor++;
+          continue;
+        }
+
+        // 行長判定 (2文字目以降で判定)
+        const wouldExceed = currentAdvanceEm + glyphTotalAdvance > safeCharsPerLine + 0.05;
 
         if (wouldExceed) {
           // ぶら下がり判定
@@ -583,7 +603,7 @@ export function simulateTypesetting(
             burasagariMode !== 'none' &&
             BURASAGARI_CHARS.has(ch) &&
             lineBurasagari === 0 &&
-            currentLineGlyphs.length >= charsPerLine - 1
+            currentLineGlyphs.length >= safeCharsPerLine - 1
           ) {
             // ぶら下がり適用！版面外（マージン）に1字追加
             currentLineGlyphs.push({
@@ -606,7 +626,8 @@ export function simulateTypesetting(
             if (startProhibited.has(ch) && currentLineGlyphs.length > 1) {
               const last = currentLineGlyphs.pop()!;
               charCursor--;
-              currentAdvanceEm -= 1.0;
+              const lastAdvance = (last.spacingBeforeEm || 0) + (last.spacingAfterEm || 0) + 1.0;
+              currentAdvanceEm = Math.max(0, currentAdvanceEm - lastAdvance);
             }
           }
 
@@ -617,7 +638,7 @@ export function simulateTypesetting(
         if (
           config.kinsoku !== 'none' &&
           endProhibited.has(ch) &&
-          currentAdvanceEm + glyphTotalAdvance * 2 > charsPerLine
+          currentAdvanceEm + glyphTotalAdvance * 2 > safeCharsPerLine
         ) {
           if (config.kinsokuAdjust === 'push_out') {
             // 追い出し優先: 行末禁則文字を丸ごと次行へ回す

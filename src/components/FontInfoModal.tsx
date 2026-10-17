@@ -136,7 +136,7 @@ export const FontInfoModal: React.FC<FontInfoModalProps> = ({
   if (!isOpen) return null;
 
   const glyphCount = Object.keys(project.glyphs || {}).length;
-  const radicalCount = Object.keys(project.radicals || {}).length;
+  const radicalCount = Object.keys((project as any).radicals || {}).length;
 
   const handleApplyPreset = (presetId: string) => {
     const p = LICENSE_PRESETS.find((x) => x.id === presetId);

@@ -13,27 +13,15 @@ import {
   ExternalLink,
   Wand2,
   Maximize2,
-  ChevronRight,
   Layers,
   Activity,
-  Zap,
-  Scissors,
   SlidersHorizontal,
   Check,
-  ArrowRight,
   Scale,
   Minimize2,
   Compass,
   Flame,
-  BarChart3,
-  ClipboardList,
   Copy,
-  Plus,
-  FileSearch,
-  ChevronDown,
-  ChevronUp,
-  CheckSquare,
-  ListFilter,
 } from 'lucide-react';
 import { FontProject, GlyphData, PathContour } from '../types';
 import { ThemeMode, isLightTheme } from '../utils/theme';
@@ -41,9 +29,6 @@ import { GlyphDensityHeatmapModal } from './GlyphDensityHeatmapModal';
 import {
   contoursToSvgPath,
   normalizeGlyphContoursWinding,
-  NodeOptimizationOptions,
-  StrokeEqualizationOptions,
-  ExtremaOptimizationOptions,
 } from '../utils/pathUtils';
 import {
   checkFontQuality,
@@ -63,10 +48,7 @@ import {
 import {
   runProjectDiagnostics,
   ProjectDiagnosticsReport,
-  DiagnosticItem,
-  DiagnosticStatus,
   DiagnosticScope,
-  CategoryDiagnosticStat,
 } from '../utils/projectDiagnostics';
 import { ProjectDiagnosticsPanel } from './ProjectDiagnosticsPanel';
 
@@ -174,12 +156,9 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   const [diagSearchQuery, setDiagSearchQuery] = useState<string>('');
   const [diagReport, setDiagReport] = useState<ProjectDiagnosticsReport | null>(null);
   const [isDiagScanning, setIsDiagScanning] = useState<boolean>(false);
-  const [showCategoryProgress, setShowCategoryProgress] = useState<boolean>(true);
-
   // Fullscreen view mode
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
-  const diagSearchInputRef = React.useRef<HTMLInputElement>(null);
   const scanTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const notify = (text: string, type: 'success' | 'info' | 'warning' | 'error' = 'info') => {
@@ -189,112 +168,27 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   };
 
   // Run or refresh report
-  const runScan = useCallback(() => {
+  const runScan = useCallback((targetProject?: FontProject) => {
     setIsScanning(true);
+    const proj = targetProject || project;
     setTimeout(() => {
-      const rep = checkFontQuality(project);
+      const rep = checkFontQuality(proj);
       setReport(rep);
       setIsScanning(false);
     }, 50);
   }, [project]);
 
   // Run project diagnostics
-  const runDiagnostics = useCallback((scope?: DiagnosticScope) => {
+  const runDiagnostics = useCallback((scope?: DiagnosticScope, targetProject?: FontProject) => {
     setIsDiagScanning(true);
     const targetScope = scope || diagScope;
+    const proj = targetProject || project;
     setTimeout(() => {
-      const rep = runProjectDiagnostics(project, { scope: targetScope, includeCompletedInItems: true });
+      const rep = runProjectDiagnostics(proj, { scope: targetScope, includeCompletedInItems: true });
       setDiagReport(rep);
       setIsDiagScanning(false);
     }, 40);
   }, [project, diagScope]);
-
-  // Copy unfinished characters to clipboard
-  const handleCopyUnfinishedList = () => {
-    if (!diagReport) return;
-    const attentionItems = diagReport.items.filter((it) => it.status !== 'complete');
-    if (attentionItems.length === 0) {
-      notify('未完成または要確認の文字はありません', 'info');
-      return;
-    }
-
-    const charsText = attentionItems.map((it) => it.char).join('');
-    const detailText = attentionItems
-      .map((it) => `[${it.statusLabel}] ${it.char} (U+${it.unicode.toString(16).toUpperCase()}): ${it.reason}`)
-      .join('\n');
-
-    const fullExport = `【フォント制作診断 未完了・要確認文字リスト (${attentionItems.length}字)】\n文字一覧: ${charsText}\n\n詳細リスト:\n${detailText}`;
-
-    navigator.clipboard.writeText(fullExport).then(() => {
-      notify(`要確認文字 ${attentionItems.length} 字のリストをクリップボードにコピーしました`, 'success');
-    }).catch(() => {
-      notify('クリップボードへのコピーに失敗しました', 'error');
-    });
-  };
-
-  // Add an empty glyph to project
-  const handleAddEmptyGlyph = (unicode: number, char: string, name?: string) => {
-    if (commitHistory) commitHistory();
-    const glyphName = name || `uni${unicode.toString(16).toUpperCase()}`;
-    const newGlyph: GlyphData = {
-      unicode,
-      char: char || String.fromCodePoint(unicode),
-      name: glyphName,
-      advanceWidth: project.metadata.unitsPerEm || 1000,
-      lsb: 50,
-      contours: [],
-      modified: true,
-    };
-
-    setProject((prev) => ({
-      ...prev,
-      glyphs: {
-        ...prev.glyphs,
-        [unicode]: newGlyph,
-      },
-      updatedAt: Date.now(),
-    }));
-
-    notify(`文字「${char}」(U+${unicode.toString(16).toUpperCase()}) を空グリフとして登録しました`, 'success');
-    runScan();
-    runDiagnostics();
-  };
-
-  // Batch add all empty chars in current filtered scope
-  const handleBatchAddFilteredEmptyGlyphs = () => {
-    if (!diagReport) return;
-    const emptyItems = diagReport.items.filter((it) => it.status === 'empty' && !it.isRegisteredInProject);
-    if (emptyItems.length === 0) {
-      notify('追加可能な未登録文字はありません', 'info');
-      return;
-    }
-
-    if (commitHistory) commitHistory();
-
-    setProject((prev) => {
-      const nextGlyphs = { ...prev.glyphs };
-      emptyItems.forEach((it) => {
-        nextGlyphs[it.unicode] = {
-          unicode: it.unicode,
-          char: it.char,
-          name: it.glyphName,
-          advanceWidth: prev.metadata.unitsPerEm || 1000,
-          lsb: 50,
-          contours: [],
-          modified: true,
-        };
-      });
-      return {
-        ...prev,
-        glyphs: nextGlyphs,
-        updatedAt: Date.now(),
-      };
-    });
-
-    notify(`未登録文字 ${emptyItems.length} 字をプロジェクトに一括登録しました`, 'success');
-    runScan();
-    runDiagnostics();
-  };
 
   // Keyboard shortcuts: Escape, F (fullscreen), R (rescan), H (heatmap), D (diagnostics toggle), / (search focus), 1-7 (tabs)
   useEffect(() => {
@@ -334,7 +228,10 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
         } else if (e.key === '/') {
           e.preventDefault();
           if (mainView === 'diagnostics') {
-            diagSearchInputRef.current?.focus();
+            const diagInput = document.querySelector<HTMLInputElement>('input[data-diag-search]');
+            if (diagInput) {
+              diagInput.focus();
+            }
           } else {
             searchInputRef.current?.focus();
           }
@@ -393,8 +290,14 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
     if (!report) return [];
     return report.issues.filter((issue) => {
       // Tab filter
-      if (activeTab !== 'all' && issue.type !== activeTab) {
-        return false;
+      if (activeTab !== 'all') {
+        if (activeTab === 'excessive_nodes') {
+          if (issue.type !== 'excessive_nodes' && issue.type !== 'isolated_node') {
+            return false;
+          }
+        } else if (issue.type !== activeTab) {
+          return false;
+        }
       }
       // Severity filter
       if (severityFilter !== 'all' && issue.severity !== severityFilter) {
@@ -419,72 +322,6 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
   const totalAutoFixableCount = useMemo(() => {
     if (!report?.issues) return 0;
     return report.issues.filter((iss) => iss.canAutoFix).length;
-  }, [report]);
-
-  const categoryStats = useMemo(() => {
-    const counts = report?.categoryCounts || {
-      duplicate_shape: 0,
-      path_intersection: 0,
-      excessive_nodes: 0,
-      missing_extrema: 0,
-      uneven_stroke: 0,
-      baseline_deviation: 0,
-    };
-    return [
-      {
-        id: 'duplicate_shape' as TabFilter,
-        label: '字形重複',
-        count: counts.duplicate_shape || 0,
-        desc: '同一形状・コピーの重複',
-        icon: Copy,
-        color: 'stone',
-      },
-      {
-        id: 'path_intersection' as TabFilter,
-        label: '重なり白抜き',
-        count: counts.path_intersection || 0,
-        desc: '交差による白抜き欠損',
-        icon: Sparkles,
-        color: 'amber',
-        canBatchFix: true,
-      },
-      {
-        id: 'missing_extrema' as TabFilter,
-        label: '極点ノード',
-        count: counts.missing_extrema || 0,
-        desc: '水平・垂直の最外端欠落',
-        icon: Compass,
-        color: 'cyan',
-        canBatchFix: true,
-      },
-      {
-        id: 'uneven_stroke' as TabFilter,
-        label: '線幅均一性',
-        count: counts.uneven_stroke || 0,
-        desc: 'かすれ線・潰れの偏り',
-        icon: Scale,
-        color: 'emerald',
-        canBatchFix: true,
-      },
-      {
-        id: 'excessive_nodes' as TabFilter,
-        label: '過剰ノード',
-        count: counts.excessive_nodes || 0,
-        desc: '冗長アンカー・肥大パス',
-        icon: Wand2,
-        color: 'purple',
-        canBatchFix: true,
-      },
-      {
-        id: 'baseline_deviation' as TabFilter,
-        label: 'ベースライン',
-        count: counts.baseline_deviation || 0,
-        desc: '基準線からの浮沈逸脱',
-        icon: Sliders,
-        color: 'blue',
-        canBatchFix: true,
-      },
-    ];
   }, [report]);
 
   const healthStatus = useMemo(() => {
@@ -529,74 +366,6 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
     };
   }, [report, isLight]);
 
-  // Filtered diagnostic items for Project Diagnostics
-  const filteredDiagnosticItems = useMemo(() => {
-    if (!diagReport) return [];
-    return diagReport.items
-      .filter((item) => {
-        // Status filter
-        if (diagFilter === 'all_attention') {
-          if (item.status === 'complete') return false;
-        } else if (diagFilter === 'empty') {
-          if (item.status !== 'empty') return false;
-        } else if (diagFilter === 'critically_low') {
-          if (item.status !== 'critically_low_complexity') return false;
-        } else if (diagFilter === 'draft') {
-          if (item.status !== 'draft') return false;
-        } else if (diagFilter === 'complete') {
-          if (item.status !== 'complete') return false;
-        }
-
-        // Category filter
-        if (diagCategoryFilter !== 'all') {
-          if (diagCategoryFilter === 'kanji' && item.categoryType !== 'kanji') return false;
-          if (diagCategoryFilter === 'hiragana' && item.categoryType !== 'hiragana') return false;
-          if (diagCategoryFilter === 'katakana' && item.categoryType !== 'katakana') return false;
-          if (diagCategoryFilter === 'latin' && item.categoryType !== 'latin') return false;
-          if (diagCategoryFilter === 'digits' && item.categoryType !== 'digits') return false;
-          if (diagCategoryFilter === 'symbols' && item.categoryType !== 'symbols') return false;
-        }
-
-        // Search query
-        if (diagSearchQuery.trim()) {
-          const query = diagSearchQuery.trim().toLowerCase();
-          const charMatch = item.char.toLowerCase().includes(query);
-          const nameMatch = item.glyphName.toLowerCase().includes(query);
-          const hexMatch = item.unicode.toString(16).toLowerCase().includes(query);
-          const reasonMatch = item.reason.toLowerCase().includes(query);
-          const catMatch = item.categoryName.toLowerCase().includes(query);
-          if (!charMatch && !nameMatch && !hexMatch && !reasonMatch && !catMatch) {
-            return false;
-          }
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        if (diagSortBy === 'complexity_asc') {
-          return (
-            a.metrics.complexityScore - b.metrics.complexityScore ||
-            a.metrics.nodeCount - b.metrics.nodeCount ||
-            a.unicode - b.unicode
-          );
-        }
-        if (diagSortBy === 'complexity_desc') {
-          return b.metrics.complexityScore - a.metrics.complexityScore || b.unicode - a.unicode;
-        }
-        if (diagSortBy === 'nodes_asc') {
-          return a.metrics.nodeCount - b.metrics.nodeCount || a.unicode - b.unicode;
-        }
-        if (diagSortBy === 'unicode') {
-          return a.unicode - b.unicode;
-        }
-        if (diagSortBy === 'severity') {
-          const rank = { error: 0, warning: 1, info: 2, success: 3 };
-          return rank[a.severity] - rank[b.severity] || a.unicode - b.unicode;
-        }
-        return 0;
-      });
-  }, [diagReport, diagFilter, diagCategoryFilter, diagSearchQuery, diagSortBy]);
-
   // Single Fix
   const handleFixIssue = (issue: QualityIssue) => {
     if (commitHistory) commitHistory();
@@ -604,7 +373,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
     if (res.success) {
       setProject(res.updatedProject);
       notify(res.message, 'success');
-      runScan();
+      runScan(res.updatedProject);
     } else {
       notify(res.message, 'error');
     }
@@ -618,7 +387,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
     if (res.fixedCount > 0) {
       setProject(res.updatedProject);
       notify(`${res.fixedCount} 件の問題を一括修正しました`, 'success');
-      runScan();
+      runScan(res.updatedProject);
     } else {
       notify('自動修正可能な対象がありませんでした', 'info');
     }
@@ -665,7 +434,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
             `${res.optimizedGlyphsCount} 文字の直線冗長ノード ${res.totalReducedNodes} 個を間引き、パスを滑らかに最適化しました（削減率: ${res.reductionPercentage}%）`,
             'success'
           );
-          runScan();
+          runScan(res.updatedProject);
         } else {
           notify('直線上の冗長ノードは見つかりませんでした（すでに最適化されています）', 'info');
         }
@@ -693,7 +462,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
         `文字「${char}」の直線冗長ノード ${res.totalReducedNodes} 個を間引き、パスを滑らかに最適化しました`,
         'success'
       );
-      runScan();
+      runScan(res.updatedProject);
     } else {
       notify(`文字「${char}」には直線上の冗長ノードは見つかりませんでした`, 'info');
     }
@@ -740,7 +509,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
             `${res.equalizedGlyphsCount} 文字のストローク線幅を均一化しました (細線補強: ${res.totalThinFixed}箇所, 太線調整: ${res.totalThickFixed}箇所)`,
             'success'
           );
-          runScan();
+          runScan(res.updatedProject);
         } else {
           notify('線幅の調整対象は見つかりませんでした（すでに均一です）', 'info');
         }
@@ -768,7 +537,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
         `文字「${char}」のストローク線幅を均一化しました (補強: ${res.totalThinFixed}箇所, 調整: ${res.totalThickFixed}箇所)`,
         'success'
       );
-      runScan();
+      runScan(res.updatedProject);
     } else {
       notify(`文字「${char}」の線幅はすでにバランスが取れています`, 'info');
     }
@@ -816,7 +585,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
             `${res.optimizedGlyphsCount} 文字のベジェ曲線極点に合計 ${res.totalNodesAdded} 個のノードを追加・最適化しました`,
             'success'
           );
-          runScan();
+          runScan(res.updatedProject);
         } else {
           notify('極点ノードの追加対象は見つかりませんでした（すでに最適化されています）', 'info');
         }
@@ -845,7 +614,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
         `文字「${char}」のベジェ曲線極点にノードを ${res.totalNodesAdded} 箇所追加・最適化しました`,
         'success'
       );
-      runScan();
+      runScan(res.updatedProject);
     } else {
       notify(`文字「${char}」の極点ノードはすでに最適化されています`, 'info');
     }
@@ -1001,7 +770,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
 
           <div className="flex items-center space-x-1.5 shrink-0">
             <button
-              onClick={runScan}
+              onClick={() => runScan()}
               disabled={isScanning}
               className={`px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border text-[11px] sm:text-xs font-semibold flex items-center space-x-1.5 transition-colors shrink-0 ${
                 isLight
@@ -1898,18 +1667,18 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
 
                 {/* Right side: Global Auto-Fix & Advanced Tools Chips */}
                 <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                  {report && report.totalIssues > 0 && (
+                  {report && totalAutoFixableCount > 0 && (
                     <button
                       onClick={() => handleBatchFix(undefined)}
-                      title="安全な修正（白抜き解消・極点最適化・線幅均一化）を一括実行します"
- className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition-all active:scale-98 ${
+                      title="安全な修正（白抜き解消・極点最適化・線幅均一化・ベースライン整列）を一括実行します"
+                      className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition-all active:scale-98 ${
                         isLight
                           ? 'bg-emerald-700 hover:bg-emerald-800 text-white border border-emerald-800'
                           : 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500'
                       }`}
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                      <span>全 {report.totalIssues} 件を一括自動修正</span>
+                      <span>全 {totalAutoFixableCount} 件を一括自動修正</span>
                     </button>
                   )}
 
@@ -2038,6 +1807,77 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                         : 'bg-[#111913] border-[#25362b] focus:border-emerald-500 text-emerald-100'
                     }`}
                   />
+                </div>
+
+                {/* Severity Filter Pills */}
+                <div className="flex items-center space-x-1 bg-stone-100 dark:bg-[#162119] p-0.5 rounded-lg border border-stone-200 dark:border-[#223326] shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSeverityFilter('all')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                      severityFilter === 'all'
+                        ? isLight
+                          ? 'bg-white text-stone-900 shadow-xs'
+                          : 'bg-[#1e2e23] text-emerald-300'
+                        : 'text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'
+                    }`}
+                  >
+                    全重要度
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSeverityFilter('error')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 transition-all ${
+                      severityFilter === 'error'
+                        ? isLight
+                          ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                          : 'bg-rose-950 text-rose-300 border border-rose-800'
+                        : 'text-stone-500 hover:text-rose-600 dark:hover:text-rose-400'
+                    }`}
+                  >
+                    <span>エラー</span>
+                    {report && report.errorCount > 0 && (
+                      <span className="px-1 rounded-full text-[9px] bg-rose-500 text-white font-mono">
+                        {report.errorCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSeverityFilter('warning')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 transition-all ${
+                      severityFilter === 'warning'
+                        ? isLight
+                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                          : 'bg-amber-950 text-amber-300 border border-amber-800'
+                        : 'text-stone-500 hover:text-amber-600 dark:hover:text-amber-400'
+                    }`}
+                  >
+                    <span>警告</span>
+                    {report && report.warningCount > 0 && (
+                      <span className="px-1 rounded-full text-[9px] bg-amber-500 text-white font-mono">
+                        {report.warningCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSeverityFilter('info')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 transition-all ${
+                      severityFilter === 'info'
+                        ? isLight
+                          ? 'bg-sky-100 text-sky-900 border border-sky-300'
+                          : 'bg-sky-950 text-sky-300 border border-sky-800'
+                        : 'text-stone-500 hover:text-sky-600 dark:hover:text-sky-400'
+                    }`}
+                  >
+                    <span>情報</span>
+                    {report && report.infoCount > 0 && (
+                      <span className="px-1 rounded-full text-[9px] bg-sky-500 text-white font-mono">
+                        {report.infoCount}
+                      </span>
+                    )}
+                  </button>
                 </div>
 
                 {/* Category Tabs */}
@@ -2403,7 +2243,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                           }`}
                         >
                           <Flame className="w-3 h-3 text-amber-500" />
-                          <span>総アンカー: <strong>{issue.details.totalNodes}個</strong></span>
+                          <span>総アンカー: <strong>{issue.details.nodeCount || 0}個</strong></span>
                           <span className="text-stone-300 dark:text-stone-600">/</span>
                           <span>
                             過密箇所: <strong className="text-rose-500 font-bold">{issue.details.densityAnalysis.criticalNodeCount}点</strong>
@@ -2484,7 +2324,7 @@ export const FontQualityModal: React.FC<FontQualityModalProps> = ({
                             <Sparkles className="w-3.5 h-3.5 text-amber-200" />
                             <span>白抜きを解消</span>
                           </>
-                        ) : issue.autoFixType === 'excessive_nodes' ? (
+                        ) : issue.autoFixType === 'simplify_nodes' ? (
                           <>
                             <Wand2 className="w-3.5 h-3.5" />
                             <span>ノード間引き</span>

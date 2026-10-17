@@ -377,7 +377,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
   const [isTopControlsCollapsed, setIsTopControlsCollapsed] = useState<boolean>(false);
   const [showHintBanner, setShowHintBanner] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [mobileTab, setMobileTab] = useState<'settings' | 'adjust'>('settings');
+  const [mobileTab, setMobileTab] = useState<'settings' | 'adjust' | 'preview'>('settings');
   const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   );
@@ -539,7 +539,7 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
     const unicode = selectedCharInfo.unicode;
     const g = project.glyphs[unicode];
     if (!g || !g.contours || g.contours.length === 0) {
-      if (onShowToast) onShowToast(`「${selectedCharInfo.char}」の輪郭データが見つかりません`, 'warning');
+      if (onShowToast) onShowToast(`「${selectedCharInfo.char}」の輪郭データが見つかりません`, 'info');
       return;
     }
 
@@ -621,9 +621,10 @@ export const TestPreviewModal: React.FC<TestPreviewModalProps> = ({
 
     return lines.map((line, lIdx) => {
       const parts = [];
+      const chars: string[] = Array.from(line);
 
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
+      for (let i = 0; i < chars.length; i++) {
+        const ch = chars[i];
         const code = ch.codePointAt(0) || ch.charCodeAt(0);
         const isSelected = selectedCharInfo && selectedCharInfo.unicode === code;
 

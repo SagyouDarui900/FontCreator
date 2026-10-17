@@ -153,8 +153,8 @@ export const RulerMeasurementLayer: React.FC<RulerMeasurementLayerProps> = React
               }}
               className="cursor-pointer hover:opacity-80 active:scale-95 transition-transform pointer-events-auto"
               transform={`translate(${58 / zoom}, 0)`}
-              title="定規を消去 (Esc/Delete)"
             >
+              <title>定規を消去 (Esc/Delete)</title>
               <circle cx={0} cy={0} r={8.5 / zoom} fill="#ef4444" stroke="#ffffff" strokeWidth={0.8 / zoom} />
               <text
                 x={0}

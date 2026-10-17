@@ -669,7 +669,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  return matchEntry.kanjiList;
  }
 
- const categoryPresets = KANJI_PRESETS_BY_CATEGORY[activePart.category] || KANJI_PRESETS_BY_CATEGORY.other;
+ const categoryPresets = (activePart?.category ? KANJI_PRESETS_BY_CATEGORY[activePart.category] : null) || KANJI_PRESETS_BY_CATEGORY.other;
  const projectChars = (Object.values(project.glyphs || {}) as GlyphData[]).map((g) => g.char);
  const combined = Array.from(new Set([...categoryPresets, ...projectChars])).filter(Boolean);
  return combined.length > 0 ? combined.slice(0, 20) : ['休', '体', '保', '信', '作', '使', '個', '倍'];
@@ -1033,7 +1033,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  if (!activePart || !selectedContourId || !selectedNodeId) return null;
  const c = activePart.contours.find((item) => item.id === selectedContourId);
  const n = c?.nodes.find((item) => item.id === selectedNodeId);
- return n?.type || 'corner';
+ return n ? (n.type === 'smooth' || n.type === 'symmetric' ? 'smooth' : 'corner') : 'corner';
  };
 
  const getContourNodeCount = (): number => {
@@ -6601,7 +6601,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
 
  {/* Preset Kanji Chips */}
  <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto p-1.5 rounded-lg border bg-stone-50 dark:bg-[#0f1711] border-stone-200 dark:border-stone-800">
- {((activePart ? KANJI_PRESETS_BY_CATEGORY[activePart.category] : null) || KANJI_PRESETS_BY_CATEGORY.other).map((kanji, kIdx) => {
+ {((activePart?.category ? KANJI_PRESETS_BY_CATEGORY[activePart.category] : null) || KANJI_PRESETS_BY_CATEGORY.other).map((kanji: string, kIdx: number) => {
  const isSelected = selectedBatchChars.includes(kanji);
  return (
  <button
@@ -7020,7 +7020,7 @@ export const RadicalStudioModal: React.FC<RadicalStudioModalProps> = ({
  <button
  onClick={(e) => {
  e.stopPropagation();
- handleDuplicatePart(part.id);
+ handleDuplicatePart(part);
  }}
  className="p-2 rounded-lg text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 min-h-[44px] min-w-[44px] flex items-center justify-center"
  title="複製"

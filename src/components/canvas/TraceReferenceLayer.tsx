@@ -148,8 +148,9 @@ export const TraceReferenceLayer: React.FC<TraceReferenceLayerProps> = React.mem
             )}
           </g>
         ) : (() => {
+          const unicodeNum = selectedUnicode != null ? Number(selectedUnicode) : null;
           const currentImageSrc =
-            (selectedUnicode && traceSettings.charImages?.[selectedUnicode]) ||
+            (unicodeNum !== null && !isNaN(unicodeNum) ? traceSettings.charImages?.[unicodeNum] : undefined) ||
             traceSettings.imageSrc;
           if (!currentImageSrc) return null;
 

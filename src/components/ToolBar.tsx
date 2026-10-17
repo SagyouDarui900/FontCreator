@@ -262,8 +262,8 @@ export const ToolBar: React.FC<ToolBarProps> = React.memo(({
  const currentPenPreset = isCustomPen && activePenPreset
  ? activePenPreset
  : PEN_PRESETS.find((p) => p.id === brushStyle) || PEN_PRESETS[0];
-
- const CurrentPenIcon = PEN_ICONS[currentPenPreset.brushStyle || brushStyle] || Paintbrush;
+ const currentPresetStyle = (('brushStyle' in currentPenPreset && (currentPenPreset as any).brushStyle) ? (currentPenPreset as any).brushStyle : brushStyle) as BrushStyle;
+ const CurrentPenIcon = (PEN_ICONS as Record<BrushStyle, React.FC<{ className?: string }>>)[currentPresetStyle] || Paintbrush;
 
  const customPresets = useMemo(() => {
  return (userPresets || []).filter(

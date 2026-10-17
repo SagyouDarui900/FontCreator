@@ -152,7 +152,9 @@ const GlyphGridCard = memo(
           {/* Status Indicator: Green dot if created, lock badge if locked */}
           <div className="flex items-center space-x-1 shrink-0">
             {glyphData?.locked && (
-              <Lock className="w-2.5 h-2.5 text-amber-500 shrink-0" title="編集ロック中" />
+              <span title="編集ロック中">
+                <Lock className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+              </span>
             )}
             {hasContours ? (
               <span

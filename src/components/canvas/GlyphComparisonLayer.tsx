@@ -46,7 +46,7 @@ export const GlyphComparisonLayer: React.FC<GlyphComparisonLayerProps> = React.m
 
     const pathData = useMemo(() => {
       if (!refGlyph || !refGlyph.contours || refGlyph.contours.length === 0) {
-        return null;
+        return undefined;
       }
       return contoursToSvgPath(refGlyph.contours);
     }, [refGlyph]);

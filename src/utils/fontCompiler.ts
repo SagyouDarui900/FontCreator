@@ -641,7 +641,7 @@ export function compileFont(
 
   for (const deriv of verticalDerivations) {
     const substitutionKey = `${deriv.sourceUnicode}:${deriv.targetUnicode}`;
-    const explicitlyConfigured = featureConfig?.verticalWriting?.substitutions?.length > 0;
+    const explicitlyConfigured = (featureConfig?.verticalWriting?.substitutions?.length ?? 0) > 0;
     const substitutionEnabled =
       verticalWritingEnabled &&
       (!explicitlyConfigured || enabledVerticalSubstitutions.has(substitutionKey));
